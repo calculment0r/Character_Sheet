@@ -262,6 +262,203 @@ body::after {
   font-size: 11px;
 }
 
+/* WIDGET (interactive question) */
+.msg-widget { max-width: 100%; align-self: flex-start; }
+.msg-widget .msg-meta { color: var(--accent-bright); }
+.widget {
+  border-color: var(--accent-dim);
+  background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
+}
+.widget-question {
+  font-size: 13px;
+  color: var(--text-bright);
+  margin-bottom: var(--s-3);
+  padding-bottom: var(--s-2);
+  border-bottom: 1px dashed var(--border);
+  letter-spacing: 0.02em;
+}
+.widget-area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.widget-locked {
+  opacity: 0.7;
+}
+.widget-locked .widget-area > *:not(.widget-result) {
+  pointer-events: none;
+  opacity: 0.5;
+}
+.widget-result {
+  font-size: 12px;
+  color: var(--green);
+  letter-spacing: 0.05em;
+  padding: var(--s-2) var(--s-3);
+  background: rgba(32, 232, 96, 0.08);
+  border: 1px solid rgba(32, 232, 96, 0.3);
+}
+
+/* CHIPS */
+.chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  background: var(--bg-3);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px var(--s-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: var(--t-fast);
+  text-transform: lowercase;
+}
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--accent-bright);
+  background: var(--bg-4);
+}
+.chip-selected {
+  background: var(--accent);
+  color: var(--bg-0);
+  border-color: var(--accent);
+}
+.chip-selected:hover { background: var(--accent-bright); color: var(--bg-0); }
+.chip-other {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+.chip-other:hover {
+  border-style: solid;
+  color: var(--accent);
+}
+.chips-custom {
+  display: flex;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+}
+.chips-custom .input { flex: 1; }
+.widget-confirm { align-self: flex-start; }
+
+/* SLIDER */
+.slider-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.slider-value {
+  font-family: var(--font-pixel);
+  font-size: 32px;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+  text-align: center;
+  line-height: 1;
+}
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--bg-3);
+  outline: none;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  padding: 0;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 20px;
+  background: var(--accent);
+  cursor: pointer;
+  border: 1px solid var(--accent-bright);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.slider::-moz-range-thumb {
+  width: 16px;
+  height: 20px;
+  background: var(--accent);
+  cursor: pointer;
+  border: 1px solid var(--accent-bright);
+  border-radius: 0;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.slider-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+}
+
+/* COLOR PALETTE */
+.swatches-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  min-height: 56px;
+  padding: var(--s-2);
+  background: var(--bg-0);
+  border: 1px dashed var(--border);
+}
+.swatches-row:empty::before {
+  content: 'aucune couleur';
+  color: var(--text-dim);
+  font-size: 11px;
+  margin: auto;
+}
+.swatch {
+  position: relative;
+  width: 64px;
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+}
+.swatch span {
+  background: rgba(0, 0, 0, 0.7);
+  color: var(--text-bright);
+  font-size: 9px;
+  text-align: center;
+  padding: 2px;
+  letter-spacing: 0;
+}
+.swatch-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  background: var(--red);
+  color: var(--bg-0);
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  line-height: 1;
+}
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.color-picker {
+  width: 48px;
+  height: 32px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-2);
+  cursor: pointer;
+  padding: 0;
+}
+.color-picker::-webkit-color-swatch { border: none; }
+.color-picker::-webkit-color-swatch-wrapper { padding: 0; }
+
 .msg-images {
   display: flex;
   gap: var(--s-2);

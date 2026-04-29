@@ -32,23 +32,41 @@ const SCALAR_KEYS = SHEET_FIELDS.map((f) => f.key);
 
 const SYSTEM_PROMPT = `Tu es un assistant qui aide à construire une "character sheet" pour générer ensuite un prompt d'image (style cinematic concept art turnaround).
 
-Ton rôle:
-- Comprendre le perso que l'utilisateur décrit (en français ou anglais).
-- Quand tu apprends une info concrète, appelle TOUT DE SUITE le tool "update_character_sheet" pour la stocker. Tu peux mettre plusieurs champs en un appel.
-- Quand l'utilisateur t'envoie une image de référence, observe-la attentivement et extrais une description textuelle riche que tu peux ranger dans le bon champ (accessoires, top, bottom, props, color_palette, etc.).
-- Quand un champ manque ou est vague, pose UNE question ciblée à la fois — ne submerge pas l'utilisateur.
-- Tu peux extrapoler quand l'utilisateur le permet (ex: "à toi de voir") ou quand un champ est trivial à déduire (ex: si "accessoires: lunettes de soleil noires" → propose une couleur dans le palette).
-- Réponds de manière concise et directe. Pas de blabla.
-- Tu réponds dans la langue de l'utilisateur.
+PRINCIPES UX:
+- L'utilisateur déteste taper. Pose tes questions via le tool "request_input" qui affiche des widgets cliquables (chips, slider, color picker) chaque fois que c'est possible.
+- N'utilise une question ouverte (sans tool) QUE si la réponse est forcément descriptive et libre (ex: décris la cicatrice, le style de cheveux, etc.).
+- UNE seule question / UN seul widget à la fois. Pas de surcharge.
+- Tu peux pré-remplir plusieurs champs d'un coup avec "update_character_sheet" si l'utilisateur t'a déjà donné l'info ou si tu extrapoles depuis une image.
+- Tu réponds toujours dans la langue de l'utilisateur (par défaut français).
+- Sois concis. Pas de blabla, pas de "Bien sûr !".
 
-Champs disponibles (utilise EXACTEMENT ces noms):
+QUEL WIDGET POUR QUEL CHAMP (recommandations):
+- gender → chips ["femme", "homme", "non-binaire", "androgyne", "autre"]
+- age → slider min=0 max=100 unit="ans"
+- height → slider min=140 max=210 unit="cm"
+- body_type → chips ["mince", "athlétique", "musclé", "rond", "élancé", "massif"]
+- ethnicity → chips avec une liste raisonnable + allow_custom
+- role → chips selon contexte (ex: "soldat", "détective", "magicien", "noble", "marchand", "rebelle")
+- archetype → chips ["héros", "anti-héros", "mentor", "trickster", "ombre", "innocent", "explorateur", "rebelle"]
+- emotional_range → chips ["stoïque", "expressif", "explosif", "réservé", "chaleureux", "froid"]
+- speech_style → chips ["soutenu", "familier", "argot", "archaïque", "laconique", "verbeux"]
+- color_palette → color_palette (le widget gère plusieurs swatches)
+- accessories, props, top/bottom/shoes, personality_traits, core_theme, behavior_notes, character_name, alias, default_outfit_description → questions ouvertes en chat (texte libre), MAIS si tu peux raisonnablement proposer 4-6 directions, utilise chips avec allow_custom=true.
+
+GESTION DES IMAGES:
+- Quand l'utilisateur drop une image, observe-la et extrais une description. Range-la via "update_character_sheet" dans le bon champ (accessoires si c'est un objet, top/bottom si c'est un vêtement, color_palette si c'est une moodboard de couleurs, etc.). Demande à l'utilisateur dans quel champ ranger si ce n'est pas évident.
+
+CHAMPS DISPONIBLES (utilise EXACTEMENT ces noms):
 - CORE: character_name, alias, gender, age, height, body_type, ethnicity, role, archetype
 - PSYCHE: personality_traits, core_theme, emotional_range, behavior_notes, speech_style
-- OUTFIT: default_outfit_description (description globale), top_description, bottom_description, shoes_description, accessories
-- EXTRA: color_palette (liste de couleurs/swatches), props (objets que le perso porte/manipule)
-- notes: utilise add_note pour ajouter une petite annotation visuelle (ex: "manches retroussées", "posture légèrement voûtée"). Plusieurs notes possibles.
+- OUTFIT: default_outfit_description, top_description, bottom_description, shoes_description, accessories
+- EXTRA: color_palette, props
+- notes: utilise add_note pour ajouter une annotation visuelle (ex: "manches retroussées").
 
-Quand TOUS les champs CORE + au moins outfit + au moins une accessoire sont remplis, dis à l'utilisateur que la fiche est prête à générer.`;
+ORDRE SUGGÉRÉ (mais adapte-toi à l'utilisateur):
+1. nom + alias (chat libre) 2. gender (chips) 3. age (slider) 4. role (chips) 5. archetype (chips) 6. body_type (chips) 7. height (slider) 8. ethnicity (chips) 9. personality (chat) 10. outfit en bloc puis détaillé 11. color_palette (color picker) 12. accessoires (chat) 13. notes finales.
+
+Quand TOUS les champs CORE + au moins default_outfit_description + accessories sont remplis, dis à l'utilisateur que la fiche est prête à générer.`;
 
 const TOOLS = [
   {
@@ -90,6 +108,43 @@ const TOOLS = [
       type: 'object',
       properties: { text: { type: 'string', description: 'Le texte de la note' } },
       required: ['text'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'request_input',
+    description:
+      "Affiche un widget interactif (chips à cliquer, slider, color picker) pour que l'utilisateur réponde sans taper. Préfère TOUJOURS ce tool aux questions ouvertes quand le champ a un set fini de réponses raisonnables. Après l'appel, ATTENDS la réponse — n'appelle pas d'autre tool dans la même réponse.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        field: {
+          type: 'string',
+          description: 'Nom du champ ciblé (ex: gender, age, role, color_palette).',
+          enum: SCALAR_KEYS,
+        },
+        question: { type: 'string', description: "Question affichée au-dessus du widget. Concise." },
+        input_type: {
+          type: 'string',
+          enum: ['chips', 'multi_chips', 'slider', 'color_palette', 'text'],
+          description: "chips=choix unique, multi_chips=plusieurs choix, slider=numérique, color_palette=picker de couleurs, text=zone de texte courte.",
+        },
+        options: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Options pour chips/multi_chips (4-8 max).',
+        },
+        allow_custom: {
+          type: 'boolean',
+          description: "Si true, ajoute une option 'autre…' qui ouvre un champ texte. Recommandé pour chips quand la liste n'est pas exhaustive.",
+        },
+        slider_min: { type: 'number' },
+        slider_max: { type: 'number' },
+        slider_default: { type: 'number' },
+        slider_unit: { type: 'string', description: "Suffixe (ex: 'ans', 'cm')." },
+        placeholder: { type: 'string', description: "Pour input_type=text, placeholder du champ." },
+      },
+      required: ['field', 'question', 'input_type'],
       additionalProperties: false,
     },
   },
@@ -212,6 +267,255 @@ function removeThinking() {
   document.querySelectorAll('.msg[data-thinking]').forEach((n) => n.remove());
 }
 
+function renderInputWidget(toolUse) {
+  const { field, question, input_type, options, allow_custom, slider_min, slider_max, slider_default, slider_unit, placeholder } = toolUse.input || {};
+
+  const log = $('#chat-log');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg msg-widget';
+  wrap.dataset.field = field;
+
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  meta.textContent = `claude → ${field}`;
+  wrap.appendChild(meta);
+
+  const body = document.createElement('div');
+  body.className = 'msg-body widget';
+  if (question) {
+    const q = document.createElement('div');
+    q.className = 'widget-question';
+    q.textContent = question;
+    body.appendChild(q);
+  }
+
+  const widgetArea = document.createElement('div');
+  widgetArea.className = 'widget-area';
+
+  const lock = (value) => {
+    wrap.classList.add('widget-locked');
+    widgetArea.querySelectorAll('button, input, select').forEach((el) => (el.disabled = true));
+    const result = document.createElement('div');
+    result.className = 'widget-result';
+    result.textContent = `→ ${value}`;
+    widgetArea.appendChild(result);
+  };
+
+  if (input_type === 'chips' || input_type === 'multi_chips') {
+    const isMulti = input_type === 'multi_chips';
+    const opts = Array.isArray(options) ? [...options] : [];
+    const picks = new Set();
+
+    const chipsRow = document.createElement('div');
+    chipsRow.className = 'chips-row';
+
+    const renderChip = (label) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip';
+      chip.textContent = label;
+      chip.onclick = () => {
+        if (isMulti) {
+          if (picks.has(label)) {
+            picks.delete(label);
+            chip.classList.remove('chip-selected');
+          } else {
+            picks.add(label);
+            chip.classList.add('chip-selected');
+          }
+        } else {
+          submitWidget(field, label, lock);
+        }
+      };
+      chipsRow.appendChild(chip);
+    };
+
+    opts.forEach(renderChip);
+
+    if (allow_custom) {
+      const otherChip = document.createElement('button');
+      otherChip.type = 'button';
+      otherChip.className = 'chip chip-other';
+      otherChip.textContent = '+ autre…';
+      otherChip.onclick = () => {
+        otherChip.remove();
+        const customRow = document.createElement('div');
+        customRow.className = 'chips-custom';
+        const inp = document.createElement('input');
+        inp.className = 'input';
+        inp.placeholder = 'tape ta réponse…';
+        inp.onkeydown = (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            submitBtn.click();
+          }
+        };
+        const submitBtn = document.createElement('button');
+        submitBtn.className = 'btn btn-primary btn-sm';
+        submitBtn.textContent = 'OK';
+        submitBtn.onclick = () => {
+          const v = inp.value.trim();
+          if (v) submitWidget(field, v, lock);
+        };
+        customRow.appendChild(inp);
+        customRow.appendChild(submitBtn);
+        widgetArea.appendChild(customRow);
+        inp.focus();
+      };
+      chipsRow.appendChild(otherChip);
+    }
+
+    widgetArea.appendChild(chipsRow);
+
+    if (isMulti) {
+      const confirmBtn = document.createElement('button');
+      confirmBtn.className = 'btn btn-primary btn-sm widget-confirm';
+      confirmBtn.textContent = '✓ valider';
+      confirmBtn.onclick = () => {
+        if (picks.size === 0) return;
+        submitWidget(field, [...picks].join(', '), lock);
+      };
+      widgetArea.appendChild(confirmBtn);
+    }
+  } else if (input_type === 'slider') {
+    const min = Number.isFinite(slider_min) ? slider_min : 0;
+    const max = Number.isFinite(slider_max) ? slider_max : 100;
+    const def = Number.isFinite(slider_default) ? slider_default : Math.round((min + max) / 2);
+    const unit = slider_unit || '';
+
+    const sliderWrap = document.createElement('div');
+    sliderWrap.className = 'slider-wrap';
+    const valLabel = document.createElement('div');
+    valLabel.className = 'slider-value';
+    valLabel.textContent = `${def} ${unit}`.trim();
+
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.min = min;
+    range.max = max;
+    range.value = def;
+    range.className = 'slider';
+    range.oninput = () => (valLabel.textContent = `${range.value} ${unit}`.trim());
+
+    const ticks = document.createElement('div');
+    ticks.className = 'slider-ticks';
+    ticks.innerHTML = `<span>${min}</span><span>${max}</span>`;
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'btn btn-primary btn-sm widget-confirm';
+    confirmBtn.textContent = '✓ valider';
+    confirmBtn.onclick = () => {
+      const v = `${range.value} ${unit}`.trim();
+      submitWidget(field, v, lock);
+    };
+
+    sliderWrap.appendChild(valLabel);
+    sliderWrap.appendChild(range);
+    sliderWrap.appendChild(ticks);
+    widgetArea.appendChild(sliderWrap);
+    widgetArea.appendChild(confirmBtn);
+  } else if (input_type === 'color_palette') {
+    const colors = [];
+
+    const swatchesRow = document.createElement('div');
+    swatchesRow.className = 'swatches-row';
+
+    const renderSwatches = () => {
+      swatchesRow.innerHTML = '';
+      colors.forEach((c, i) => {
+        const sw = document.createElement('div');
+        sw.className = 'swatch';
+        sw.style.background = c;
+        sw.title = c;
+        const lbl = document.createElement('span');
+        lbl.textContent = c;
+        const x = document.createElement('button');
+        x.textContent = '×';
+        x.className = 'swatch-x';
+        x.onclick = () => {
+          colors.splice(i, 1);
+          renderSwatches();
+        };
+        sw.appendChild(lbl);
+        sw.appendChild(x);
+        swatchesRow.appendChild(sw);
+      });
+    };
+
+    const pickerRow = document.createElement('div');
+    pickerRow.className = 'picker-row';
+    const colorInp = document.createElement('input');
+    colorInp.type = 'color';
+    colorInp.value = '#1ed8e8';
+    colorInp.className = 'color-picker';
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn btn-ghost btn-sm';
+    addBtn.textContent = '+ ajouter';
+    addBtn.onclick = () => {
+      colors.push(colorInp.value);
+      renderSwatches();
+    };
+    pickerRow.appendChild(colorInp);
+    pickerRow.appendChild(addBtn);
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'btn btn-primary btn-sm widget-confirm';
+    confirmBtn.textContent = '✓ valider la palette';
+    confirmBtn.onclick = () => {
+      if (colors.length === 0) return;
+      submitWidget(field, colors.join(', '), lock);
+    };
+
+    widgetArea.appendChild(swatchesRow);
+    widgetArea.appendChild(pickerRow);
+    widgetArea.appendChild(confirmBtn);
+  } else {
+    // text fallback
+    const row = document.createElement('div');
+    row.className = 'chips-custom';
+    const inp = document.createElement('input');
+    inp.className = 'input';
+    inp.placeholder = placeholder || 'tape ta réponse…';
+    inp.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sub.click();
+      }
+    };
+    const sub = document.createElement('button');
+    sub.className = 'btn btn-primary btn-sm';
+    sub.textContent = 'OK';
+    sub.onclick = () => {
+      const v = inp.value.trim();
+      if (v) submitWidget(field, v, lock);
+    };
+    row.appendChild(inp);
+    row.appendChild(sub);
+    widgetArea.appendChild(row);
+    setTimeout(() => inp.focus(), 50);
+  }
+
+  body.appendChild(widgetArea);
+  wrap.appendChild(body);
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function submitWidget(field, value, lockFn) {
+  if (state.busy) return;
+  if (SCALAR_KEYS.includes(field)) {
+    state.sheet[field] = value;
+    renderSheet();
+    flashField(field);
+  }
+  lockFn(value);
+  state.conversation.push({
+    role: 'user',
+    content: `[via widget] ${field} = ${value}`,
+  });
+  await runAgent();
+}
+
 function renderImagePreviews() {
   const wrap = $('#image-preview');
   wrap.innerHTML = '';
@@ -267,6 +571,9 @@ function applyToolCall(name, input) {
     state.notes.push(text);
     renderSheet();
     return `note ajoutée (#${state.notes.length})`;
+  }
+  if (name === 'request_input') {
+    return 'widget affiché — en attente de la réponse utilisateur via UI';
   }
   return `unknown tool: ${name}`;
 }
@@ -326,20 +633,30 @@ async function runAgent() {
         break;
       }
 
+      removeThinking();
+      const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+      if (text) appendMessage('assistant', text, 'claude');
+
       const toolResults = [];
+      let waitingForWidget = false;
       for (const tu of toolUses) {
         const out = applyToolCall(tu.name, tu.input);
         toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: out });
-        appendMessage('tool', `▸ ${tu.name}(${JSON.stringify(tu.input)}) → ${out}`, 'tool');
+        if (tu.name === 'request_input') {
+          renderInputWidget(tu);
+          waitingForWidget = true;
+        } else {
+          appendMessage('tool', `▸ ${tu.name} → ${out}`, 'tool');
+        }
       }
       state.conversation.push({ role: 'user', content: toolResults });
 
-      if (response.stop_reason !== 'tool_use') {
-        removeThinking();
-        const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
-        if (text) appendMessage('assistant', text, 'claude');
-        break;
+      if (waitingForWidget) {
+        setStatus('await input', 'thinking');
+        return;
       }
+      if (response.stop_reason !== 'tool_use') break;
+      appendThinking();
     }
     setStatus('online', 'online');
   } catch (e) {
