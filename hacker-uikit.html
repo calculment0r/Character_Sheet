@@ -1,0 +1,2880 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HACKER UI KIT // DESIGN SYSTEM v1.0</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   DESIGN TOKENS - HACKER THEME
+   These are the source of truth. All components reference these.
+   ============================================================ */
+:root {
+  /* COLORS - Background scale */
+  --bg-0: #00080f;
+  --bg-1: #000d18;
+  --bg-2: #001220;
+  --bg-3: #001d30;
+  --bg-4: #002a45;
+
+  /* COLORS - Accents */
+  --accent: #1ed8e8;
+  --accent-bright: #5ef5ff;
+  --accent-dim: rgba(30, 216, 232, 0.4);
+  --accent-glow: rgba(30, 216, 232, 0.16);
+
+  /* COLORS - Semantic */
+  --red: #e84020;
+  --red-dim: rgba(232, 64, 32, 0.4);
+  --orange: #e89020;
+  --orange-dim: rgba(232, 144, 32, 0.4);
+  --green: #20e860;
+  --green-dim: rgba(32, 232, 96, 0.4);
+  --yellow: #e8d020;
+
+  /* COLORS - Text */
+  --text: #c8e8f0;
+  --text-bright: #ffffff;
+  --text-muted: #7aa8b8;
+  --text-dim: #4a7888;
+
+  /* COLORS - Borders */
+  --border: rgba(30, 216, 232, 0.16);
+  --border-strong: rgba(30, 216, 232, 0.32);
+  --border-bright: rgba(30, 216, 232, 0.6);
+
+  /* TYPOGRAPHY */
+  --font-mono: 'Share Tech Mono', 'JetBrains Mono', monospace;
+  --font-mono-alt: 'JetBrains Mono', monospace;
+  --font-pixel: 'VT323', monospace;
+
+  /* SPACING (8pt grid) */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+  --s-9: 96px;
+
+  /* RADII */
+  --r-0: 0px;
+  --r-1: 2px;
+  --r-2: 4px;
+
+  /* TRANSITIONS */
+  --t-fast: 0.12s ease;
+  --t-base: 0.24s ease;
+  --t-slow: 0.4s ease;
+
+  /* LAYOUT */
+  --sidebar-w: 240px;
+  --content-max: 980px;
+}
+
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-mono);
+  background: var(--bg-0);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Dot grid background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(rgba(30, 216, 232, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Scanlines overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 2px,
+    rgba(30, 216, 232, 0.018) 2px,
+    rgba(30, 216, 232, 0.018) 3px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+::selection { background: var(--accent); color: var(--bg-0); }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-1); }
+::-webkit-scrollbar-thumb { background: var(--accent-dim); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ============================================================
+   LAYOUT - Sidebar + Main
+   ============================================================ */
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: 100vh;
+  position: relative;
+  z-index: 2;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--bg-1);
+  border-right: 1px solid var(--border);
+  padding: var(--s-5) var(--s-4);
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.sidebar-header {
+  padding-bottom: var(--s-4);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--s-4);
+}
+
+.sidebar-logo {
+  font-family: var(--font-pixel);
+  font-size: 28px;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+  line-height: 1;
+}
+
+.sidebar-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: var(--s-2);
+}
+
+.live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--green);
+  border-radius: 50%;
+  margin-right: 6px;
+  animation: blink 1.4s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+.sidebar-clock {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: var(--s-2);
+}
+
+.sidebar-section {
+  margin-bottom: var(--s-5);
+}
+
+.sidebar-section-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.15em;
+  margin-bottom: var(--s-2);
+}
+
+.sidebar-nav { list-style: none; }
+
+.sidebar-nav a {
+  display: block;
+  padding: var(--s-2) var(--s-3);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 12px;
+  border-left: 2px solid transparent;
+  transition: var(--t-fast);
+}
+
+.sidebar-nav a:hover {
+  color: var(--accent);
+  background: var(--bg-2);
+  border-left-color: var(--accent-dim);
+}
+
+.sidebar-nav a.active {
+  color: var(--accent-bright);
+  background: var(--bg-2);
+  border-left-color: var(--accent);
+}
+
+.sidebar-footer {
+  position: absolute;
+  bottom: var(--s-4);
+  left: var(--s-4);
+  right: var(--s-4);
+  font-size: 10px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  padding-top: var(--s-3);
+}
+
+.main {
+  grid-column: 2;
+  padding: var(--s-7) var(--s-6);
+  max-width: var(--content-max);
+}
+
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-mono);
+  font-weight: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+}
+
+h1 {
+  font-size: 32px;
+  line-height: 1.1;
+  margin-bottom: var(--s-4);
+  position: relative;
+  display: inline-block;
+}
+
+h1::before {
+  content: '> ';
+  color: var(--accent);
+}
+
+h2 {
+  font-size: 22px;
+  color: var(--accent);
+  margin: var(--s-7) 0 var(--s-4);
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.1em;
+}
+
+h3 {
+  font-size: 16px;
+  color: var(--accent-bright);
+  margin: var(--s-5) 0 var(--s-3);
+  letter-spacing: 0.08em;
+}
+
+h4 {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: var(--s-4) 0 var(--s-2);
+}
+
+p {
+  margin-bottom: var(--s-3);
+  text-transform: none;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-dim);
+  transition: var(--t-fast);
+}
+
+a:hover {
+  color: var(--accent-bright);
+  border-bottom-color: var(--accent);
+}
+
+code, pre, kbd {
+  font-family: var(--font-mono-alt);
+  background: var(--bg-2);
+  padding: 2px 6px;
+  border-radius: 0;
+  font-size: 12px;
+  color: var(--accent-bright);
+  border: 1px solid var(--border);
+}
+
+kbd {
+  border-bottom-width: 2px;
+  padding: 1px 6px;
+}
+
+pre {
+  padding: var(--s-4);
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text);
+}
+
+.text-bright { color: var(--text-bright); }
+.text-muted { color: var(--text-muted); }
+.text-dim { color: var(--text-dim); }
+.text-accent { color: var(--accent); }
+.text-red { color: var(--red); }
+.text-orange { color: var(--orange); }
+.text-green { color: var(--green); }
+.text-yellow { color: var(--yellow); }
+
+.label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.2em;
+  margin-bottom: var(--s-2);
+  display: block;
+}
+
+.eyebrow {
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.18em;
+  margin-bottom: var(--s-2);
+}
+
+/* ============================================================
+   SECTION SCAFFOLDING
+   ============================================================ */
+.section {
+  margin-bottom: var(--s-9);
+  scroll-margin-top: var(--s-5);
+}
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--s-5);
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.section-id {
+  font-family: var(--font-mono-alt);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.demo-grid {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.demo-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.demo-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.demo-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.demo-grid-auto { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+
+@media (max-width: 768px) {
+  .demo-grid-2, .demo-grid-3, .demo-grid-4 { grid-template-columns: 1fr; }
+}
+
+.demo-block {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  padding: var(--s-5);
+  position: relative;
+}
+
+.demo-block::before {
+  content: attr(data-label);
+  position: absolute;
+  top: -8px;
+  left: var(--s-3);
+  background: var(--bg-0);
+  padding: 0 var(--s-2);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.15em;
+}
+
+/* ============================================================
+   COLOR SWATCHES
+   ============================================================ */
+.swatch {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  padding: var(--s-3);
+  font-size: 11px;
+}
+
+.swatch-color {
+  height: 60px;
+  margin-bottom: var(--s-2);
+  border: 1px solid var(--border);
+}
+
+.swatch-name {
+  color: var(--accent-bright);
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.swatch-value {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
+
+.swatch-token {
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: lowercase;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-4);
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: var(--t-fast);
+  position: relative;
+  overflow: hidden;
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: var(--accent);
+  color: var(--bg-0);
+  border-color: var(--accent);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}
+
+.btn[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Button variants */
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg-0);
+  border-color: var(--accent);
+}
+
+.btn-primary:hover {
+  background: var(--accent-bright);
+  border-color: var(--accent-bright);
+  color: var(--bg-0);
+}
+
+.btn-ghost {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.btn-ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+}
+
+.btn-danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.btn-danger:hover {
+  background: var(--red);
+  color: var(--bg-0);
+}
+
+.btn-warning {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
+.btn-warning:hover {
+  background: var(--orange);
+  color: var(--bg-0);
+}
+
+.btn-success {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.btn-success:hover {
+  background: var(--green);
+  color: var(--bg-0);
+}
+
+/* Button sizes */
+.btn-sm { padding: 4px var(--s-3); font-size: 11px; }
+.btn-lg { padding: var(--s-3) var(--s-5); font-size: 14px; }
+.btn-block { display: flex; width: 100%; }
+
+/* Button with prefix indicator */
+.btn-prefix::before {
+  content: '> ';
+  color: inherit;
+  margin-right: 4px;
+}
+
+/* Icon button */
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+/* Glitch button */
+.btn-glitch {
+  position: relative;
+}
+
+.btn-glitch::before,
+.btn-glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.btn-glitch:hover::before {
+  opacity: 0.8;
+  color: var(--red);
+  transform: translate(-2px, 0);
+  animation: glitch-1 0.3s infinite;
+}
+
+.btn-glitch:hover::after {
+  opacity: 0.8;
+  color: var(--orange);
+  transform: translate(2px, 0);
+  animation: glitch-2 0.3s infinite;
+}
+
+@keyframes glitch-1 {
+  0%, 100% { transform: translate(-2px, 0); }
+  50% { transform: translate(-1px, 1px); }
+}
+
+@keyframes glitch-2 {
+  0%, 100% { transform: translate(2px, 0); }
+  50% { transform: translate(1px, -1px); }
+}
+
+/* ============================================================
+   FORMS - Inputs, Textareas, Selects
+   ============================================================ */
+.form-group {
+  margin-bottom: var(--s-4);
+}
+
+.form-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.15em;
+  margin-bottom: var(--s-2);
+  text-transform: uppercase;
+}
+
+.form-label::before {
+  content: '// ';
+  color: var(--accent-dim);
+}
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  background: var(--bg-2);
+  color: var(--text-bright);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  transition: var(--t-fast);
+  outline: none;
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+  border-color: var(--accent);
+  background: var(--bg-3);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.textarea {
+  min-height: 100px;
+  resize: vertical;
+  font-family: var(--font-mono-alt);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--accent) 50%),
+                    linear-gradient(135deg, var(--accent) 50%, transparent 50%);
+  background-position: calc(100% - 16px) center, calc(100% - 11px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: var(--s-7);
+  cursor: pointer;
+}
+
+.input-prefix {
+  display: flex;
+  align-items: stretch;
+}
+
+.input-prefix-label {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--s-3);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-right: none;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.input-prefix .input {
+  flex: 1;
+}
+
+.form-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.form-error {
+  font-size: 10px;
+  color: var(--red);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.form-error::before {
+  content: '! ';
+}
+
+/* Checkbox & Radio */
+.check-group {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  cursor: pointer;
+  margin-bottom: var(--s-2);
+  user-select: none;
+}
+
+.check-input {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: var(--t-fast);
+}
+
+.check-input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.check-input:checked::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--bg-0);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.check-input[type="radio"] {
+  border-radius: 50%;
+}
+
+.check-input[type="radio"]:checked::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background: var(--bg-0);
+  border: none;
+  transform: none;
+  border-radius: 50%;
+}
+
+.check-input:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}
+
+.check-label {
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* Toggle Switch */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 22px;
+  cursor: pointer;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  transition: var(--t-fast);
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-muted);
+  transition: var(--t-fast);
+}
+
+.toggle input:checked ~ .toggle-track {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+}
+
+.toggle input:checked ~ .toggle-thumb {
+  left: 24px;
+  background: var(--accent);
+}
+
+/* Range Slider */
+.range {
+  width: 100%;
+  appearance: none;
+  height: 4px;
+  background: var(--bg-3);
+  outline: none;
+  border: 1px solid var(--border);
+}
+
+.range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 18px;
+  background: var(--accent);
+  cursor: pointer;
+  border: 1px solid var(--accent-bright);
+}
+
+.range::-moz-range-thumb {
+  width: 14px;
+  height: 18px;
+  background: var(--accent);
+  cursor: pointer;
+  border: 1px solid var(--accent-bright);
+  border-radius: 0;
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.range-value {
+  font-family: var(--font-mono-alt);
+  color: var(--accent);
+  font-size: 12px;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* File input (custom) */
+.file-input {
+  display: block;
+  border: 1px dashed var(--border-strong);
+  background: var(--bg-2);
+  padding: var(--s-5);
+  text-align: center;
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+
+.file-input:hover {
+  border-color: var(--accent);
+  background: var(--bg-3);
+}
+
+.file-input input { display: none; }
+
+.file-input-icon {
+  font-size: 24px;
+  color: var(--accent);
+  margin-bottom: var(--s-2);
+}
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+.card {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  padding: var(--s-5);
+  position: relative;
+  transition: var(--t-fast);
+}
+
+.card:hover {
+  border-color: var(--border-strong);
+}
+
+.card-bordered-accent {
+  border-left: 2px solid var(--accent);
+}
+
+.card-elevated {
+  background: var(--bg-2);
+  border-color: var(--border-strong);
+}
+
+.card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--s-3);
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.card-title {
+  font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+}
+
+.card-meta {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.card-body { color: var(--text); }
+
+.card-footer {
+  margin-top: var(--s-4);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* KPI Card */
+.kpi {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  padding: var(--s-4);
+  position: relative;
+}
+
+.kpi-corner {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 12px;
+  height: 12px;
+  border-top: 1px solid var(--accent);
+  border-right: 1px solid var(--accent);
+}
+
+.kpi-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.15em;
+  margin-bottom: var(--s-2);
+}
+
+.kpi-value {
+  font-family: var(--font-pixel);
+  font-size: 36px;
+  color: var(--accent-bright);
+  line-height: 1;
+  letter-spacing: 0.05em;
+}
+
+.kpi-delta {
+  font-size: 11px;
+  margin-top: var(--s-2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kpi-delta-up { color: var(--green); }
+.kpi-delta-down { color: var(--red); }
+
+/* ============================================================
+   BADGES & TAGS
+   ============================================================ */
+.badge {
+  display: inline-block;
+  padding: 2px var(--s-2);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.badge-accent { border-color: var(--accent-dim); color: var(--accent); }
+.badge-red { border-color: var(--red-dim); color: var(--red); background: rgba(232, 64, 32, 0.08); }
+.badge-orange { border-color: var(--orange-dim); color: var(--orange); background: rgba(232, 144, 32, 0.08); }
+.badge-green { border-color: var(--green-dim); color: var(--green); background: rgba(32, 232, 96, 0.08); }
+.badge-solid { background: var(--accent); color: var(--bg-0); border-color: var(--accent); }
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--s-2);
+  font-size: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+
+.tag::before { content: '#'; color: var(--accent-dim); }
+
+.tag:hover { border-color: var(--accent); color: var(--accent); }
+
+.tag-close {
+  margin-left: 4px;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.tag-close:hover { color: var(--red); }
+
+/* Status pill */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px var(--s-2);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.status-pill.online .status-dot { background: var(--green); animation: blink 1.4s infinite; }
+.status-pill.warning .status-dot { background: var(--orange); }
+.status-pill.error .status-dot { background: var(--red); }
+.status-pill.idle .status-dot { background: var(--text-dim); }
+
+/* ============================================================
+   ALERTS
+   ============================================================ */
+.alert {
+  display: flex;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  font-size: 12px;
+  margin-bottom: var(--s-3);
+}
+
+.alert-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-pixel);
+  font-size: 18px;
+}
+
+.alert-content { flex: 1; }
+.alert-title { font-weight: bold; margin-bottom: 2px; }
+.alert-body { color: var(--text-muted); font-size: 11px; }
+
+.alert-info { border-color: var(--accent-dim); }
+.alert-info .alert-icon { color: var(--accent); }
+.alert-info .alert-title { color: var(--accent); }
+
+.alert-success { border-color: var(--green-dim); background: rgba(32, 232, 96, 0.04); }
+.alert-success .alert-icon { color: var(--green); }
+.alert-success .alert-title { color: var(--green); }
+
+.alert-warning { border-color: var(--orange-dim); background: rgba(232, 144, 32, 0.04); }
+.alert-warning .alert-icon { color: var(--orange); }
+.alert-warning .alert-title { color: var(--orange); }
+
+.alert-error { border-color: var(--red-dim); background: rgba(232, 64, 32, 0.04); }
+.alert-error .alert-icon { color: var(--red); }
+.alert-error .alert-title { color: var(--red); }
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th,
+.table td {
+  padding: var(--s-2) var(--s-3);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.table th {
+  background: var(--bg-2);
+  color: var(--text-dim);
+  font-weight: normal;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  border-bottom-color: var(--border-strong);
+}
+
+.table tbody tr:hover {
+  background: var(--bg-2);
+}
+
+.table-numeric {
+  font-family: var(--font-mono-alt);
+  color: var(--accent-bright);
+  text-align: right;
+}
+
+/* ============================================================
+   NAVIGATION - Tabs, Breadcrumbs, Pagination
+   ============================================================ */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--s-4);
+  gap: 0;
+}
+
+.tab {
+  padding: var(--s-2) var(--s-4);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: var(--t-fast);
+}
+
+.tab:hover { color: var(--accent); }
+.tab.active {
+  color: var(--accent-bright);
+  border-bottom-color: var(--accent);
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: var(--s-3);
+}
+
+.breadcrumbs a { border: none; color: var(--text-muted); }
+.breadcrumbs a:hover { color: var(--accent); }
+.breadcrumb-sep { color: var(--text-dim); }
+.breadcrumb-current { color: var(--accent); }
+
+.pagination {
+  display: flex;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.pagination button {
+  width: 32px;
+  height: 32px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+
+.pagination button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pagination button.active {
+  background: var(--accent);
+  color: var(--bg-0);
+  border-color: var(--accent);
+}
+
+/* ============================================================
+   PROGRESS & LOADERS
+   ============================================================ */
+.progress {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s ease;
+  position: relative;
+}
+
+.progress-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--accent-bright), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.progress-labeled {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.dots-loader {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.dots-loader span {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  animation: bounce 1.4s infinite ease-in-out;
+}
+
+.dots-loader span:nth-child(2) { animation-delay: 0.16s; }
+.dots-loader span:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+.terminal-loader {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.terminal-loader::after {
+  content: '_';
+  animation: blink 1s infinite;
+}
+
+/* ============================================================
+   TERMINAL & CODE BLOCKS
+   ============================================================ */
+.terminal {
+  background: var(--bg-0);
+  border: 1px solid var(--border-strong);
+  font-family: var(--font-mono-alt);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.terminal-header {
+  background: var(--bg-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.terminal-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.terminal-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg-4);
+}
+
+.terminal-dots span:first-child { background: var(--red); }
+.terminal-dots span:nth-child(2) { background: var(--orange); }
+.terminal-dots span:nth-child(3) { background: var(--green); }
+
+.terminal-body {
+  padding: var(--s-3);
+  line-height: 1.6;
+  min-height: 120px;
+  color: var(--text);
+}
+
+.terminal-line {
+  display: flex;
+  gap: var(--s-2);
+}
+
+.terminal-prompt { color: var(--accent); flex-shrink: 0; }
+.terminal-output { color: var(--text-muted); }
+.terminal-success { color: var(--green); }
+.terminal-error { color: var(--red); }
+.terminal-cursor::after {
+  content: '█';
+  animation: blink 1s infinite;
+  color: var(--accent);
+}
+
+/* ============================================================
+   MODAL / DIALOG
+   ============================================================ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 8, 15, 0.85);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: var(--s-5);
+}
+
+.modal {
+  background: var(--bg-1);
+  border: 1px solid var(--border-strong);
+  max-width: 480px;
+  width: 100%;
+  position: relative;
+}
+
+.modal::before,
+.modal::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--accent);
+}
+
+.modal::before {
+  top: -1px;
+  left: -1px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.modal::after {
+  bottom: -1px;
+  right: -1px;
+  border-left: none;
+  border-top: none;
+}
+
+.modal-header {
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-title {
+  font-size: 13px;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 16px;
+}
+
+.modal-close:hover { color: var(--red); }
+
+.modal-body { padding: var(--s-4); font-size: 12px; line-height: 1.7; color: var(--text); }
+
+.modal-footer {
+  padding: var(--s-3) var(--s-4);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
+/* ============================================================
+   ACCORDION
+   ============================================================ */
+.accordion-item {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  margin-bottom: var(--s-2);
+}
+
+.accordion-header {
+  padding: var(--s-3) var(--s-4);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+  font-size: 12px;
+  color: var(--text);
+  letter-spacing: 0.05em;
+}
+
+.accordion-header:hover { color: var(--accent); }
+
+.accordion-icon {
+  color: var(--accent);
+  transition: var(--t-fast);
+  font-family: var(--font-pixel);
+}
+
+.accordion-item.open .accordion-icon { transform: rotate(45deg); }
+
+.accordion-body {
+  padding: 0 var(--s-4);
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, padding 0.3s ease;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.7;
+}
+
+.accordion-item.open .accordion-body {
+  max-height: 400px;
+  padding: var(--s-3) var(--s-4) var(--s-4);
+  border-top: 1px solid var(--border);
+}
+
+/* ============================================================
+   TOOLTIPS
+   ============================================================ */
+.tooltip-wrap {
+  position: relative;
+  display: inline-block;
+  cursor: help;
+  border-bottom: 1px dashed var(--accent-dim);
+}
+
+.tooltip-wrap::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px var(--s-2);
+  background: var(--bg-3);
+  border: 1px solid var(--accent);
+  color: var(--accent-bright);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: var(--t-fast);
+}
+
+.tooltip-wrap:hover::after {
+  opacity: 1;
+  bottom: calc(100% + 4px);
+}
+
+/* ============================================================
+   PULL QUOTE / EDITORIAL
+   ============================================================ */
+.pull-quote {
+  border-left: 2px solid var(--accent);
+  padding: var(--s-3) var(--s-5);
+  margin: var(--s-5) 0;
+  background: var(--bg-1);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-bright);
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-style: italic;
+}
+
+.pull-quote-attr {
+  display: block;
+  margin-top: var(--s-2);
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: normal;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pull-quote-attr::before { content: '— '; color: var(--accent); }
+
+/* ============================================================
+   SIGNATURE BLOCK
+   ============================================================ */
+.signature {
+  display: flex;
+  gap: var(--s-3);
+  margin: var(--s-7) 0;
+}
+
+.sig-bar {
+  width: 2px;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.sig-body { flex: 1; }
+.sig-from {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+  margin-bottom: var(--s-2);
+}
+.sig-text { font-size: 12px; color: var(--text-muted); line-height: 1.7; text-transform: none; letter-spacing: 0; }
+
+/* ============================================================
+   ASCII / DECORATIVE
+   ============================================================ */
+.ascii-divider {
+  font-family: var(--font-mono-alt);
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0;
+  white-space: pre;
+  text-align: center;
+  margin: var(--s-5) 0;
+  user-select: none;
+}
+
+.ascii-art {
+  font-family: var(--font-mono-alt);
+  color: var(--accent);
+  font-size: 10px;
+  line-height: 1.1;
+  letter-spacing: 0;
+  white-space: pre;
+  text-transform: none;
+}
+
+.bracket-corners {
+  position: relative;
+  padding: var(--s-5);
+}
+
+.bracket-corners::before,
+.bracket-corners::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--accent);
+}
+
+.bracket-corners::before {
+  top: 0;
+  left: 0;
+  border-top: 1px solid;
+  border-left: 1px solid;
+}
+
+.bracket-corners::after {
+  bottom: 0;
+  right: 0;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+}
+
+/* ============================================================
+   CHARTS - Simple bar / sparkline (CSS only)
+   ============================================================ */
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 80px;
+  padding: var(--s-2);
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+}
+
+.bar {
+  flex: 1;
+  background: var(--accent-dim);
+  border-top: 2px solid var(--accent);
+  transition: var(--t-fast);
+}
+
+.bar:hover { background: var(--accent); }
+
+.sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 24px;
+}
+
+.sparkline span {
+  flex: 1;
+  background: var(--accent);
+  min-height: 2px;
+}
+
+/* ============================================================
+   AVATARS
+   ============================================================ */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--bg-3);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  font-weight: bold;
+}
+
+.avatar-lg { width: 56px; height: 56px; font-size: 16px; }
+.avatar-sm { width: 24px; height: 24px; font-size: 10px; }
+
+.avatar-stack {
+  display: inline-flex;
+}
+
+.avatar-stack .avatar {
+  margin-left: -8px;
+  background: var(--bg-1);
+}
+
+.avatar-stack .avatar:first-child { margin-left: 0; }
+
+/* ============================================================
+   LIST GROUPS
+   ============================================================ */
+.list-group {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+}
+
+.list-item {
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+
+.list-item:last-child { border-bottom: none; }
+.list-item:hover { background: var(--bg-2); }
+
+.list-item-meta {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* ============================================================
+   SPECIAL EFFECTS
+   ============================================================ */
+.glitch-text {
+  position: relative;
+  display: inline-block;
+  color: var(--text-bright);
+}
+
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.glitch-text::before {
+  color: var(--red);
+  animation: glitch-anim-1 4s infinite linear alternate-reverse;
+  clip-path: polygon(0 0, 100% 0, 100% 33%, 0 33%);
+}
+
+.glitch-text::after {
+  color: var(--accent);
+  animation: glitch-anim-2 3s infinite linear alternate-reverse;
+  clip-path: polygon(0 67%, 100% 67%, 100% 100%, 0 100%);
+}
+
+@keyframes glitch-anim-1 {
+  0%, 90%, 100% { transform: translate(0); }
+  92% { transform: translate(-2px, 1px); }
+  94% { transform: translate(2px, -1px); }
+  96% { transform: translate(-1px, -2px); }
+}
+
+@keyframes glitch-anim-2 {
+  0%, 88%, 100% { transform: translate(0); }
+  90% { transform: translate(2px, -1px); }
+  92% { transform: translate(-1px, 2px); }
+  94% { transform: translate(1px, 1px); }
+}
+
+.typewriter {
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 2px solid var(--accent);
+  animation: typing 3s steps(30, end), cursor-blink 0.7s step-end infinite;
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes cursor-blink {
+  from, to { border-color: transparent; }
+  50% { border-color: var(--accent); }
+}
+
+.crt-flicker {
+  animation: flicker 0.15s infinite;
+}
+
+@keyframes flicker {
+  0% { opacity: 0.97; }
+  5% { opacity: 0.95; }
+  10% { opacity: 0.99; }
+  100% { opacity: 0.98; }
+}
+
+/* ============================================================
+   UTILITIES
+   ============================================================ */
+.flex { display: flex; }
+.flex-col { display: flex; flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: var(--s-1); }
+.gap-2 { gap: var(--s-2); }
+.gap-3 { gap: var(--s-3); }
+.gap-4 { gap: var(--s-4); }
+.mt-2 { margin-top: var(--s-2); }
+.mt-3 { margin-top: var(--s-3); }
+.mt-4 { margin-top: var(--s-4); }
+.mb-2 { margin-bottom: var(--s-2); }
+.mb-3 { margin-bottom: var(--s-3); }
+.mb-4 { margin-bottom: var(--s-4); }
+.mb-5 { margin-bottom: var(--s-5); }
+.text-xs { font-size: 10px; }
+.text-sm { font-size: 11px; }
+.full { width: 100%; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-footer { position: static; }
+  .main {
+    grid-column: 1;
+    padding: var(--s-5) var(--s-4);
+  }
+  h1 { font-size: 24px; }
+  h2 { font-size: 18px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ============================================================
+     SIDEBAR
+     ============================================================ -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">UI//KIT</div>
+    <div class="sidebar-meta">
+      <span class="live-dot"></span>SYSTEM ACTIVE
+    </div>
+    <div class="sidebar-clock" id="clock">--:--:--</div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">// FOUNDATIONS</div>
+    <ul class="sidebar-nav">
+      <li><a href="#tokens">01 / Tokens</a></li>
+      <li><a href="#typography">02 / Typography</a></li>
+      <li><a href="#colors">03 / Colors</a></li>
+      <li><a href="#spacing">04 / Spacing</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">// PRIMITIVES</div>
+    <ul class="sidebar-nav">
+      <li><a href="#buttons">05 / Buttons</a></li>
+      <li><a href="#inputs">06 / Inputs</a></li>
+      <li><a href="#controls">07 / Controls</a></li>
+      <li><a href="#badges">08 / Badges</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">// COMPONENTS</div>
+    <ul class="sidebar-nav">
+      <li><a href="#cards">09 / Cards</a></li>
+      <li><a href="#alerts">10 / Alerts</a></li>
+      <li><a href="#nav">11 / Navigation</a></li>
+      <li><a href="#tables">12 / Tables</a></li>
+      <li><a href="#feedback">13 / Feedback</a></li>
+      <li><a href="#overlay">14 / Overlay</a></li>
+      <li><a href="#data">15 / Data Display</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">// EDITORIAL</div>
+    <ul class="sidebar-nav">
+      <li><a href="#editorial">16 / Editorial</a></li>
+      <li><a href="#fx">17 / FX & Glitch</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-footer">
+    UI KIT v1.0<br>
+    BUILD: 2026.04.29<br>
+    THEME: HACKER//PRO
+  </div>
+</aside>
+
+<!-- ============================================================
+     MAIN
+     ============================================================ -->
+<main class="main">
+
+<!-- HEADER -->
+<header class="mb-5">
+  <div class="eyebrow">// DESIGN SYSTEM // RESEARCH PREVIEW</div>
+  <h1 class="glitch-text" data-text="HACKER UI KIT">HACKER UI KIT</h1>
+  <p class="text-muted mt-3">A comprehensive design system for terminal-aesthetic interfaces. All primitives, components, and layouts in one document. Hand off to <code>Claude Design</code> for refinement, then to <code>Claude Code</code> for production implementation.</p>
+  <div class="flex gap-2 mt-4">
+    <span class="badge badge-accent">v1.0.0</span>
+    <span class="badge badge-green">17 SECTIONS</span>
+    <span class="badge">80+ COMPONENTS</span>
+    <span class="badge badge-orange">RESPONSIVE</span>
+  </div>
+</header>
+
+<!-- ============================================================
+     01 / TOKENS
+     ============================================================ -->
+<section id="tokens" class="section">
+  <div class="section-header">
+    <h2>01 // Design Tokens</h2>
+    <span class="section-id">/foundations/tokens</span>
+  </div>
+  <p class="text-muted mb-4">All values derive from CSS custom properties at <code>:root</code>. Modify these to retheme the entire system.</p>
+
+  <h3>Spacing scale (8pt grid)</h3>
+  <div class="demo-grid demo-grid-auto mb-4">
+    <div class="swatch"><div class="swatch-color" style="height:4px; background:var(--accent);"></div><div class="swatch-name">--s-1</div><div class="swatch-token">4px</div></div>
+    <div class="swatch"><div class="swatch-color" style="height:8px; background:var(--accent);"></div><div class="swatch-name">--s-2</div><div class="swatch-token">8px</div></div>
+    <div class="swatch"><div class="swatch-color" style="height:12px; background:var(--accent);"></div><div class="swatch-name">--s-3</div><div class="swatch-token">12px</div></div>
+    <div class="swatch"><div class="swatch-color" style="height:16px; background:var(--accent);"></div><div class="swatch-name">--s-4</div><div class="swatch-token">16px</div></div>
+    <div class="swatch"><div class="swatch-color" style="height:24px; background:var(--accent);"></div><div class="swatch-name">--s-5</div><div class="swatch-token">24px</div></div>
+    <div class="swatch"><div class="swatch-color" style="height:32px; background:var(--accent);"></div><div class="swatch-name">--s-6</div><div class="swatch-token">32px</div></div>
+    <div class="swatch"><div class="swatch-color" style="height:48px; background:var(--accent);"></div><div class="swatch-name">--s-7</div><div class="swatch-token">48px</div></div>
+    <div class="swatch"><div class="swatch-color" style="height:64px; background:var(--accent);"></div><div class="swatch-name">--s-8</div><div class="swatch-token">64px</div></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     02 / TYPOGRAPHY
+     ============================================================ -->
+<section id="typography" class="section">
+  <div class="section-header">
+    <h2>02 // Typography</h2>
+    <span class="section-id">/foundations/typography</span>
+  </div>
+
+  <div class="demo-block mb-4" data-label="HEADINGS">
+    <h1>Heading 01 / 32px</h1>
+    <h2 style="margin-top:16px; margin-bottom:8px;">Heading 02 / 22px</h2>
+    <h3>Heading 03 / 16px</h3>
+    <h4>Heading 04 / 13px</h4>
+  </div>
+
+  <div class="demo-block mb-4" data-label="BODY">
+    <p>Default body text. Sans-serif terminal monospace, 14px, line-height 1.6, letter-spacing 0.04em. Text-transform uppercase by default for the system aesthetic. Body paragraphs reset to lowercase via <code>p</code> selector.</p>
+    <p class="text-muted">Muted variant for secondary information.</p>
+    <p class="text-dim">Dim variant for tertiary metadata.</p>
+  </div>
+
+  <div class="demo-block mb-4" data-label="LABELS & EYEBROWS">
+    <div class="eyebrow">// section eyebrow</div>
+    <span class="label">FORM LABEL</span>
+    <p>Inline elements: <code>code snippet</code>, <kbd>Ctrl</kbd>+<kbd>K</kbd>, and <a href="#">links with underline</a>.</p>
+  </div>
+
+  <div class="demo-block" data-label="FONT FAMILIES">
+    <div style="font-family: var(--font-mono); font-size: 14px;">Share Tech Mono — primary system font</div>
+    <div style="font-family: var(--font-mono-alt); font-size: 14px;">JetBrains Mono — code & data</div>
+    <div style="font-family: var(--font-pixel); font-size: 20px;">VT323 — display & metrics</div>
+  </div>
+</section>
+
+<!-- ============================================================
+     03 / COLORS
+     ============================================================ -->
+<section id="colors" class="section">
+  <div class="section-header">
+    <h2>03 // Color System</h2>
+    <span class="section-id">/foundations/colors</span>
+  </div>
+
+  <h3>Background scale</h3>
+  <div class="demo-grid demo-grid-auto mb-4">
+    <div class="swatch"><div class="swatch-color" style="background:#00080f"></div><div class="swatch-name">--bg-0</div><div class="swatch-value">#00080f</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#000d18"></div><div class="swatch-name">--bg-1</div><div class="swatch-value">#000d18</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#001220"></div><div class="swatch-name">--bg-2</div><div class="swatch-value">#001220</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#001d30"></div><div class="swatch-name">--bg-3</div><div class="swatch-value">#001d30</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#002a45"></div><div class="swatch-name">--bg-4</div><div class="swatch-value">#002a45</div></div>
+  </div>
+
+  <h3>Accent</h3>
+  <div class="demo-grid demo-grid-auto mb-4">
+    <div class="swatch"><div class="swatch-color" style="background:#1ed8e8"></div><div class="swatch-name">--accent</div><div class="swatch-value">#1ed8e8</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#5ef5ff"></div><div class="swatch-name">--accent-bright</div><div class="swatch-value">#5ef5ff</div></div>
+  </div>
+
+  <h3>Semantic</h3>
+  <div class="demo-grid demo-grid-auto mb-4">
+    <div class="swatch"><div class="swatch-color" style="background:#e84020"></div><div class="swatch-name">--red</div><div class="swatch-value">#e84020</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#e89020"></div><div class="swatch-name">--orange</div><div class="swatch-value">#e89020</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#e8d020"></div><div class="swatch-name">--yellow</div><div class="swatch-value">#e8d020</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#20e860"></div><div class="swatch-name">--green</div><div class="swatch-value">#20e860</div></div>
+  </div>
+
+  <h3>Text</h3>
+  <div class="demo-grid demo-grid-auto">
+    <div class="swatch"><div class="swatch-color" style="background:#ffffff"></div><div class="swatch-name">--text-bright</div><div class="swatch-value">#ffffff</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#c8e8f0"></div><div class="swatch-name">--text</div><div class="swatch-value">#c8e8f0</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#7aa8b8"></div><div class="swatch-name">--text-muted</div><div class="swatch-value">#7aa8b8</div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#4a7888"></div><div class="swatch-name">--text-dim</div><div class="swatch-value">#4a7888</div></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     04 / SPACING
+     ============================================================ -->
+<section id="spacing" class="section">
+  <div class="section-header">
+    <h2>04 // Spacing & Layout</h2>
+    <span class="section-id">/foundations/spacing</span>
+  </div>
+  <p class="text-muted mb-4">All spacing follows an 8pt grid. Tokens range from <code>--s-1</code> (4px) to <code>--s-9</code> (96px).</p>
+
+  <div class="demo-block" data-label="GRID DEMO">
+    <div style="display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--s-2);">
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">1</div>
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">2</div>
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">3</div>
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">4</div>
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">5</div>
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">6</div>
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">7</div>
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">8</div>
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">9</div>
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">10</div>
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">11</div>
+      <div style="background: var(--accent-glow); border: 1px solid var(--accent-dim); padding: var(--s-2); font-size: 10px; text-align: center; color: var(--accent);">12</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     05 / BUTTONS
+     ============================================================ -->
+<section id="buttons" class="section">
+  <div class="section-header">
+    <h2>05 // Buttons</h2>
+    <span class="section-id">/primitives/buttons</span>
+  </div>
+
+  <h3>Variants</h3>
+  <div class="demo-block mb-4" data-label="VARIANTS">
+    <div class="flex gap-2 mb-3">
+      <button class="btn btn-primary">PRIMARY</button>
+      <button class="btn">DEFAULT</button>
+      <button class="btn btn-ghost">GHOST</button>
+      <button class="btn btn-danger">DANGER</button>
+      <button class="btn btn-warning">WARNING</button>
+      <button class="btn btn-success">SUCCESS</button>
+      <button class="btn" disabled>DISABLED</button>
+    </div>
+  </div>
+
+  <h3>Sizes</h3>
+  <div class="demo-block mb-4" data-label="SIZES">
+    <div class="flex gap-2 items-center">
+      <button class="btn btn-sm">SMALL</button>
+      <button class="btn">DEFAULT</button>
+      <button class="btn btn-lg">LARGE</button>
+    </div>
+  </div>
+
+  <h3>With prefix indicator</h3>
+  <div class="demo-block mb-4" data-label="PREFIX">
+    <div class="flex gap-2">
+      <button class="btn btn-prefix">EXECUTE</button>
+      <button class="btn btn-prefix btn-primary">DEPLOY</button>
+      <button class="btn btn-prefix btn-danger">PURGE</button>
+    </div>
+  </div>
+
+  <h3>Glitch hover</h3>
+  <div class="demo-block mb-4" data-label="GLITCH">
+    <div class="flex gap-2">
+      <button class="btn btn-glitch" data-text="HOVER ME">HOVER ME</button>
+      <button class="btn btn-glitch btn-primary" data-text="SYSTEM CALL">SYSTEM CALL</button>
+    </div>
+  </div>
+
+  <h3>Block / Full width</h3>
+  <div class="demo-block" data-label="BLOCK">
+    <button class="btn btn-block btn-primary mb-2">FULL WIDTH PRIMARY</button>
+    <button class="btn btn-block">FULL WIDTH DEFAULT</button>
+  </div>
+</section>
+
+<!-- ============================================================
+     06 / INPUTS
+     ============================================================ -->
+<section id="inputs" class="section">
+  <div class="section-header">
+    <h2>06 // Inputs & Forms</h2>
+    <span class="section-id">/primitives/inputs</span>
+  </div>
+
+  <div class="demo-grid demo-grid-2 mb-4">
+    <div class="demo-block" data-label="TEXT INPUTS">
+      <div class="form-group">
+        <label class="form-label">USERNAME</label>
+        <input class="input" type="text" placeholder="ENTER VALUE" value="root@nirvalab">
+      </div>
+      <div class="form-group">
+        <label class="form-label">PASSWORD</label>
+        <input class="input" type="password" value="hunter2hunter2">
+      </div>
+      <div class="form-group">
+        <label class="form-label">WITH HINT</label>
+        <input class="input" type="text" placeholder="API KEY">
+        <div class="form-hint">// must be 32-char hexadecimal</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">WITH ERROR</label>
+        <input class="input" type="email" value="invalid-email" style="border-color: var(--red);">
+        <div class="form-error">invalid email format</div>
+      </div>
+    </div>
+
+    <div class="demo-block" data-label="ADVANCED">
+      <div class="form-group">
+        <label class="form-label">PREFIXED INPUT</label>
+        <div class="input-prefix">
+          <span class="input-prefix-label">SSH://</span>
+          <input class="input" type="text" placeholder="user@host">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">SELECT</label>
+        <select class="select">
+          <option>OPTION 01</option>
+          <option>OPTION 02</option>
+          <option>OPTION 03</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">TEXTAREA</label>
+        <textarea class="textarea" placeholder="Enter your message..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <h3>File upload</h3>
+  <div class="demo-block" data-label="FILE">
+    <label class="file-input">
+      <div class="file-input-icon">[+]</div>
+      <div class="text-bright">DROP FILE OR CLICK TO BROWSE</div>
+      <div class="text-dim text-xs mt-2">SUPPORTED: .JSON, .CSV, .TSV — MAX 50MB</div>
+      <input type="file">
+    </label>
+  </div>
+</section>
+
+<!-- ============================================================
+     07 / CONTROLS
+     ============================================================ -->
+<section id="controls" class="section">
+  <div class="section-header">
+    <h2>07 // Controls</h2>
+    <span class="section-id">/primitives/controls</span>
+  </div>
+
+  <div class="demo-grid demo-grid-2 mb-4">
+    <div class="demo-block" data-label="CHECKBOXES">
+      <label class="check-group">
+        <input type="checkbox" class="check-input" checked>
+        <span class="check-label">ENABLE TELEMETRY</span>
+      </label>
+      <label class="check-group">
+        <input type="checkbox" class="check-input">
+        <span class="check-label">VERBOSE LOGGING</span>
+      </label>
+      <label class="check-group">
+        <input type="checkbox" class="check-input" checked>
+        <span class="check-label">AUTO-SYNC ENABLED</span>
+      </label>
+    </div>
+
+    <div class="demo-block" data-label="RADIO GROUP">
+      <label class="check-group">
+        <input type="radio" name="r1" class="check-input" checked>
+        <span class="check-label">PRODUCTION</span>
+      </label>
+      <label class="check-group">
+        <input type="radio" name="r1" class="check-input">
+        <span class="check-label">STAGING</span>
+      </label>
+      <label class="check-group">
+        <input type="radio" name="r1" class="check-input">
+        <span class="check-label">DEVELOPMENT</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="demo-grid demo-grid-2 mb-4">
+    <div class="demo-block" data-label="TOGGLES">
+      <div class="flex items-center gap-3 mb-3">
+        <label class="toggle">
+          <input type="checkbox" checked>
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+        <span class="text-sm">SCANLINES</span>
+      </div>
+      <div class="flex items-center gap-3 mb-3">
+        <label class="toggle">
+          <input type="checkbox">
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+        <span class="text-sm">DEBUG MODE</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="toggle">
+          <input type="checkbox" checked>
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+        <span class="text-sm">AUTO-REFRESH</span>
+      </div>
+    </div>
+
+    <div class="demo-block" data-label="RANGE SLIDERS">
+      <div class="form-group">
+        <label class="form-label">CPU LOAD</label>
+        <div class="range-row">
+          <input class="range" type="range" min="0" max="100" value="73" oninput="this.nextElementSibling.textContent=this.value+'%'">
+          <span class="range-value">73%</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">MEMORY ALLOC</label>
+        <div class="range-row">
+          <input class="range" type="range" min="0" max="100" value="42" oninput="this.nextElementSibling.textContent=this.value+'%'">
+          <span class="range-value">42%</span>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">THREADS</label>
+        <div class="range-row">
+          <input class="range" type="range" min="1" max="64" value="16" oninput="this.nextElementSibling.textContent=this.value">
+          <span class="range-value">16</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     08 / BADGES
+     ============================================================ -->
+<section id="badges" class="section">
+  <div class="section-header">
+    <h2>08 // Badges, Tags & Status</h2>
+    <span class="section-id">/primitives/badges</span>
+  </div>
+
+  <div class="demo-block mb-4" data-label="BADGES">
+    <div class="flex gap-2 mb-3">
+      <span class="badge">DEFAULT</span>
+      <span class="badge badge-accent">ACCENT</span>
+      <span class="badge badge-red">CRITICAL</span>
+      <span class="badge badge-orange">WARNING</span>
+      <span class="badge badge-green">STABLE</span>
+      <span class="badge badge-solid">NEW</span>
+    </div>
+  </div>
+
+  <div class="demo-block mb-4" data-label="TAGS">
+    <div class="flex gap-2">
+      <span class="tag">infra</span>
+      <span class="tag">async <span class="tag-close">×</span></span>
+      <span class="tag">rust <span class="tag-close">×</span></span>
+      <span class="tag">distributed</span>
+    </div>
+  </div>
+
+  <div class="demo-block" data-label="STATUS PILLS">
+    <div class="flex gap-2 flex-col">
+      <div class="flex gap-2">
+        <span class="status-pill online"><span class="status-dot"></span>ONLINE</span>
+        <span class="status-pill warning"><span class="status-dot"></span>DEGRADED</span>
+        <span class="status-pill error"><span class="status-dot"></span>OFFLINE</span>
+        <span class="status-pill idle"><span class="status-dot"></span>IDLE</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     09 / CARDS
+     ============================================================ -->
+<section id="cards" class="section">
+  <div class="section-header">
+    <h2>09 // Cards</h2>
+    <span class="section-id">/components/cards</span>
+  </div>
+
+  <h3>Standard cards</h3>
+  <div class="demo-grid demo-grid-2 mb-4">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">// SYSTEM CARD</span>
+        <span class="card-meta">2026.04.29</span>
+      </div>
+      <div class="card-body">
+        <p>Standard card with header, body and meta. Used for content blocks where context is important.</p>
+      </div>
+      <div class="card-footer">
+        <span>STATUS: ACTIVE</span>
+        <a href="#">VIEW →</a>
+      </div>
+    </div>
+    <div class="card card-bordered-accent">
+      <div class="card-header">
+        <span class="card-title">// ACCENT CARD</span>
+        <span class="card-meta">PRIORITY</span>
+      </div>
+      <div class="card-body">
+        <p>Variant with left accent border for highlighted or featured content.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>KPI cards</h3>
+  <div class="demo-grid demo-grid-4 mb-4">
+    <div class="kpi">
+      <div class="kpi-corner"></div>
+      <div class="kpi-label">UPTIME</div>
+      <div class="kpi-value">99.7</div>
+      <div class="kpi-delta kpi-delta-up">▲ 0.2% / 24H</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-corner"></div>
+      <div class="kpi-label">THROUGHPUT</div>
+      <div class="kpi-value">2.4K</div>
+      <div class="kpi-delta kpi-delta-up">▲ 12.4%</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-corner"></div>
+      <div class="kpi-label">LATENCY</div>
+      <div class="kpi-value">187</div>
+      <div class="kpi-delta kpi-delta-down">▼ 3.1MS</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-corner"></div>
+      <div class="kpi-label">ERRORS</div>
+      <div class="kpi-value text-red" style="color:var(--red);">14</div>
+      <div class="kpi-delta kpi-delta-up" style="color:var(--red);">▲ HIGH</div>
+    </div>
+  </div>
+
+  <h3>List group</h3>
+  <div class="list-group">
+    <div class="list-item">
+      <div>
+        <div class="text-bright">DGX_SPARK_01</div>
+        <div class="list-item-meta">node-01.cluster.local</div>
+      </div>
+      <span class="status-pill online"><span class="status-dot"></span>OK</span>
+    </div>
+    <div class="list-item">
+      <div>
+        <div class="text-bright">DGX_SPARK_02</div>
+        <div class="list-item-meta">node-02.cluster.local</div>
+      </div>
+      <span class="status-pill warning"><span class="status-dot"></span>WARN</span>
+    </div>
+    <div class="list-item">
+      <div>
+        <div class="text-bright">RTX_3090_OUROBOROS</div>
+        <div class="list-item-meta">sentinel.local</div>
+      </div>
+      <span class="status-pill online"><span class="status-dot"></span>OK</span>
+    </div>
+    <div class="list-item">
+      <div>
+        <div class="text-bright">MAC_MINI_M4</div>
+        <div class="list-item-meta">ui.local</div>
+      </div>
+      <span class="status-pill idle"><span class="status-dot"></span>IDLE</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     10 / ALERTS
+     ============================================================ -->
+<section id="alerts" class="section">
+  <div class="section-header">
+    <h2>10 // Alerts</h2>
+    <span class="section-id">/components/alerts</span>
+  </div>
+
+  <div class="alert alert-info">
+    <div class="alert-icon">i</div>
+    <div class="alert-content">
+      <div class="alert-title">SYSTEM NOTICE</div>
+      <div class="alert-body">Scheduled maintenance window: 2026-04-30 02:00 UTC. Expected downtime: ~4 minutes.</div>
+    </div>
+  </div>
+
+  <div class="alert alert-success">
+    <div class="alert-icon">✓</div>
+    <div class="alert-content">
+      <div class="alert-title">DEPLOYMENT SUCCESSFUL</div>
+      <div class="alert-body">Build v2.4.1 deployed to production. All health checks passing.</div>
+    </div>
+  </div>
+
+  <div class="alert alert-warning">
+    <div class="alert-icon">!</div>
+    <div class="alert-content">
+      <div class="alert-title">RATE LIMIT APPROACHING</div>
+      <div class="alert-body">API quota at 87% of monthly allocation. Consider upgrading tier.</div>
+    </div>
+  </div>
+
+  <div class="alert alert-error">
+    <div class="alert-icon">×</div>
+    <div class="alert-content">
+      <div class="alert-title">CRITICAL FAILURE</div>
+      <div class="alert-body">Connection to node-02 lost. Failover initiated.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     11 / NAVIGATION
+     ============================================================ -->
+<section id="nav" class="section">
+  <div class="section-header">
+    <h2>11 // Navigation</h2>
+    <span class="section-id">/components/navigation</span>
+  </div>
+
+  <h3>Tabs</h3>
+  <div class="demo-block mb-4" data-label="TABS">
+    <div class="tabs">
+      <button class="tab active">OVERVIEW</button>
+      <button class="tab">METRICS</button>
+      <button class="tab">LOGS</button>
+      <button class="tab">CONFIG</button>
+    </div>
+    <p class="text-muted text-sm">Tab content area. Switching is non-functional in this kit — implement state in framework of choice.</p>
+  </div>
+
+  <h3>Breadcrumbs</h3>
+  <div class="demo-block mb-4" data-label="BREADCRUMBS">
+    <div class="breadcrumbs">
+      <a href="#">root</a>
+      <span class="breadcrumb-sep">/</span>
+      <a href="#">cluster</a>
+      <span class="breadcrumb-sep">/</span>
+      <a href="#">nodes</a>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current">dgx-spark-01</span>
+    </div>
+  </div>
+
+  <h3>Pagination</h3>
+  <div class="demo-block" data-label="PAGINATION">
+    <div class="pagination">
+      <button>‹</button>
+      <button>1</button>
+      <button class="active">2</button>
+      <button>3</button>
+      <button>4</button>
+      <button>5</button>
+      <button>›</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     12 / TABLES
+     ============================================================ -->
+<section id="tables" class="section">
+  <div class="section-header">
+    <h2>12 // Tables</h2>
+    <span class="section-id">/components/tables</span>
+  </div>
+
+  <div class="demo-block" data-label="DATA TABLE">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>NODE</th>
+          <th>ROLE</th>
+          <th>STATUS</th>
+          <th class="table-numeric">CPU</th>
+          <th class="table-numeric">MEM</th>
+          <th class="table-numeric">UPTIME</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="text-bright">dgx-01</td>
+          <td>inference</td>
+          <td><span class="status-pill online"><span class="status-dot"></span>OK</span></td>
+          <td class="table-numeric">73%</td>
+          <td class="table-numeric">12.4G</td>
+          <td class="table-numeric">42d</td>
+        </tr>
+        <tr>
+          <td class="text-bright">dgx-02</td>
+          <td>synthesis</td>
+          <td><span class="status-pill warning"><span class="status-dot"></span>WARN</span></td>
+          <td class="table-numeric">94%</td>
+          <td class="table-numeric">28.1G</td>
+          <td class="table-numeric">8d</td>
+        </tr>
+        <tr>
+          <td class="text-bright">rtx-3090</td>
+          <td>sentinel</td>
+          <td><span class="status-pill online"><span class="status-dot"></span>OK</span></td>
+          <td class="table-numeric">31%</td>
+          <td class="table-numeric">6.2G</td>
+          <td class="table-numeric">120d</td>
+        </tr>
+        <tr>
+          <td class="text-bright">mac-m4</td>
+          <td>ui/mcp</td>
+          <td><span class="status-pill idle"><span class="status-dot"></span>IDLE</span></td>
+          <td class="table-numeric">4%</td>
+          <td class="table-numeric">1.1G</td>
+          <td class="table-numeric">3d</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================
+     13 / FEEDBACK
+     ============================================================ -->
+<section id="feedback" class="section">
+  <div class="section-header">
+    <h2>13 // Feedback</h2>
+    <span class="section-id">/components/feedback</span>
+  </div>
+
+  <h3>Progress bars</h3>
+  <div class="demo-block mb-4" data-label="PROGRESS">
+    <div class="form-group">
+      <div class="progress-labeled">
+        <span class="text-muted">DEPLOY</span>
+        <span class="text-accent">73%</span>
+      </div>
+      <div class="progress"><div class="progress-bar" style="width: 73%"></div></div>
+    </div>
+    <div class="form-group">
+      <div class="progress-labeled">
+        <span class="text-muted">VALIDATE</span>
+        <span class="text-accent">42%</span>
+      </div>
+      <div class="progress"><div class="progress-bar" style="width: 42%; background: var(--orange);"></div></div>
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <div class="progress-labeled">
+        <span class="text-muted">ROLLBACK</span>
+        <span class="text-accent">12%</span>
+      </div>
+      <div class="progress"><div class="progress-bar" style="width: 12%; background: var(--red);"></div></div>
+    </div>
+  </div>
+
+  <h3>Loaders</h3>
+  <div class="demo-block" data-label="LOADERS">
+    <div class="flex gap-4 items-center">
+      <div class="flex flex-col gap-2 items-center">
+        <div class="spinner"></div>
+        <span class="text-xs text-dim">SPINNER</span>
+      </div>
+      <div class="flex flex-col gap-2 items-center">
+        <div class="dots-loader"><span></span><span></span><span></span></div>
+        <span class="text-xs text-dim">DOTS</span>
+      </div>
+      <div class="flex flex-col gap-2 items-center">
+        <div class="terminal-loader">PROCESSING</div>
+        <span class="text-xs text-dim">TERMINAL</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     14 / OVERLAY
+     ============================================================ -->
+<section id="overlay" class="section">
+  <div class="section-header">
+    <h2>14 // Overlay & Disclosure</h2>
+    <span class="section-id">/components/overlay</span>
+  </div>
+
+  <h3>Modal (static demo)</h3>
+  <div class="demo-block mb-4" data-label="MODAL" style="background:var(--bg-2); padding:var(--s-7) var(--s-4);">
+    <div style="position:relative; max-width:480px; margin:0 auto;">
+      <div class="modal" style="position:relative;">
+        <div class="modal-header">
+          <span class="modal-title">// CONFIRM ACTION</span>
+          <button class="modal-close">×</button>
+        </div>
+        <div class="modal-body">
+          <p>You are about to purge <code>node-02</code> from the cluster. This action cannot be undone. All persistent data on this node will be permanently deleted.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost btn-sm">CANCEL</button>
+          <button class="btn btn-danger btn-sm">CONFIRM PURGE</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Accordion</h3>
+  <div class="demo-block mb-4" data-label="ACCORDION">
+    <div class="accordion-item open">
+      <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+        <span>WHAT IS THIS UI KIT?</span>
+        <span class="accordion-icon">+</span>
+      </div>
+      <div class="accordion-body">
+        A comprehensive design system for terminal-aesthetic interfaces. Includes all primitives, components, and editorial layouts in a single document for easy handoff.
+      </div>
+    </div>
+    <div class="accordion-item">
+      <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+        <span>HOW TO USE WITH CLAUDE DESIGN?</span>
+        <span class="accordion-icon">+</span>
+      </div>
+      <div class="accordion-body">
+        Upload this HTML file plus the DESIGN-SYSTEM.md documentation to your Claude Design organization settings. It will extract tokens and components automatically.
+      </div>
+    </div>
+    <div class="accordion-item">
+      <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+        <span>HOW TO USE WITH CLAUDE CODE?</span>
+        <span class="accordion-icon">+</span>
+      </div>
+      <div class="accordion-body">
+        Place CLAUDE.md at the root of your repo. Claude Code will use it as context for every implementation task.
+      </div>
+    </div>
+  </div>
+
+  <h3>Tooltips</h3>
+  <div class="demo-block" data-label="TOOLTIP">
+    <p>Hover over <span class="tooltip-wrap" data-tooltip="DGX SPARK = NVIDIA mini-supercomputer">DGX Spark</span> for context. Multiple tooltips: <span class="tooltip-wrap" data-tooltip="LATOUR / MEILLASSOUX / SIMONDON / STIEGLER">LMSS</span>, <span class="tooltip-wrap" data-tooltip="JOINT EMBEDDING PREDICTIVE ARCH">JEPA</span>.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     15 / DATA DISPLAY
+     ============================================================ -->
+<section id="data" class="section">
+  <div class="section-header">
+    <h2>15 // Data Display</h2>
+    <span class="section-id">/components/data</span>
+  </div>
+
+  <h3>Bar chart (CSS)</h3>
+  <div class="demo-block mb-4" data-label="BAR CHART">
+    <div class="bar-chart">
+      <div class="bar" style="height: 40%"></div>
+      <div class="bar" style="height: 65%"></div>
+      <div class="bar" style="height: 80%"></div>
+      <div class="bar" style="height: 55%"></div>
+      <div class="bar" style="height: 90%"></div>
+      <div class="bar" style="height: 72%"></div>
+      <div class="bar" style="height: 48%"></div>
+      <div class="bar" style="height: 88%"></div>
+      <div class="bar" style="height: 95%"></div>
+      <div class="bar" style="height: 60%"></div>
+      <div class="bar" style="height: 75%"></div>
+      <div class="bar" style="height: 82%"></div>
+    </div>
+    <div class="flex justify-between text-xs text-dim mt-2">
+      <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+    </div>
+  </div>
+
+  <h3>Sparklines inline</h3>
+  <div class="demo-block mb-4" data-label="SPARKLINES">
+    <div class="flex items-center gap-3 mb-2">
+      <span class="text-muted text-sm" style="min-width:120px;">CPU LOAD</span>
+      <div class="sparkline" style="flex:1; max-width:200px;">
+        <span style="height:30%"></span><span style="height:55%"></span><span style="height:40%"></span><span style="height:70%"></span><span style="height:90%"></span><span style="height:65%"></span><span style="height:80%"></span><span style="height:95%"></span>
+      </div>
+      <span class="text-accent">73%</span>
+    </div>
+    <div class="flex items-center gap-3 mb-2">
+      <span class="text-muted text-sm" style="min-width:120px;">REQUESTS/SEC</span>
+      <div class="sparkline" style="flex:1; max-width:200px;">
+        <span style="height:60%"></span><span style="height:40%"></span><span style="height:75%"></span><span style="height:55%"></span><span style="height:35%"></span><span style="height:80%"></span><span style="height:65%"></span><span style="height:50%"></span>
+      </div>
+      <span class="text-accent">2.4K</span>
+    </div>
+  </div>
+
+  <h3>Avatars</h3>
+  <div class="demo-block mb-4" data-label="AVATARS">
+    <div class="flex gap-3 items-center mb-3">
+      <div class="avatar avatar-sm">CL</div>
+      <div class="avatar">CL</div>
+      <div class="avatar avatar-lg">CL</div>
+    </div>
+    <div class="avatar-stack">
+      <div class="avatar avatar-sm">CL</div>
+      <div class="avatar avatar-sm">HE</div>
+      <div class="avatar avatar-sm">MR</div>
+      <div class="avatar avatar-sm">JL</div>
+      <div class="avatar avatar-sm" style="color:var(--text-muted); border-color:var(--border)">+3</div>
+    </div>
+  </div>
+
+  <h3>Terminal block</h3>
+  <div class="terminal mb-4">
+    <div class="terminal-header">
+      <div class="terminal-dots"><span></span><span></span><span></span></div>
+      <span>~/bloom — bash — 80x24</span>
+    </div>
+    <div class="terminal-body">
+      <div class="terminal-line"><span class="terminal-prompt">$</span><span>ssh dgx-01</span></div>
+      <div class="terminal-line"><span class="terminal-output">Last login: Wed Apr 29 14:32:41</span></div>
+      <div class="terminal-line"><span class="terminal-prompt">$</span><span>./run-bloom.sh --mode=production</span></div>
+      <div class="terminal-line"><span class="terminal-output">[BOOT] initializing 4 ontology agents...</span></div>
+      <div class="terminal-line"><span class="terminal-success">[OK]</span><span>Latour agent online</span></div>
+      <div class="terminal-line"><span class="terminal-success">[OK]</span><span>Meillassoux agent online</span></div>
+      <div class="terminal-line"><span class="terminal-success">[OK]</span><span>Simondon agent online</span></div>
+      <div class="terminal-line"><span class="terminal-success">[OK]</span><span>Stiegler agent online</span></div>
+      <div class="terminal-line"><span class="terminal-prompt">$</span><span class="terminal-cursor"></span></div>
+    </div>
+  </div>
+
+  <h3>Code block</h3>
+  <pre><code><span style="color:var(--accent);">async</span> <span style="color:var(--orange);">function</span> <span style="color:var(--green);">deployBloom</span>(config) {
+  <span style="color:var(--accent);">const</span> agents = <span style="color:var(--accent);">await</span> <span style="color:var(--green);">spawnAgents</span>(config.ontologies);
+  <span style="color:var(--accent);">const</span> result = <span style="color:var(--accent);">await</span> <span style="color:var(--green);">runDeliberation</span>(agents, signal);
+  <span style="color:var(--accent);">return</span> result;
+}</code></pre>
+</section>
+
+<!-- ============================================================
+     16 / EDITORIAL
+     ============================================================ -->
+<section id="editorial" class="section">
+  <div class="section-header">
+    <h2>16 // Editorial</h2>
+    <span class="section-id">/components/editorial</span>
+  </div>
+
+  <h3>Pull quote</h3>
+  <div class="pull-quote">
+    The seul position critique possible était d'aller plus vite que le capitalisme lui-même. De pousser la logique jusqu'à l'absurde patent.
+    <span class="pull-quote-attr">ReNEXT // xlrting re.accelerationism, 2011</span>
+  </div>
+
+  <h3>Signature block</h3>
+  <div class="signature">
+    <div class="sig-bar"></div>
+    <div class="sig-body">
+      <div class="sig-from">// FROM AUTHOR TO READER</div>
+      <p class="sig-text">This UI kit is a working document. Components, tokens, and patterns will evolve. Treat it as a living system rather than a fixed deliverable.</p>
+    </div>
+  </div>
+
+  <h3>ASCII divider</h3>
+  <div class="ascii-divider">
+─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
+  </div>
+
+  <h3>Bracket corners box</h3>
+  <div class="bracket-corners">
+    <p class="text-muted">Decorative container with corner brackets. Useful for emphasizing key passages or technical specs.</p>
+  </div>
+
+  <h3>ASCII art</h3>
+  <pre class="ascii-art">  ╔══════════════════════════════════╗
+  ║   B L O O M   //   v 0 . 4 . 1   ║
+  ║                                  ║
+  ║   [ system online ]              ║
+  ║   [ 4 agents synced ]            ║
+  ║   [ deliberation idle ]          ║
+  ╚══════════════════════════════════╝</pre>
+</section>
+
+<!-- ============================================================
+     17 / FX & GLITCH
+     ============================================================ -->
+<section id="fx" class="section">
+  <div class="section-header">
+    <h2>17 // FX & Glitch</h2>
+    <span class="section-id">/components/fx</span>
+  </div>
+
+  <h3>Glitch text</h3>
+  <div class="demo-block mb-4" data-label="GLITCH">
+    <div style="font-size: 32px; padding: var(--s-4) 0;" class="glitch-text" data-text="GLITCH ME">GLITCH ME</div>
+    <p class="text-muted text-sm">Use sparingly on hero titles only. Never inside paragraph text.</p>
+  </div>
+
+  <h3>Typewriter effect</h3>
+  <div class="demo-block mb-4" data-label="TYPEWRITER">
+    <div style="font-size: 16px; color: var(--accent); padding: var(--s-3) 0;" class="typewriter">> SYSTEM BOOT SEQUENCE INITIATED...</div>
+  </div>
+
+  <h3>CRT flicker</h3>
+  <div class="demo-block" data-label="CRT">
+    <div class="crt-flicker" style="font-size: 18px; color: var(--accent-bright);">FLICKERING TEXT BLOCK</div>
+    <p class="text-muted text-sm mt-2">Subtle opacity oscillation simulates CRT phosphor decay. Apply to hero blocks max.</p>
+  </div>
+</section>
+
+<footer style="margin-top: var(--s-9); padding-top: var(--s-5); border-top: 1px solid var(--border); color: var(--text-dim); font-size: 11px;">
+  <p>// END OF DOCUMENT // HACKER UI KIT v1.0 //</p>
+  <p>// HANDOFF: claude.ai/design → claude code → github pages</p>
+</footer>
+
+</main>
+</div>
+
+<script>
+// Live clock
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const s = String(now.getSeconds()).padStart(2, '0');
+  const el = document.getElementById('clock');
+  if (el) el.textContent = h + ':' + m + ':' + s + ' UTC';
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// Scroll spy on sidebar
+const sections = document.querySelectorAll('.section');
+const navLinks = document.querySelectorAll('.sidebar-nav a');
+
+function updateActiveNav() {
+  const scrollPos = window.scrollY + 100;
+  sections.forEach(section => {
+    const top = section.offsetTop;
+    const bottom = top + section.offsetHeight;
+    const id = section.id;
+    if (scrollPos >= top && scrollPos < bottom) {
+      navLinks.forEach(link => {
+        link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+      });
+    }
+  });
+}
+window.addEventListener('scroll', updateActiveNav);
+updateActiveNav();
+</script>
+</body>
+</html>
