@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CHARACTER_SHEET // GENERATOR v1.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="logo">&gt;_CHAR.SHEET</span>
+    <span class="status"><span class="live-dot"></span><span id="status-text">offline</span></span>
+  </div>
+  <div class="topbar-right">
+    <select id="model-select" class="select select-sm" title="model">
+      <option value="claude-sonnet-4-6">sonnet-4-6</option>
+      <option value="claude-opus-4-7">opus-4-7</option>
+      <option value="claude-haiku-4-5">haiku-4-5</option>
+    </select>
+    <button id="reset-btn" class="btn btn-ghost btn-sm" title="reset session">RESET</button>
+    <button id="key-btn" class="btn btn-sm">API KEY</button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <section class="panel panel-chat">
+    <div class="terminal-header">
+      <div class="terminal-dots"><span></span><span></span><span></span></div>
+      <span>conversation.log</span>
+    </div>
+    <div id="chat-log" class="chat-log">
+      <div class="msg msg-system">
+        <div class="msg-body">
+          <p>// boot sequence ok.</p>
+          <p>// décris-moi le personnage que tu as en tête, en français ou anglais.</p>
+          <p>// drop une image ici pour la donner en réf (accessoire, outfit, vibe…).</p>
+          <p>// je remplirai la fiche à droite au fur et à mesure et te poserai des questions pour combler les blancs.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="image-preview" class="image-preview"></div>
+
+    <div class="composer" id="composer">
+      <textarea id="input-text" class="textarea" placeholder="décris ton perso, ou réponds aux questions…" rows="3"></textarea>
+      <div class="composer-actions">
+        <label class="btn btn-ghost btn-sm" title="ajouter image(s)">
+          <span>+IMG</span>
+          <input id="input-image" type="file" accept="image/*" multiple hidden>
+        </label>
+        <button id="send-btn" class="btn btn-primary btn-sm">SEND ▸</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel panel-sheet">
+    <div class="terminal-header">
+      <div class="terminal-dots"><span></span><span></span><span></span></div>
+      <span>character_sheet.json</span>
+      <span id="sheet-progress" class="progress">0/20</span>
+    </div>
+    <div id="sheet-fields" class="sheet-fields"></div>
+    <div class="sheet-actions">
+      <button id="generate-btn" class="btn btn-primary btn-block">&gt; GENERATE PROMPT</button>
+    </div>
+    <div id="output-block" class="output-block hidden">
+      <div class="output-header">
+        <span>output.txt</span>
+        <div class="output-actions">
+          <button id="copy-btn" class="btn btn-ghost btn-sm">COPY</button>
+          <button id="download-btn" class="btn btn-ghost btn-sm">.TXT</button>
+        </div>
+      </div>
+      <pre id="output-text"></pre>
+    </div>
+  </section>
+
+</main>
+
+<div id="key-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span>// auth.config</span>
+      <button class="modal-close" data-close-modal>×</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-blurb">colle ta clé API Anthropic. elle est stockée localement (localStorage) et envoyée seulement à <code>api.anthropic.com</code>. pas de backend, pas de logs.</p>
+      <label class="form-label">anthropic api key</label>
+      <input id="key-input" type="password" class="input" placeholder="sk-ant-..." autocomplete="off">
+      <div class="modal-actions">
+        <button id="key-clear" class="btn btn-danger btn-sm">CLEAR</button>
+        <button id="key-save" class="btn btn-primary btn-sm">SAVE ▸</button>
+      </div>
+      <p class="modal-warning">⚠ ne distribue pas cette page à des inconnus avec ta clé en cache : ils pourront l'utiliser depuis leur navigateur.</p>
+    </div>
+  </div>
+</div>
+
+<script src="./app.js"></script>
+</body>
+</html>
