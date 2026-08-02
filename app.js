@@ -1,6 +1,7 @@
 'use strict';
 
 const TEMPLATE_URL = './character_generation_prompt_template_layout.txt';
+const METHODOLOGY_URL = './methodology.md';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 
 const SHEET_FIELDS = [
@@ -30,43 +31,25 @@ const SHEET_FIELDS = [
 const SECTIONS = ['CORE', 'PSYCHE', 'OUTFIT', 'EXTRA'];
 const SCALAR_KEYS = SHEET_FIELDS.map((f) => f.key);
 
-const SYSTEM_PROMPT = `Tu es un assistant qui aide à construire une "character sheet" pour générer ensuite un prompt d'image (style cinematic concept art turnaround).
+const SYSTEM_PREAMBLE = `Tu es un assistant qui construit une "character sheet" pour générer ensuite un prompt d'image (style cinematic concept art turnaround). Tu suis rigoureusement la MÉTHODE ci-dessous, qui est ta seule référence normative.
 
-PRINCIPES UX:
-- L'utilisateur déteste taper. Pose tes questions via le tool "request_input" qui affiche des widgets cliquables (chips, slider, color picker) chaque fois que c'est possible.
-- N'utilise une question ouverte (sans tool) QUE si la réponse est forcément descriptive et libre (ex: décris la cicatrice, le style de cheveux, etc.).
-- UNE seule question / UN seul widget à la fois. Pas de surcharge.
-- Tu peux pré-remplir plusieurs champs d'un coup avec "update_character_sheet" si l'utilisateur t'a déjà donné l'info ou si tu extrapoles depuis une image.
-- Tu réponds toujours dans la langue de l'utilisateur (par défaut français).
-- Sois concis. Pas de blabla, pas de "Bien sûr !".
+TOOLS DISPONIBLES (rappel technique):
+- update_character_sheet(fields) : range une ou plusieurs infos dans les champs de la sheet.
+- add_note(text) : ajoute une annotation visuelle courte au panel notes.
+- request_input(field, question, input_type, options?, ...) : affiche un widget interactif (chips, multi_chips, slider, color_palette, text) pour éviter à l'utilisateur d'avoir à taper. Après un appel à request_input, N'APPELLE PLUS AUCUN AUTRE TOOL dans la même réponse — attends la réponse.
 
-QUEL WIDGET POUR QUEL CHAMP (recommandations):
-- gender → chips ["femme", "homme", "non-binaire", "androgyne", "autre"]
-- age → slider min=0 max=100 unit="ans"
-- height → slider min=140 max=210 unit="cm"
-- body_type → chips ["mince", "athlétique", "musclé", "rond", "élancé", "massif"]
-- ethnicity → chips avec une liste raisonnable + allow_custom
-- role → chips selon contexte (ex: "soldat", "détective", "magicien", "noble", "marchand", "rebelle")
-- archetype → chips ["héros", "anti-héros", "mentor", "trickster", "ombre", "innocent", "explorateur", "rebelle"]
-- emotional_range → chips ["stoïque", "expressif", "explosif", "réservé", "chaleureux", "froid"]
-- speech_style → chips ["soutenu", "familier", "argot", "archaïque", "laconique", "verbeux"]
-- color_palette → color_palette (le widget gère plusieurs swatches)
-- accessories, props, top/bottom/shoes, personality_traits, core_theme, behavior_notes, character_name, alias, default_outfit_description → questions ouvertes en chat (texte libre), MAIS si tu peux raisonnablement proposer 4-6 directions, utilise chips avec allow_custom=true.
+CHAMPS EXACTS À UTILISER (case-sensitive) :
+- CORE : character_name, alias, gender, age, height, body_type, ethnicity, role, archetype
+- PSYCHE : personality_traits, core_theme, emotional_range, behavior_notes, speech_style
+- OUTFIT : default_outfit_description, top_description, bottom_description, shoes_description, accessories
+- EXTRA : color_palette, props
+- notes (via add_note, plusieurs possibles)
 
-GESTION DES IMAGES:
-- Quand l'utilisateur drop une image, observe-la et extrais une description. Range-la via "update_character_sheet" dans le bon champ (accessoires si c'est un objet, top/bottom si c'est un vêtement, color_palette si c'est une moodboard de couleurs, etc.). Demande à l'utilisateur dans quel champ ranger si ce n'est pas évident.
+=== MÉTHODE (à suivre) ===
 
-CHAMPS DISPONIBLES (utilise EXACTEMENT ces noms):
-- CORE: character_name, alias, gender, age, height, body_type, ethnicity, role, archetype
-- PSYCHE: personality_traits, core_theme, emotional_range, behavior_notes, speech_style
-- OUTFIT: default_outfit_description, top_description, bottom_description, shoes_description, accessories
-- EXTRA: color_palette, props
-- notes: utilise add_note pour ajouter une annotation visuelle (ex: "manches retroussées").
+`;
 
-ORDRE SUGGÉRÉ (mais adapte-toi à l'utilisateur):
-1. nom + alias (chat libre) 2. gender (chips) 3. age (slider) 4. role (chips) 5. archetype (chips) 6. body_type (chips) 7. height (slider) 8. ethnicity (chips) 9. personality (chat) 10. outfit en bloc puis détaillé 11. color_palette (color picker) 12. accessoires (chat) 13. notes finales.
-
-Quand TOUS les champs CORE + au moins default_outfit_description + accessories sont remplis, dis à l'utilisateur que la fiche est prête à générer.`;
+let SYSTEM_PROMPT = SYSTEM_PREAMBLE + '(méthodologie non chargée — utilise ton bon sens en attendant)';
 
 const TOOLS = [
   {
@@ -158,6 +141,7 @@ const state = {
   notes: [],
   pendingImages: [],
   template: '',
+  methodology: '',
   busy: false,
 };
 
@@ -821,6 +805,17 @@ async function loadTemplate() {
   }
 }
 
+async function loadMethodology() {
+  try {
+    const res = await fetch(METHODOLOGY_URL);
+    if (!res.ok) throw new Error(res.statusText);
+    state.methodology = await res.text();
+    SYSTEM_PROMPT = SYSTEM_PREAMBLE + state.methodology;
+  } catch (e) {
+    appendMessage('system', `// impossible de charger methodology.md (${e.message}). claude fonctionnera en mode dégradé.`, 'system');
+  }
+}
+
 function setupDragDrop() {
   const composer = $('#composer');
   ['dragenter', 'dragover'].forEach((ev) =>
@@ -885,12 +880,33 @@ function init() {
   $('#download-btn').addEventListener('click', handleDownload);
   $('#reset-btn').addEventListener('click', handleReset);
 
+  $('#method-btn').addEventListener('click', openMethodModal);
+  $$('[data-close-method]').forEach((b) => b.addEventListener('click', closeMethodModal));
+  $('#method-modal').addEventListener('click', (e) => {
+    if (e.target === $('#method-modal')) closeMethodModal();
+  });
+
   setupDragDrop();
   renderSheet();
   loadTemplate();
+  loadMethodology();
 
   if (state.apiKey) setStatus('online', 'online');
   else setStatus('offline');
+}
+
+function openMethodModal() {
+  const container = $('#method-body');
+  if (state.methodology) {
+    container.textContent = state.methodology;
+  } else {
+    container.textContent = '// chargement de methodology.md…';
+  }
+  $('#method-modal').classList.remove('hidden');
+}
+
+function closeMethodModal() {
+  $('#method-modal').classList.add('hidden');
 }
 
 document.addEventListener('DOMContentLoaded', init);

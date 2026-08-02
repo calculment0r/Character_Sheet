@@ -762,6 +762,49 @@ body::after {
   border: 1px solid var(--border-strong);
   max-width: 480px;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.modal-lg { max-width: 780px; }
+
+.method-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s-4);
+  font-family: var(--font-mono-alt);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: var(--bg-0);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--s-3);
+  gap: var(--s-3);
+}
+
+.modal-footnote {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.modal-footnote code {
+  background: var(--bg-2);
+  padding: 1px 4px;
+  color: var(--accent);
 }
 
 .modal-header {
