@@ -1,6 +1,7 @@
 # Character Factory — où en est la chaîne
 
-Document d'état. Le cadrage complet est dans
+Document d'état. Pour reprendre le travail sur une machine qui voit les
+DGX, lire d'abord [`HANDOFF.md`](./HANDOFF.md). Le cadrage complet est dans
 [`BRIEF_CHARACTER_FACTORY.md`](./BRIEF_CHARACTER_FACTORY.md) ; ce
 fichier-ci dit seulement ce qui existe, ce qui n'existe pas, et où c'est.
 
