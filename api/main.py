@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 import storage
 from config import settings
@@ -256,3 +258,15 @@ async def artifact(key: str):
 
 app.include_router(guarded)
 app.include_router(llm_router, dependencies=[Depends(require_token)])
+
+
+# Le front, servi par l'API. Monté en dernier pour ne rien recouvrir :
+# une route déclarée plus haut gagne toujours. Avec ça, un seul tunnel
+# suffit — la page et l'API sont sur la même origine, donc pas de CORS
+# à régler et aucune URL à coller dans l'écran MOTEUR.
+FRONT = Path(__file__).resolve().parent.parent
+if settings.serve_front and (FRONT / "index.html").is_file():
+    app.mount("/", StaticFiles(directory=FRONT, html=True), name="front")
+    log.info("front servi depuis %s", FRONT)
+else:
+    log.info("front non servi : API seule")

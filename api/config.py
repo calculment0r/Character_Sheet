@@ -55,6 +55,11 @@ class Settings:
     # Étiquette de ce nœud. Deux DGX partagent la file, pas l'étiquette.
     node: str = os.getenv("FACTORY_NODE", "dgx-01")
 
+    # Servir le front depuis l'API elle-même. C'est ce qui permet de
+    # n'ouvrir qu'un seul tunnel : la page et l'API partagent alors la
+    # même origine, et la question du CORS ne se pose plus du tout.
+    serve_front: bool = os.getenv("FACTORY_SERVE_FRONT", "1") != "0"
+
     @property
     def has_redis(self) -> bool:
         return bool(self.redis_url)

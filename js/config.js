@@ -48,14 +48,30 @@ const cfg = {
     return Object.fromEntries(Object.keys(STORE_KEYS).map((k) => [k, cfg.read(k)]));
   },
 
+  /* Quand la page est servie par l'API elle-même — le cas du tunnel
+     unique — son origine EST l'API. Rien à configurer : on la prend.
+     On l'écarte sur GitHub Pages et sur un fichier ouvert en local,
+     qui ne servent que du statique et ne répondront jamais sur /v1. */
+  implicitBase() {
+    const { protocol, origin, hostname } = window.location;
+    if (protocol !== 'http:' && protocol !== 'https:') return '';
+    if (/\.github\.io$/i.test(hostname)) return '';
+    return origin;
+  },
+
   /* Normalise une base d'URL : pas de barre oblique finale, et on
      tolère que l'opérateur colle « …/v1 » ou « …/v1/ ». */
   dgxBase() {
     let u = cfg.read('dgxUrl').trim();
-    if (!u) return '';
+    if (!u) return cfg.implicitBase();
     u = u.replace(/\/+$/, '');
     u = u.replace(/\/v1$/, '');
     return u;
+  },
+
+  /* Vrai quand on tourne sur l'origine de l'API, sans réglage. */
+  isImplicit() {
+    return !cfg.read('dgxUrl').trim() && !!cfg.implicitBase();
   },
 
   /* Quel moteur pour ce tour ? 'auto' préfère le DGX dès qu'une

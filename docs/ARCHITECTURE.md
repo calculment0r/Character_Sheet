@@ -70,15 +70,21 @@ mémoire), le visualiseur three.js du §9, et la couche mains/visage du §13.
 ## Faire tourner
 
 ```sh
-# le front
-python3 -m http.server 8811
-
-# l'API, dans un autre terminal
-cd api && uvicorn main:app --port 8000
+./start.sh
 ```
 
-Puis dans la page, bouton **MOTEUR** : coller l'URL de l'API (ou celle
-du serveur d'inférence en direct), le nom du modèle, et tester.
+L'API sert aussi la page, donc un seul port : `http://localhost:8000`.
+Page et API partagent l'origine, ce qui supprime la question du CORS et
+dispense de coller quoi que ce soit dans l'écran MOTEUR — le front
+reconnaît sa propre origine comme moteur et adopte le modèle que l'API
+déclare servir.
+
+Pour ouvrir depuis l'extérieur, un seul tunnel suffit : voir
+[`CLOUDFLARE.md`](./CLOUDFLARE.md).
+
+Les deux morceaux peuvent aussi tourner séparément — `python3 -m
+http.server` d'un côté, `uvicorn` de l'autre — mais il faut alors régler
+`FACTORY_CORS_ORIGINS` et coller l'adresse de l'API dans MOTEUR.
 
 ## Les arbitrages
 

@@ -351,6 +351,14 @@ function openSettings() {
   }
   sel.value = c.anthropicModel;
 
+  const implicit = $('#set-implicit');
+  if (cfg.isImplicit()) {
+    implicit.textContent = `vide : on utilise l'origine de cette page, ${cfg.implicitBase()}`;
+    implicit.hidden = false;
+  } else {
+    implicit.hidden = true;
+  }
+
   $('#set-probe').textContent = '';
   $('#settings').hidden = false;
   setTimeout(() => $('#set-dgx-url').focus(), 50);
@@ -405,7 +413,14 @@ async function refreshEngine() {
   if (chain[0] === 'dgx') {
     ui.setStatus('test DGX…', 'work');
     const r = await probeDgx();
-    if (r.ok) return settle(`dgx · ${cfg.read('dgxModel')}`, 'on', `dgx · ${cfg.read('dgxModel')}`);
+    if (r.ok) {
+      // Le DGX sait ce qu'il sert mieux que le réglage par défaut :
+      // tant que l'opérateur n'a rien choisi, on prend son premier
+      // modèle plutôt que d'afficher un nom de remplissage.
+      if (r.models.length && cfg.read('dgxModel') === 'local-model') cfg.write('dgxModel', r.models[0]);
+      const m = cfg.read('dgxModel');
+      return settle(`dgx · ${m}`, 'on', `dgx · ${m}`);
+    }
     if (chain[1]) return settle(`dgx muet → ${chain[1]}`, 'err', `repli ${chain[1]}`);
     return settle(`dgx muet — ${r.reason}`, 'err', 'dgx muet');
   }
