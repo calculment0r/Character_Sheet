@@ -16,25 +16,52 @@
 <body>
 
 <header class="hdr">
-  <div class="logo">
+  <button class="logo" id="home-btn" title="revenir à la console">
     <span class="sq"><i></i></span>
     <span>
       <b>Character Factory</b>
       <small>chaîne souveraine · dgx</small>
     </span>
-  </div>
+  </button>
 
   <span class="sp"></span>
 
   <span class="pill" id="engine-pill"><i></i><span id="engine-text">démarrage</span></span>
   <span class="clock" id="clock">--:--:--</span>
 
+  <button class="tb ghost sm" id="console-btn" title="revenir à la console" hidden>◂ Console</button>
   <button class="tb ghost sm" id="method-btn" title="voir la méthode chargée">Méthode</button>
   <button class="tb ghost sm" id="reset-btn" title="vider la session">Reset</button>
   <button class="tb go sm" id="settings-btn" title="URL du DGX, modèle, repli">Moteur</button>
 </header>
 
-<main class="bench">
+<main class="console" id="home">
+
+  <div class="console-top">
+    <div class="hero">
+      <span class="ref">00_console</span>
+      <h1>Du prompt<br>au personnage</h1>
+      <p>
+        Blocs pleins, filets fins, chiffres larges. Une chaîne en huit étages, du portrait
+        neutre jusqu'au mouvement joué : visage verrouillé, costumes, planche, vues
+        orthogonales, mesh PBR, rig SOMA, animation. Tout calcule sur le DGX, rien ne sort
+        du réseau. Chaque étage s'ouvre depuis cette console.
+      </p>
+    </div>
+
+    <div class="statcard">
+      <span class="ref">étages ouverts</span>
+      <span class="n" id="stat-n">01</span>
+      <span class="foot" id="stat-foot">sur 8 étages</span>
+      <span class="dots"></span>
+    </div>
+  </div>
+
+  <div id="console-sections"></div>
+
+</main>
+
+<main class="bench" id="work" hidden>
 
   <!-- ── colonne 1 : le rack des étages ──────────────── -->
   <section class="col">

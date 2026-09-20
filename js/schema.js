@@ -113,6 +113,14 @@ const TOOLS = [
   },
 ];
 
+/* Le nom de chaque lot, tel que le §15 du brief les ordonne. */
+const LOTS = {
+  'LOT 2': 'Le front',
+  'LOT 3': 'Vues et 3D',
+  'LOT 4': 'Le rig',
+  'LOT 5': "L'animation",
+};
+
 /* ── les étages de la chaîne ────────────────────────────────
    `ready` distingue ce qui tourne aujourd'hui dans le navigateur
    de ce qui attend un worker GPU sur le DGX. Le rack affiche la
@@ -170,4 +178,4 @@ const STAGES = [
   },
 ];
 
-export { SHEET_FIELDS, SECTIONS, SCALAR_KEYS, SYSTEM_PREAMBLE, TOOLS, STAGES };
+export { SHEET_FIELDS, SECTIONS, SCALAR_KEYS, SYSTEM_PREAMBLE, TOOLS, STAGES, LOTS };

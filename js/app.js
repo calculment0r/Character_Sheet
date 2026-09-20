@@ -15,6 +15,7 @@ const MAX_TURNS = 10;
 /* ── état ───────────────────────────────────────────────── */
 
 const state = {
+  view: 'home',
   stage: 'identity',
   progress: {},                 // stageId → 'run' | 'done' | 'err'
   conversation: [],
@@ -289,10 +290,23 @@ function handleExportJson() {
 
 /* ── étages ─────────────────────────────────────────────── */
 
+function showHome() {
+  state.view = 'home';
+  $('#home').hidden = false;
+  $('#work').hidden = true;
+  $('#console-btn').hidden = true;
+  ui.renderConsole(state.progress);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 function pickStage(id) {
   const st = STAGES.find((s) => s.id === id);
   if (!st) return;
   state.stage = id;
+  state.view = 'work';
+  $('#home').hidden = true;
+  $('#work').hidden = false;
+  $('#console-btn').hidden = false;
 
   $('#stage-ref').textContent = st.ref;
   $('#stage-name').textContent = st.name;
@@ -380,16 +394,23 @@ async function runProbe() {
 
 async function refreshEngine() {
   const chain = cfg.plan();
-  if (!chain.length) { ui.setStatus('non configuré', 'err'); return; }
+  const settle = (label, cls, node) => {
+    ui.setStatus(label, cls);
+    ui.setNode(node);
+    if (state.view === 'home') ui.renderConsole(state.progress);
+  };
+
+  if (!chain.length) return settle('non configuré', 'err', 'aucun moteur');
+
   if (chain[0] === 'dgx') {
     ui.setStatus('test DGX…', 'work');
     const r = await probeDgx();
-    if (r.ok) ui.setStatus(`dgx · ${cfg.read('dgxModel')}`, 'on');
-    else if (chain[1]) ui.setStatus(`dgx muet → ${chain[1]}`, 'err');
-    else ui.setStatus(`dgx muet — ${r.reason}`, 'err');
-    return;
+    if (r.ok) return settle(`dgx · ${cfg.read('dgxModel')}`, 'on', `dgx · ${cfg.read('dgxModel')}`);
+    if (chain[1]) return settle(`dgx muet → ${chain[1]}`, 'err', `repli ${chain[1]}`);
+    return settle(`dgx muet — ${r.reason}`, 'err', 'dgx muet');
   }
-  ui.setStatus(`anthropic · ${cfg.read('anthropicModel')}`, 'on');
+
+  settle(`anthropic · ${cfg.read('anthropicModel')}`, 'on', `anthropic · ${cfg.read('anthropicModel')}`);
 }
 
 /* ── méthode ────────────────────────────────────────────── */
@@ -415,6 +436,7 @@ function handleReset() {
   $('#output').hidden = true;
   bootMessage();
   pickStage('identity');
+  showHome();
   ui.toast('session vidée');
 }
 
@@ -482,6 +504,8 @@ function wire() {
   $('#copy').onclick = handleCopy;
   $('#download').onclick = handleDownload;
 
+  $('#home-btn').onclick = showHome;
+  $('#console-btn').onclick = showHome;
   $('#settings-btn').onclick = openSettings;
   $('#set-save').onclick = saveSettings;
   $('#set-probe-btn').onclick = runProbe;
@@ -504,7 +528,8 @@ function wire() {
 async function init() {
   wire();
   ui.renderSheet(state.sheet, state.notes);
-  pickStage('identity');
+  pickStage('identity');   // prépare le banc sans l'afficher
+  showHome();
   bootMessage();
   tickClock();
   setInterval(tickClock, 1000);

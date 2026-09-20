@@ -1,0 +1,10 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.8
+httpx>=0.27
+
+# Facultatifs. Sans eux le service tourne en mémoire et sur disque
+# local, et le dit au démarrage.
+redis>=5.0
+rq>=1.16
+minio>=7.2

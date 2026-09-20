@@ -86,7 +86,7 @@
 .chips-custom .fld { flex: 1; }
 
 .slider-wrap { display: flex; flex-direction: column; gap: 6px; }
-.slider-value { font-family: var(--f-disp); font-weight: 700; font-size: 20px; letter-spacing: .06em; color: var(--cy); }
+.slider-value { font-family: var(--f-disp); font-size: 20px; letter-spacing: .06em; color: var(--cy); }
 .slider { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; }
 .slider::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--panel3); }
 .slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--or); }
@@ -162,5 +162,5 @@
   font-family: var(--f-mono); font-size: 8px; letter-spacing: .16em;
   text-transform: uppercase; color: var(--ink3); line-height: 1.5; position: relative;
 }
-.panel-cell .az { font-family: var(--f-disp); font-weight: 700; font-size: 15px; letter-spacing: .06em; color: var(--panel3); position: relative; }
+.panel-cell .az { font-family: var(--f-disp); font-size: 15px; letter-spacing: .06em; color: var(--panel3); position: relative; }
 .panel-cell.has-img .cap, .panel-cell.has-img .az { display: none; }

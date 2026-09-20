@@ -23,6 +23,15 @@
   --grn:     #2f6b4a;   /* vert sourd — l'état engagé */
   --grn2:    #3d8a60;   /* vert clair — la progression */
 
+  /* rampe des barres de la console — du plus clair au plus sourd,
+     comme la pile de logiciels du banc NL */
+  --coral-3: #f2cdb8;
+  --coral-2: #e79b7c;
+  --coral-1: #a8603c;
+  --verd-2:  #35684a;
+  --verd-1:  #2a5540;
+  --on-light: #1a0d07;
+
   /* traits */
   --line:    rgba(198, 213, 220, .14);
   --line-cy: rgba(185, 207, 216, .45);
@@ -38,6 +47,12 @@
   --f-ui:    'Chakra Petch', 'Saira Semi Condensed', sans-serif;
   --f-mono:  'Azeret Mono', ui-monospace, monospace;
   --f-disp:  'Venus Rising', 'Chakra Petch', sans-serif;
+  /* Norelli Demo Black ne porte que 54 glyphes : A-Z et a-z, sans
+     chiffre ni accent. Elle ne peut donc tenir que des chaînes dont on
+     maîtrise le contenu exact — en pratique le seul logotype. Partout
+     ailleurs, un caractère manquant ferait basculer la police en plein
+     mot, ce qui se voit. */
+  --f-black: 'Norelli', 'Venus Rising', 'Chakra Petch', sans-serif;
 
   /* rayons — sobres, outil professionnel */
   --r1: 4px;

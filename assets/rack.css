@@ -2,11 +2,26 @@
    CHARACTER FACTORY — composants du rack
    Langage repris du banc NL : en-tête collante, rack de rangées,
    moniteur à volet A/B, transport, timeline, cartes de méta.
-   Note typo : la fonte d'affichage du banc NL est "Venus Rising",
-   une fonte commerciale Typodermic qu'on ne redistribue pas dans
-   un dépôt public. On garde son repli déclaré — Chakra Petch 700
-   très espacé — sous le même nom de classe .venus.
+   Typographie : Venus Rising porte l'affichage, comme dans le banc
+   NL. Norelli Black remplace la "Four Zero" du banc d'origine, qui y
+   était déclarée sans jamais servir ; elle ne tient que le logotype,
+   faute de chiffres et d'accents dans son jeu de 54 glyphes.
    ============================================================ */
+
+@font-face {
+  font-family: 'Venus Rising';
+  src: url('./fonts/venus-rising.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Norelli';
+  src: url('./fonts/norelli-black.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -55,8 +70,7 @@ select:focus-visible, textarea:focus-visible,
 }
 .venus {
   font-family: var(--f-disp);
-  font-weight: 700;
-  letter-spacing: .1em;
+  letter-spacing: .06em;
   text-transform: uppercase;
   line-height: 1;
 }
@@ -71,7 +85,7 @@ select:focus-visible, textarea:focus-visible,
   flex-wrap: wrap;
   box-shadow: inset 0 -1px 0 var(--line);
 }
-.logo { display: flex; align-items: center; gap: 11px; }
+.logo { display: flex; align-items: center; gap: 11px; padding: 0; text-align: left; }
 .logo .sq {
   width: 24px; height: 24px; border-radius: var(--r1);
   background: var(--or);
@@ -79,8 +93,8 @@ select:focus-visible, textarea:focus-visible,
 }
 .logo .sq i { display: block; width: 7px; height: 7px; border-radius: 2px; background: var(--on-or); }
 .logo b {
-  display: block; font-size: 14px; font-weight: 700;
-  letter-spacing: .08em; text-transform: uppercase;
+  display: block; font-family: var(--f-black); font-size: 16px; font-weight: 400;
+  letter-spacing: .05em; text-transform: uppercase; line-height: 1.1;
 }
 .logo small {
   display: block; font-family: var(--f-mono); font-size: 8.5px;
@@ -157,7 +171,7 @@ select.fld { cursor: pointer; }
 /* ── entête de colonne ──────────────────────────────────── */
 .c-head { display: flex; align-items: baseline; gap: var(--s4); padding: 0 2px; }
 .c-head h2 {
-  margin: 0; font-family: var(--f-disp); font-size: 12px; font-weight: 700;
+  margin: 0; font-family: var(--f-disp); font-size: 12px; font-weight: 400;
   letter-spacing: .2em; text-transform: uppercase; color: var(--ink3);
 }
 .c-head .sec { font-family: var(--f-mono); font-size: 9px; letter-spacing: .2em; color: var(--or); }
@@ -193,10 +207,13 @@ select.fld { cursor: pointer; }
   color: var(--ink3); text-transform: uppercase;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* Venus Rising est plus large que la fonte d'interface : un nom
+   d'étage passe à la ligne au lieu de se faire couper. Le rack a de la
+   hauteur, il n'a pas de largeur. */
 .item .nm {
-  display: block; font-family: var(--f-disp); font-weight: 700; font-size: 13px;
-  line-height: 1.15; letter-spacing: .07em; text-transform: uppercase;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px;
+  display: block; font-family: var(--f-disp); font-size: 13px;
+  line-height: 1.2; letter-spacing: .04em; text-transform: uppercase;
+  margin-top: 3px; overflow-wrap: break-word;
 }
 .item .sub {
   display: block; font-family: var(--f-mono); font-size: 8.5px; line-height: 1.5;
@@ -267,7 +284,7 @@ select.fld { cursor: pointer; }
   box-shadow: inset 0 0 0 1px var(--line); pointer-events: none;
 }
 .tag.a { left: 12px; } .tag.b { right: 12px; }
-.tag b { font-family: var(--f-disp); font-weight: 700; font-size: 13px; letter-spacing: .08em; }
+.tag b { font-family: var(--f-disp); font-size: 13px; letter-spacing: .06em; }
 .tag.a b { color: var(--cy); } .tag.b b { color: var(--or); }
 .tag span {
   display: block; font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .14em;
@@ -280,8 +297,8 @@ select.fld { cursor: pointer; }
   text-align: center; padding: var(--s6); color: var(--ink3);
 }
 .monitor .empty b {
-  font-family: var(--f-disp); font-weight: 700; font-size: 22px;
-  letter-spacing: .1em; text-transform: uppercase; color: var(--ink2);
+  font-family: var(--f-disp); font-size: 22px;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--ink2);
 }
 .readout {
   position: absolute; bottom: 12px; right: 12px; z-index: 6;
@@ -394,3 +411,89 @@ select.fld { cursor: pointer; }
 .modal-body code { font-family: var(--f-mono); font-size: 10px; color: var(--cy); }
 
 [hidden] { display: none !important; }
+
+/* ============================================================
+   LA CONSOLE — page d'accueil
+   Reprise de la home du banc NL : une carte héro, une carte de
+   compte, puis la pile des étages en barres pleines.
+   ============================================================ */
+
+.console { max-width: 1420px; margin: 0 auto; padding: var(--s6) var(--s6) 64px; display: flex; flex-direction: column; gap: var(--s6); }
+
+.console-top { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: var(--s4); }
+@media (max-width: 900px) { .console-top { grid-template-columns: 1fr; } }
+
+/* ── carte héro ─────────────────────────────────────────── */
+.hero { background: var(--panel); border-radius: var(--r4); padding: 34px 38px; display: flex; flex-direction: column; gap: var(--s5); }
+.hero .ref { font-family: var(--f-mono); font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--or); }
+.hero h1 {
+  /* Norelli ne porte que des lettres et l'espace : ce titre est écrit
+     pour elle, sans chiffre, sans accent, sans ponctuation. */
+  margin: 0; font-family: var(--f-black); font-weight: 400;
+  font-size: clamp(30px, 4.4vw, 54px); line-height: 1.04;
+  letter-spacing: .01em; text-transform: uppercase; color: var(--ink);
+}
+.hero p { margin: 0; max-width: 58ch; color: var(--ink2); font-size: 13px; line-height: 1.75; }
+
+/* ── carte de compte ────────────────────────────────────── */
+.statcard {
+  position: relative; overflow: hidden; border-radius: var(--r4);
+  background: var(--or); color: var(--on-light);
+  padding: 22px 26px; display: flex; flex-direction: column; min-height: 210px;
+}
+.statcard .ref { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .2em; text-transform: uppercase; opacity: .72; }
+.statcard .n {
+  font-family: var(--f-disp); font-size: clamp(56px, 8vw, 92px); line-height: 1;
+  letter-spacing: -.01em; margin: auto 0; position: relative;
+}
+.statcard .foot { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; opacity: .8; }
+.statcard .dots {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 140px;
+  background-image: radial-gradient(rgba(26,13,7,.22) 1px, transparent 1.1px);
+  background-size: 7px 7px; pointer-events: none;
+}
+
+/* ── section ────────────────────────────────────────────── */
+.sect { display: flex; flex-direction: column; gap: var(--s3); }
+.sect-head { display: flex; align-items: baseline; gap: var(--s3); }
+.sect-head h2 {
+  margin: 0; font-family: var(--f-disp); font-size: 15px; font-weight: 400;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--ink2);
+}
+.sect-head .k { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .2em; color: var(--or); }
+.sect-head .cnt { margin-left: auto; font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink3); }
+
+/* ── dalle d'étage ──────────────────────────────────────── */
+.slab {
+  position: relative; overflow: hidden; width: 100%; text-align: left;
+  border-radius: var(--r3); padding: 17px 22px;
+  display: flex; align-items: center; gap: var(--s5);
+  transition: filter .14s, transform .14s;
+}
+.slab:hover { filter: brightness(1.06); transform: translateX(3px); }
+.slab .ico { flex: none; width: 22px; height: 22px; opacity: .72; }
+.slab .ico svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.slab .body { min-width: 0; flex: 1; position: relative; z-index: 1; }
+.slab .line { display: flex; align-items: baseline; gap: var(--s4); flex-wrap: wrap; }
+.slab .ref { font-family: var(--f-mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; opacity: .68; flex: none; }
+.slab .nm { font-family: var(--f-disp); font-size: clamp(19px, 2.2vw, 27px); line-height: 1.05; letter-spacing: .02em; text-transform: uppercase; }
+.slab .sub { display: block; margin-top: 5px; font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .1em; opacity: .74; }
+.slab .dots {
+  position: absolute; right: 96px; top: 0; bottom: 0; width: 140px;
+  background-image: radial-gradient(currentColor 1px, transparent 1.1px);
+  background-size: 7px 7px; opacity: .18; pointer-events: none;
+}
+.slab .go {
+  flex: none; font-family: var(--f-mono); font-size: 10px; letter-spacing: .18em;
+  text-transform: uppercase; opacity: .82; position: relative; z-index: 1;
+}
+
+/* les trois teintes de la pile, comme sur la home NL */
+.slab.t3 { background: var(--coral-3); color: var(--on-light); }
+.slab.t2 { background: var(--coral-2); color: var(--on-light); }
+.slab.t1 { background: var(--coral-1); color: #fdf1ea; }
+
+/* les étages encore verrouillés restent dans la famille verte */
+.slab.lk  { background: var(--verd-2); color: var(--on-grn); }
+.slab.lk2 { background: var(--verd-1); color: var(--on-grn); }
+.slab.lk .go, .slab.lk2 .go { opacity: .6; }

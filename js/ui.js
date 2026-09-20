@@ -1,6 +1,6 @@
 'use strict';
 
-import { SHEET_FIELDS, SECTIONS, SCALAR_KEYS, STAGES } from './schema.js';
+import { SHEET_FIELDS, SECTIONS, SCALAR_KEYS, STAGES, LOTS } from './schema.js';
 
 /* ============================================================
    Tout ce qui touche au DOM. La logique ne connaît pas le HTML,
@@ -42,6 +42,91 @@ function setStatus(label, cls) {
   $('#engine-text').textContent = label;
   pill.className = 'pill' + (cls ? ` ${cls}` : '');
 }
+
+/* ── la console d'accueil ───────────────────────────────── */
+
+/* Quelques pictogrammes au trait, dans l'esprit des marques de la
+   pile NL. Rien de figuratif : ils servent de repère, pas d'illustration. */
+const ICONS = {
+  identity: 'M4 18c0-3.3 2.7-6 6-6s6 2.7 6 6M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6',
+  face:     'M3 10a7 7 0 1 0 14 0 7 7 0 0 0-14 0M7 9v1M13 9v1M7 13c1.8 1.4 4.2 1.4 6 0',
+  costume:  'M7 3 4 6v11h12V6l-3-3M7 3c0 1.7 1.3 3 3 3s3-1.3 3-3',
+  sheet:    'M3 3h5v14H3zM9.5 3h5v14h-5zM16 3h1v14h-1',
+  views:    'M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6',
+  mesh:     'M10 2 3 6v8l7 4 7-4V6zM3 6l7 4 7-4M10 10v8',
+  rig:      'M10 3v5m0 0-4 4m4-4 4 4m-8 4v-4m8 4v-4M10 3a1 1 0 1 0 0-.01',
+  anim:     'M2 10h3l2-6 3 12 3-9 2 3h3',
+};
+
+function icon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', ICONS[name] || ICONS.identity);
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  svg.appendChild(path);
+  const box = el('span', 'ico');
+  box.appendChild(svg);
+  return box;
+}
+
+const CORAL = ['t3', 't2', 't1'];
+const VERD = ['lk', 'lk2'];
+
+function renderConsole(progress = {}) {
+  const host = $('#console-sections');
+  host.innerHTML = '';
+
+  const lots = [...new Set(STAGES.map((s) => s.lot))];
+
+  lots.forEach((lot, lotIndex) => {
+    const rows = STAGES.filter((s) => s.lot === lot);
+
+    const sect = el('section', 'sect');
+    const head = el('div', 'sect-head');
+    head.appendChild(el('span', 'k', lot.replace(' ', '\u2014')));
+    head.appendChild(el('h2', null, LOTS[lot] || lot));
+    head.appendChild(el('span', 'cnt', `${rows.length} étage${rows.length > 1 ? 's' : ''}`));
+    sect.appendChild(head);
+
+    rows.forEach((st, i) => {
+      const bar = el('button', 'slab');
+      bar.type = 'button';
+      // Le lot de tête prend la famille corail, l'aval reste en vert :
+      // la couleur dit où on travaille, pas ce qui est fini.
+      bar.classList.add(lotIndex === 0 ? CORAL[i % CORAL.length] : VERD[i % VERD.length]);
+
+      bar.appendChild(icon(st.id));
+
+      const body = el('div', 'body');
+      const line = el('div', 'line');
+      line.appendChild(el('span', 'ref', st.ref.replace('-', '\u2014')));
+      line.appendChild(el('span', 'nm', st.name));
+      body.appendChild(line);
+      body.appendChild(el('span', 'sub', st.ready ? st.sub : `verrouillé · ${st.needs}`));
+      bar.appendChild(body);
+
+      bar.appendChild(el('span', 'dots'));
+      bar.appendChild(el('span', 'go', st.ready ? 'Ouvrir' : (progress[st.id] === 'done' ? 'Fait' : 'Voir')));
+
+      bar.onclick = () => handlers.onStagePick(st.id);
+      sect.appendChild(bar);
+    });
+
+    host.appendChild(sect);
+  });
+
+  const ready = STAGES.filter((s) => s.ready).length;
+  $('#stat-n').textContent = String(ready).padStart(2, '0');
+  $('#stat-foot').textContent = `sur ${STAGES.length} étages · ${settingsNode()}`;
+}
+
+/* Le pied de la carte de compte dit sur quel nœud on travaille ; la
+   valeur est posée par l'application, qui seule connaît les réglages. */
+let _node = 'hors ligne';
+function setNode(label) { _node = label; }
+function settingsNode() { return _node; }
 
 /* ── le rack des étages ─────────────────────────────────── */
 
@@ -321,8 +406,8 @@ function renderPreviews(images, onRemove) {
 }
 
 export {
-  $, $$, el, setHandlers, toast, setStatus,
-  renderRack, renderSheet, flashField,
+  $, $$, el, setHandlers, toast, setStatus, setNode,
+  renderConsole, renderRack, renderSheet, flashField,
   appendMessage, appendThinking, removeThinking, clearChat,
   renderInputWidget, renderPreviews,
 };
