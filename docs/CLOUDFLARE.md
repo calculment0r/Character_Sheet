@@ -9,26 +9,49 @@ partagent donc la même adresse, il n'y a pas de CORS à régler et rien
 
 ---
 
-## Le chemin le plus court — 5 minutes, sans compte Cloudflare
+## D'abord : regarder ce qui est déjà là
 
-### 1. Installer `cloudflared` sur le DGX
+Sur une machine qui sert déjà, la moitié de ce guide est inutile. Avant
+d'installer quoi que ce soit :
+
+```sh
+./check.sh
+```
+
+Il ne touche à rien. Il cherche un serveur d'inférence sur les ports
+usuels et relève les modèles qu'il sert, dit si `cloudflared` est
+installé et si un tunnel tourne déjà, liste les dépendances Python
+présentes, repère Redis et MinIO, et vérifie que le port de la Factory
+est libre. Il finit en écrivant les commandes exactes à lancer, remplies
+avec ce qu'il a trouvé.
+
+Si le serveur d'inférence écoute sur un port inhabituel :
+
+```sh
+FACTORY_SCAN_PORTS="8000 9999 12345" ./check.sh
+```
+
+Le reste de cette page ne sert que pour ce que `check.sh` déclare absent.
+
+---
+
+## Le chemin le plus court — sans compte Cloudflare
+
+### 1. Installer `cloudflared`, s'il manque
 
 ```sh
 curl -L -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
 chmod +x cloudflared
 sudo mv cloudflared /usr/local/bin/
-cloudflared --version
 ```
 
 ### 2. Démarrer la Factory
 
-```sh
-pip install fastapi "uvicorn[standard]" httpx
+Avec les deux lignes que `check.sh` t'a données :
 
-# l'adresse de ton serveur d'inférence local
+```sh
 export FACTORY_LLM_URL=http://localhost:8001
 export FACTORY_LLM_MODEL=Qwen3-VL-32B-Instruct
-
 ./start.sh
 ```
 

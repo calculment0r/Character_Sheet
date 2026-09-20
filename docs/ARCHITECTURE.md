@@ -70,7 +70,8 @@ mémoire), le visualiseur three.js du §9, et la couche mains/visage du §13.
 ## Faire tourner
 
 ```sh
-./start.sh
+./check.sh     # ce qui est déjà en place, et quoi lancer
+./start.sh     # la Factory, page et API sur un seul port
 ```
 
 L'API sert aussi la page, donc un seul port : `http://localhost:8000`.
