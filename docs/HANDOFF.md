@@ -185,7 +185,25 @@ implémenté en option (`mask_face_in_fullbody`) et attend son A/B.
 
 ---
 
-## 7. Carte du dépôt
+## 7. Reprendre la direction artistique
+
+**Ouvrir `theme.html`** — c'est le catalogue du thème. Il charge les
+mêmes feuilles que l'application, donc il ne peut pas dériver : tous les
+jetons avec leur rôle, les quatre fontes avec leurs contraintes, et
+chaque composant réel, du bouton à la dalle de console.
+
+À côté :
+
+- `docs/reference/nl-bench.css` — le CSS du banc NL d'origine, dont tout
+  est tiré. L'artefact source n'est pas lisible hors du compte de Cal ;
+  ce fichier est la seule trace.
+- `docs/img/` — captures de référence : la console, le banc, le
+  spécimen typographique, la vue étroite.
+- `CLAUDE.md` — les règles dures, en tête de dépôt.
+
+---
+
+## 8. Carte du dépôt
 
 ```
 index.html              la page — console + banc
@@ -204,5 +222,10 @@ data/sheet_template.txt le gabarit de prompt historique
 api/                    FastAPI — voir api/README.md
 check.sh                inventaire de la machine
 start.sh                lancement, un seul port
+theme.html              le catalogue du thème — jetons, fontes, composants
+tools/mock_llm.py       un faux modèle, pour tester sans GPU
+tools/e2e.mjs           la vérification bout en bout
+docs/reference/         le CSS du banc NL, source de la DA
+docs/img/               captures de référence
 legacy/                 l'ancien kit UI, gardé pour mémoire
 ```
