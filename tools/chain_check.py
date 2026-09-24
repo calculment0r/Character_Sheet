@@ -186,6 +186,35 @@ def sam3d_yaw() -> None:
     check("SAM 3D Body : cap du bassin lu dans le BVH, vue gauche à 90°", abs(az - 90.0) < 1e-6, f"{az:.1f}°")
 
 
+def unirig_to_soma() -> None:
+    """Le report UniRig → SOMA, sans UniRig : on « prédit » 22 os du corps
+    sur le gabarit SOMA en A-pose, agrandi de 10 % et déplacé, sous des
+    noms à la UniRig. Les 55 articulations restantes doivent revenir à
+    leur place à moins d'un centimètre ; un os non mappé doit verser ses
+    poids sur son ancêtre."""
+    from factory import rig_unirig, skeleton
+
+    spec = skeleton.soma_spec()
+    tmpl = skeleton.soma_apose(spec)
+    body = ["Hips", "Spine1", "Spine2", "Chest", "Neck1", "Head", "LeftShoulder", "LeftArm", "LeftForeArm",
+            "LeftHand", "RightShoulder", "RightArm", "RightForeArm", "RightHand", "LeftLeg", "LeftShin",
+            "LeftFoot", "LeftToeBase", "RightLeg", "RightShin", "RightFoot", "RightToeBase"]
+    body = [n for n in body if n in spec["names"]]
+    names = [f"bone_{i}" for i in range(len(body))] + ["bone_extra"]
+    parents = [-1] + [0] * (len(body) - 1) + [body.index("LeftHand")]
+    table = {f"bone_{i}": n for i, n in enumerate(body)}
+    moved = tmpl * 1.1 + np.array([0.2, 0.0, -0.1])
+    pos = np.array([moved[spec["names"].index(n)] for n in body] + [moved[spec["names"].index("LeftHand")]])
+    out = rig_unirig.soma_positions(spec, names, pos, table)
+    err = float(np.abs(out - moved).max())
+    owner = rig_unirig.unirig_owner(names, np.array(parents), table, spec)
+    j, w = rig_unirig.to_soma_weights(np.array([[len(body), 0]]), np.array([[0.75, 0.25]]), owner)
+    hand = spec["names"].index("LeftHand")
+    check("UniRig → SOMA : articulations manquantes sur les proportions SOMA, poids reportés sur l'ancêtre",
+          err < 0.01 and int(j[0, 0]) == hand and abs(float(w[0].sum()) - 1.0) < 1e-6,
+          f"{len(body)} os prédits, écart max {err * 100:.2f} cm")
+
+
 def dry_validation() -> None:
     """La validation à blanc de `./usine doctor` : elle doit voir un nœud
     absent et un fichier de poids inconnu, dans les deux formes de liste
@@ -365,6 +394,7 @@ def main() -> int:
     orbit_selection()
     sam3d_yaw()
     dry_validation()
+    unirig_to_soma()
 
     failed = [r for r in results if not r[1]]
     print(f"\n{len(results) - len(failed)}/{len(results)} vérifications passées\n")
