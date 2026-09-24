@@ -187,32 +187,51 @@ def sam3d_yaw() -> None:
 
 
 def unirig_to_soma() -> None:
-    """Le report UniRig → SOMA, sans UniRig : on « prédit » 22 os du corps
-    sur le gabarit SOMA en A-pose, agrandi de 10 % et déplacé, sous des
-    noms à la UniRig. Les 55 articulations restantes doivent revenir à
-    leur place à moins d'un centimètre ; un os non mappé doit verser ses
-    poids sur son ancêtre."""
+    """La reconnaissance UniRig → SOMA, sans UniRig. UniRig nomme ses os
+    bone_0… sans sens : on lui donne des squelettes anonymes, numérotés
+    dans le désordre — le SOMA complet, le même tourné vers −Z, et un
+    squelette réduit à la UniRig (ni doigts, ni yeux, ni mâchoire) —, pris
+    sur le gabarit en A-pose agrandi de 10 % et déplacé. Chaque os
+    reconnu doit porter son vrai nom SOMA, le squelette SOMA reconstruit
+    doit tomber à moins d'un centimètre, le personnage tourné doit être
+    remis face à +Z, et les poids d'un doigt doivent aller à la main."""
     from factory import rig_unirig, skeleton
 
     spec = skeleton.soma_spec()
-    tmpl = skeleton.soma_apose(spec)
-    body = ["Hips", "Spine1", "Spine2", "Chest", "Neck1", "Head", "LeftShoulder", "LeftArm", "LeftForeArm",
-            "LeftHand", "RightShoulder", "RightArm", "RightForeArm", "RightHand", "LeftLeg", "LeftShin",
-            "LeftFoot", "LeftToeBase", "RightLeg", "RightShin", "RightFoot", "RightToeBase"]
-    body = [n for n in body if n in spec["names"]]
-    names = [f"bone_{i}" for i in range(len(body))] + ["bone_extra"]
-    parents = [-1] + [0] * (len(body) - 1) + [body.index("LeftHand")]
-    table = {f"bone_{i}": n for i, n in enumerate(body)}
-    moved = tmpl * 1.1 + np.array([0.2, 0.0, -0.1])
-    pos = np.array([moved[spec["names"].index(n)] for n in body] + [moved[spec["names"].index("LeftHand")]])
-    out = rig_unirig.soma_positions(spec, names, pos, table)
-    err = float(np.abs(out - moved).max())
-    owner = rig_unirig.unirig_owner(names, np.array(parents), table, spec)
-    j, w = rig_unirig.to_soma_weights(np.array([[len(body), 0]]), np.array([[0.75, 0.25]]), owner)
-    hand = spec["names"].index("LeftHand")
-    check("UniRig → SOMA : articulations manquantes sur les proportions SOMA, poids reportés sur l'ancêtre",
-          err < 0.01 and int(j[0, 0]) == hand and abs(float(w[0].sum()) - 1.0) < 1e-6,
-          f"{len(body)} os prédits, écart max {err * 100:.2f} cm")
+    names, sparents = spec["names"], spec["parents"]
+    moved = skeleton.soma_apose(spec) * 1.1 + np.array([0.2, 0.0, -0.1])
+    reduced = ["Hips", "Spine1", "Spine2", "Chest", "Neck1", "Head", "HeadEnd", "LeftShoulder", "LeftArm",
+               "LeftForeArm", "LeftHand", "RightShoulder", "RightArm", "RightForeArm", "RightHand", "LeftLeg",
+               "LeftShin", "LeftFoot", "LeftToeBase", "RightLeg", "RightShin", "RightFoot", "RightToeBase"]
+    rng = np.random.default_rng(3)
+    report, ok = [], True
+    for label, keep, yaw in (("complet", names, 0.0), ("tourné vers −Z", names, np.pi), ("réduit", reduced, 0.0)):
+        kept = [names.index(n) for n in keep]
+        order = [kept[0]] + list(rng.permutation(kept[1:]))       # racine d'abord, le reste mélangé
+        new = {s: i for i, s in enumerate(order)}
+
+        def up(s: int) -> int:
+            s = sparents[s]
+            while s >= 0 and s not in new:
+                s = sparents[s]
+            return s
+
+        parents = np.array([new[up(s)] if up(s) >= 0 else -1 for s in order])
+        turn = rig_unirig._yaw_matrix(yaw)
+        pos = moved[order] @ turn.T
+        table, found_yaw = rig_unirig.match_soma(parents, pos)
+        wrong = [f"{names[order[u]]}≠{n}" for u, n in table.items() if names[order[u]] != n]
+        fixed = pos @ rig_unirig._yaw_matrix(found_yaw).T
+        err = float(np.abs(rig_unirig.soma_positions(spec, fixed, table) - moved).max())
+        ok &= not wrong and err < 0.01 and abs(fixed - moved[order]).max() < 1e-9
+        report.append(f"{label} : {len(table)} reconnus, écart {err * 100:.2f} cm{' ; ' + ', '.join(wrong) if wrong else ''}")
+        if label == "complet":
+            finger = new[names.index("LeftHandIndex2")]
+            owner = rig_unirig.unirig_owner(parents, table, spec)
+            j, w = rig_unirig.to_soma_weights(np.array([[finger, 0]]), np.array([[0.75, 0.25]]), owner)
+            ok &= int(j[0, 0]) == names.index("LeftHand") and abs(float(w[0].sum()) - 1.0) < 1e-6
+    check("UniRig → SOMA : os anonymes reconnus sur la topologie, face remise à +Z, doigts versés sur la main",
+          ok, " | ".join(report))
 
 
 def dry_validation() -> None:

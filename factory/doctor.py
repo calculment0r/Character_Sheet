@@ -35,6 +35,8 @@ REMOTE_NEEDS = {
                ("encodeur de texte Llama-3-8B-Instruct (dépôt Meta à accès restreint, licence à accepter sur "
                 "Hugging Face, puis téléchargement)",
                 "ls ~/.cache/huggingface/hub/models--meta-llama--Meta-Llama-3-8B-Instruct/snapshots/*/*.safetensors")],
+    "unirig": [("checkpoint squelette", "test -s ~/UniRig/experiments/skeleton/articulation-xl_quantization_256/model.ckpt"),
+               ("checkpoint peau", "test -s ~/UniRig/experiments/skin/articulation-xl/model.ckpt")],
 }
 
 

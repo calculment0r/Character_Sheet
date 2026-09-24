@@ -73,11 +73,13 @@ molette.
 
 | Capacité | Moteur réel | État |
 |---|---|---|
-| H3 | ComfyUI (déjà en place) | client écrit et testé contre un faux ComfyUI ; à relancer sur le vrai |
-| Mesh 3D | TRELLIS 2, Hunyuan3D 2.1 | interface écrite, adaptateurs à écrire |
+| H3 | ComfyUI, DGX1 :8189 | **tourne** : visage, plein pied, planche, orbite sur de vraies images |
+| Détourage | BiRefNet par ComfyUI, DGX1 | **tourne** : vues et frames d'orbite |
+| Mesh 3D | TRELLIS 2 par ComfyUI, DGX2 | gabarits multi-vues et image unique validés à blanc ; jamais lancé |
+| Mesure d'azimut | SAM 3D Body par ComfyUI | câblée (`controle --mesurer`), jamais lancée ; signe à confirmer |
 | Delight | hunyuan3d-delight-v2-0 | branchement prévu dans `prep` |
-| Rig | UniRig + mapping vers SOMA | squelette, bind et écriture glTF prêts ; prédiction à brancher |
-| Animation | Kimodo, SAM 3D Body | format de prise et mixage prêts ; modèles à brancher |
+| Rig | UniRig par ssh, DGX2, reconnu sur la topologie → SOMA 77 | installé, câblé, jamais lancé |
+| Animation | Kimodo par ssh, DGX2 ; SAM 3D Body | Kimodo installé, bloqué sur Llama-3 (licence Meta) ; vidéo → SOMA à trancher |
 
 Tant qu'une capacité n'a pas son moteur, elle tourne en factice et le
 dit : étiquette FACTICE sur les images, « (factice) » dans `./usine etat`.
@@ -87,7 +89,9 @@ dit : étiquette FACTICE sur les images, « (factice) » dans `./usine etat`.
 - **H3** : local, 768 px. Tranché par Cal.
 - **Vues orthogonales** : une génération par vue par défaut, pour un
   contrôle d'angle exact ; l'orbite redécoupée est disponible
-  (`--orbite`) pour le banc que le brief demande.
+  (`--orbite`) pour le banc que le brief demande. Premier banc sur la machine (24/09) : par vue, H3 revient vers la face (profil
+  demandé à 90°, rendu vers 55°) ; l'orbite donne de vrais profils et un vrai dos,
+  frames choisies sur la silhouette. Défaut à basculer sur l'orbite : à Cal de trancher.
 - **Moteur 3D par défaut** : TRELLIS 2, MIT. Hunyuan3D 2.1 reste au
   choix, avec l'avertissement de licence territoriale à chaque appel.
 - **Disque sur le visage** : `./usine planche --ab` sort les deux

@@ -104,9 +104,30 @@ réglé dans `factory.local.json`. `chain_check` : 32/32 sous Windows.
   NumPy 2.4 or less. Got NumPy 2.5 ») ; le réparer demande de toucher
   l'environnement ComfyUI partagé de DGX2 — pas fait sans Cal. Le
   modèle natif de ComfyUI ne fait que la forme, sans texture.
-- **Reste ouvert** : UniRig vers SOMA (mapping des noms à écrire une fois
-  qu'on voit la sortie d'UniRig), SAM 3D Body vers SOMA pour la vidéo
-  (route MHR → SOMA à trancher, §11.2).
+- **Kimodo** installé sur DGX2 (`~/kimodo/.venv`, commit 58e7818, poids
+  Kimodo-SOMA-RP-v1 — l'alias par défaut `kimodo-soma-rp` pointe sur la
+  v1.1), script `tools/remote/kimodo_entry.py`. **Bloqué** : l'encodeur
+  de texte s'appuie sur `meta-llama/Meta-Llama-3-8B-Instruct`, dépôt à
+  accès restreint ; Cal doit accepter la licence Meta sur Hugging Face,
+  puis on télécharge (~16 Go). MotionCorrection (anti-glissement des
+  pieds) a été porté sur aarch64 (sse2neon), jamais exécuté.
+- **UniRig** installé sur DGX2 (`~/UniRig/.venv`, Python 3.11, spconv,
+  torch-scatter/cluster et flash-attn compilés pour sm_120/121), **sans
+  Blender** : `bpy` n'existe pas pour linux-aarch64, et il ne sert qu'à
+  l'import et à l'export ; `tools/remote/unirig_entry.py` fait l'import
+  en numpy/trimesh et reporte les poids sur les sommets d'entrée par le
+  `reskin()` d'UniRig. Jamais exécuté.
+- **Écart au brief §10.3** : le modèle UniRig publié nomme ses os
+  `bone_0…` sans sens, en nombre variable ; une table de noms fixe ne
+  peut pas marcher. `rig_unirig.match_soma` reconnaît le squelette sur
+  sa topologie et sa géométrie, par des règles fixes (bassin à trois
+  branches, thorax, mi-chemin des chaînes, avant lu aux pieds), et remet
+  le personnage face à +Z si le mesh regarde ailleurs. Vérifié sur des
+  squelettes synthétiques anonymes (`chain_check`), pas sur UniRig.
+- Licence : l'encodeur Michelangelo d'UniRig (`src/model/michelangelo/`)
+  est GPL-3.0, le reste MIT.
+- **Reste ouvert** : SAM 3D Body vers SOMA pour la vidéo (route MHR →
+  SOMA à trancher, §11.2) ; Hunyuan3D 2.1 (numpy de DGX2).
 
 ---
 
