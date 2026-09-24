@@ -92,8 +92,13 @@ def still(kind: str, *, sections: dict, refs: list[Path], dest: Path, seed: int,
 def orbit(*, sections: dict, refs: list[Path], dest_dir: Path, seed: int, azimuths: dict[str, float],
           report=lambda p, m: None, identity_seed: int | None = None) -> dict[str, Still]:
     """L'alternative du §6.1 : un plan en orbite, redécoupé aux azimuts
-    voulus. L'azimut d'une frame est supposé proportionnel à son rang —
-    la caméra tourne à vitesse constante — et le contrôle le dit."""
+    voulus.
+
+    La caméra de H3 ne tourne pas à vitesse constante : quand le
+    détourage passe par ComfyUI, BiRefNet détoure chaque frame dans le
+    même workflow et les frames se choisissent sur la largeur de la
+    silhouette (`imaging.orbit_picks`). Sinon, l'azimut d'une frame est
+    supposé proportionnel à son rang, et le manifeste le dit."""
     backend = config.backend("h3")
     size = SIZES["orbit"]
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -108,32 +113,49 @@ def orbit(*, sections: dict, refs: list[Path], dest_dir: Path, seed: int, azimut
             out[name] = Still(path, seed, backend, meta)
         return out
 
-    frames = _frames("orbit", prompts.to_text(sections), refs, size, seed, FRAMES_ORBIT, dest_dir / ".orbit", report)
+    with_masks = backend == "comfyui" and config.backend("prep") == "comfyui"
+    frames, masks = _frames("orbit", prompts.to_text(sections), refs, size, seed, FRAMES_ORBIT, dest_dir / ".orbit",
+                            report, masks=with_masks)
     n = len(frames)
+    if masks:
+        widths = [imaging.silhouette_width(m) for m in masks]
+        picks = imaging.orbit_picks(widths, azimuths)
+        (dest_dir / "orbit.json").write_text(json.dumps({"widths": widths, "picks": picks}, ensure_ascii=False,
+                                                        indent=1), encoding="utf-8")
+    else:
+        picks = {name: {"frame": round(az / 360.0 * n) % n, "azimuth": None, "precision_deg": None,
+                        "source": "supposé (vitesse constante)"} for name, az in azimuths.items()}
     for name, az in azimuths.items():
-        i = round(az / 360.0 * n) % n
+        pick = picks[name]
+        i = pick["frame"]
         path = dest_dir / f"{name}.png"
         frames[i].convert("RGB").save(path)
         meta = {"kind": "orbit", "backend": backend, "seed": seed, "frame": i, "frames": n,
-                "azimuth_assumed": az, "prompt": sections}
+                "azimuth_assumed": az, "azimuth_estimated": pick["azimuth"], "azimuth_source": pick["source"],
+                "precision_deg": pick["precision_deg"], "prompt": sections}
         _save_meta(path, meta)
         out[name] = Still(path, seed, backend, meta)
     return out
 
 
 def _frames(kind: str, text: str, refs: list[Path], size: tuple[int, int], seed: int, frames: int,
-            workdir: Path, report) -> list:
+            workdir: Path, report, masks: bool = False):
+    """Les frames rendues ; avec `masks`, rend aussi leurs masques
+    BiRefNet, calculés dans le même workflow : (frames, masques)."""
     backend = config.backend("h3")
     if backend == "comfyui":
-        return _frames_comfyui(kind, text, refs, size, seed, frames, workdir, report)
-    if backend == "python":
+        images, mask_images = _frames_comfyui(kind, text, refs, size, seed, frames, workdir, report, masks)
+    elif backend == "python":
         from . import h3_python
 
-        return h3_python.frames(text=text, refs=refs, size=size, seed=seed, frames=frames, report=report)
-    raise ValueError(f"moteur H3 inconnu : {backend}")
+        images = h3_python.frames(text=text, refs=refs, size=size, seed=seed, frames=frames, report=report)
+        mask_images = []
+    else:
+        raise ValueError(f"moteur H3 inconnu : {backend}")
+    return (images, mask_images) if masks else images
 
 
-def _frames_comfyui(kind, text, refs, size, seed, frames, workdir, report) -> list:
+def _frames_comfyui(kind, text, refs, size, seed, frames, workdir, report, masks: bool = False):
     from .comfy import Comfy, fill, load_template
 
     comfy = Comfy()
@@ -141,11 +163,27 @@ def _frames_comfyui(kind, text, refs, size, seed, frames, workdir, report) -> li
     names = [comfy.upload(Path(r)) for r in refs]
     wf = fill(template, {"prompt": text, "seed": seed, "width": size[0], "height": size[1], "frames": frames},
               names)
-    paths = comfy.run(wf, workdir, report=report, prefix=kind)
+    prefixes = {"OUT": kind}
+    if masks:
+        # BiRefNet sur les frames décodées, avant toute recompression.
+        src = next(n for n in wf.values() if n.get("_meta", {}).get("title") == "OUT")["inputs"]["images"]
+        wf.update({
+            "9001": {"class_type": "LoadBackgroundRemovalModel",
+                     "inputs": {"bg_removal_name": config.setting("birefnet", "birefnet.safetensors")}},
+            "9002": {"class_type": "RemoveBackground", "inputs": {"bg_removal_model": ["9001", 0], "image": src}},
+            "9003": {"class_type": "MaskToImage", "inputs": {"mask": ["9002", 0]}},
+            "9004": {"class_type": "SaveImage", "_meta": {"title": "OUT MASK"},
+                     "inputs": {"images": ["9003", 0], "filename_prefix": "usine/mask"}},
+        })
+        prefixes["OUT MASK"] = f"{kind}_mask"
+    got = comfy.run_titled(wf, workdir, report=report, prefixes=prefixes)
     images = []
-    for p in paths:
+    for p in got["OUT"]:
         # Une sortie animée ou vidéo se déplie en frames.
         images.extend(imaging.frames_of(p))
     if not images:
         raise RuntimeError("H3 n'a rendu aucune frame")
-    return images
+    mask_images = [imaging.load(p).convert("L") for p in got.get("OUT MASK", [])]
+    if masks and len(mask_images) != len(images):
+        raise RuntimeError(f"{len(images)} frames mais {len(mask_images)} masques")
+    return images, mask_images

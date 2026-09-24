@@ -33,16 +33,23 @@ LICENSE_NOTE = {
 
 
 def generate(engine: str, *, views: dict[str, Path], out_dir: Path, seed: int, style: str = "photoreal",
-             single_view: Path | None = None, texture: bool = True, report=lambda p, m: None) -> dict:
+             single_view: Path | None = None, texture: bool = True, height_m: float = 1.75,
+             report=lambda p, m: None) -> dict:
     if engine not in ENGINES:
         raise ValueError(f"moteur 3D inconnu : {engine} (possibles : {', '.join(ENGINES)})")
     backend = config.backend(ENGINES[engine])
     out_dir.mkdir(parents=True, exist_ok=True)
     glb_path = out_dir / "model.glb"
+    extra = {}
 
     if backend == "stub":
         report(0.3, f"factice · {engine}")
         _stub(glb_path, seed=seed + (0 if engine == "trellis2" else 1))
+    elif backend == "comfyui":
+        from . import mesh_comfy
+
+        extra = mesh_comfy.generate(engine, views=views, single_view=single_view, dest=glb_path, seed=seed,
+                                    texture=texture, height_m=height_m, report=report)
     elif engine == "trellis2":
         from . import mesh_trellis
 
@@ -57,8 +64,8 @@ def generate(engine: str, *, views: dict[str, Path], out_dir: Path, seed: int, s
     report(0.9, "canaux PBR")
     maps = extract_maps(glb_path, out_dir)
     stats = glb_stats(glb_path)
-    meta = {"engine": engine, "backend": backend, "seed": seed, "style": style,
-            "single_view": bool(single_view), "stats": stats, "maps": sorted(maps)}
+    meta = {"engine": engine, "backend": backend, "seed": seed, "style": style, "height_m": height_m,
+            "single_view": bool(single_view), "stats": stats, "maps": sorted(maps), **extra}
     (out_dir / "mesh.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"glb": glb_path, "maps": maps, "stats": stats, "backend": backend}
 

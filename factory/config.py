@@ -25,9 +25,9 @@ LOCAL_CONFIG = REPO / "factory.local.json"
 # Une capacité = un modèle. `prep` et `bake` n'en chargent pas de gros.
 CAPABILITIES = {
     "h3":        ("stub", "comfyui", "python"),
-    "prep":      ("builtin", "rembg"),
+    "prep":      ("comfyui", "builtin", "rembg"),
     "delight":   ("off", "hunyuan"),
-    "trellis":   ("stub", "python"),
+    "trellis":   ("stub", "comfyui", "python"),
     "hunyuan3d": ("stub", "python"),
     "unirig":    ("stub", "python"),
     "kimodo":    ("stub", "python"),
@@ -35,9 +35,11 @@ CAPABILITIES = {
 }
 
 # H3 tourne déjà dans ComfyUI sur la machine (confirmé par Cal) : c'est
-# le moteur par défaut. Les autres capacités restent factices tant que
-# `./usine doctor` n'a pas trouvé leur modèle.
-DEFAULTS = {"h3": "comfyui", "prep": "builtin", "delight": "off", "trellis": "stub",
+# le moteur par défaut. Le détourage aussi passe par ComfyUI (BiRefNet) :
+# le détourage intégré ne tient pas les fonds de studio que rend H3,
+# dégradé et ombre du sujet compris. Les autres capacités restent
+# factices tant que `./usine doctor` n'a pas trouvé leur modèle.
+DEFAULTS = {"h3": "comfyui", "prep": "comfyui", "delight": "off", "trellis": "stub",
             "hunyuan3d": "stub", "unirig": "stub", "kimodo": "stub", "sam3dbody": "stub"}
 
 _override: dict[str, str] = {}
@@ -82,7 +84,14 @@ def projects_root() -> Path:
     return Path(setting("projects", str(REPO / "projects"))).expanduser()
 
 
-def comfyui_url() -> str:
+def comfyui_url(capability: str | None = None) -> str:
+    """Le ComfyUI d'une capacité. `comfyui_url_<capacité>` (par exemple
+    `comfyui_url_trellis`, ou FACTORY_COMFYUI_URL_TRELLIS) l'envoie sur
+    une autre machine que H3 ; sinon `comfyui_url` vaut pour tout."""
+    if capability:
+        own = setting(f"comfyui_url_{capability}")
+        if own:
+            return own.rstrip("/")
     return setting("comfyui_url", "http://127.0.0.1:8188").rstrip("/")
 
 

@@ -202,7 +202,10 @@ def views(p: Project, costume: str | None, *, method: str = "per_view", names: l
         stills = h3.orbit(sections=sections, refs=refs, dest_dir=folder, seed=s, azimuths=azimuths,
                           report=report, identity_seed=identity_seed(p))
         for n, st in stills.items():
-            v["raw"][n] = {"file": p.rel(st.path), "azimuth": azimuths[n], "azimuth_source": "supposé (orbite)",
+            v["raw"][n] = {"file": p.rel(st.path), "azimuth": azimuths[n],
+                           "azimuth_source": f"orbite, {st.meta.get('azimuth_source', 'supposé')}",
+                           "azimuth_estimated": st.meta.get("azimuth_estimated"),
+                           "precision_deg": st.meta.get("precision_deg"), "frame": st.meta.get("frame"),
                            "seed": s, "backend": st.backend, "at": now()}
     else:
         for n in names:
@@ -245,7 +248,7 @@ def prep(p: Project, costume: str | None, *, delight: bool | None = None, size: 
             from . import delight as delight_mod
 
             img = delight_mod.run(img)
-        images[n] = imaging.matte(img, engine)
+        images[n] = imaging.matte(img, engine, workdir=p.dir(f"costumes/{key}/views/.matte"))
 
     out, rep = imaging.normalize_views(images, size=size, margin=margin)
     folder = p.dir(f"costumes/{key}/views/prepared")
@@ -284,13 +287,16 @@ def check(p: Project, costume: str | None, *, angles: dict[str, float] | None = 
             value, source = angles[n], "fourni"
         elif raw.get("azimuth_measured") is not None:
             value, source = raw["azimuth_measured"], "mesuré"
+        elif raw.get("azimuth_estimated") is not None:
+            value, source = raw["azimuth_estimated"], f"estimé : {raw.get('azimuth_source', '?')}"
         elif n in v["raw"]:
             value, source = raw["azimuth"], raw.get("azimuth_source", "demandé")
         else:
             errors[n] = "vue absente"
             continue
         delta = angular_error(value, target)
-        table[n] = {"target": target, "value": value, "error": round(delta, 2), "source": source}
+        table[n] = {"target": target, "value": value, "error": round(delta, 2), "source": source,
+                    "precision_deg": raw.get("precision_deg")}
         if abs(delta) > TOLERANCE_DEG:
             errors[n] = f"écart de {abs(delta):.1f}° — au-delà de la tolérance de {TOLERANCE_DEG:g}°"
     spread = v.get("prep", {}).get("height_spread_before", 0.0)
@@ -303,6 +309,20 @@ def check(p: Project, costume: str | None, *, angles: dict[str, float] | None = 
 
 
 # ── 3D ─────────────────────────────────────────────────────────────
+
+def height_m(sheet: dict, default: float = 1.75) -> float:
+    """La taille du personnage, lue dans la fiche : « 172 cm », « 1,72 m »,
+    « 5'8" » ou un nombre nu (en centimètres au-delà de 3)."""
+    import re
+
+    text = str(sheet.get("height") or "").lower().replace(",", ".")
+    if m := re.search(r"(\d+)\s*'\s*(\d+)?", text):
+        return round((int(m.group(1)) * 12 + int(m.group(2) or 0)) * 0.0254, 3)
+    if m := re.search(r"\d+(\.\d+)?", text):
+        v = float(m.group(0))
+        return v / 100.0 if (v > 3.0 or "cm" in text) else v
+    return default
+
 
 def mesh(p: Project, costume: str | None, *, engine: str | None = None, single_view: bool = False,
          seed: int | None = None, texture: bool = True, report=None) -> dict:
@@ -337,7 +357,7 @@ def mesh(p: Project, costume: str | None, *, engine: str | None = None, single_v
     out_dir = p.dir(f"costumes/{key}/mesh/v{version:03d}")
     views = {n: p.path(v["prepared"][n]["file"]) for n in ORTHO if n in v["prepared"]}
     res = mesh_mod.generate(engine, views=views, out_dir=out_dir, seed=_seed(seed), style=p.data["style"],
-                            single_view=single, texture=texture, report=report)
+                            single_view=single, texture=texture, height_m=height_m(p.sheet), report=report)
     entry = {"version": version, "engine": engine, "backend": res["backend"], "dir": p.rel(out_dir),
              "glb": p.rel(res["glb"]), "maps": {k: p.rel(path) for k, path in res["maps"].items()},
              "stats": res["stats"], "single_view": single_view,

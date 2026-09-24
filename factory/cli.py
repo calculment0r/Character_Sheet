@@ -137,10 +137,11 @@ def cmd_controle(args) -> None:
     res = chain.check(p, args.costume, angles=_angles(args.angle))
     for n, row in res["angles"].items():
         flag = "ok " if abs(row["error"]) <= res["tolerance"] else "NON"
-        print(f"  {flag} {n:6s} cible {row['target']:5.1f}°  relevé {row['value']:6.1f}°  "
+        prec = f" ±{row['precision_deg']:g}°" if row.get("precision_deg") is not None else ""
+        print(f"  {flag} {n:6s} cible {row['target']:5.1f}°  relevé {row['value']:6.1f}°{prec}  "
               f"écart {row['error']:+5.1f}°  ({row['source']})")
     if not res["measured"]:
-        print("  note : angles déclarés, pas mesurés — aucun estimateur de pose n'a regardé les images")
+        print("  note : aucun estimateur de pose n'a regardé les images — angles déclarés ou tirés de la silhouette")
     if res["ok"]:
         print(f"contrôle passé (±{res['tolerance']:g}°) ; suite : ./usine mesh {p.data['slug']}")
     else:

@@ -148,6 +148,32 @@ def comfy_route(tmp: Path, ident: Path) -> None:
         server.terminate()
 
 
+def orbit_selection() -> None:
+    """Une orbite dont la caméra démarre lentement, comme celle de H3 :
+    la silhouette en A-pose, vue sous l'azimut θ, est large de
+    max(envergure·|cos θ|, largeur du torse sous θ). Le choix sur la
+    largeur doit retrouver les profils, le dos et le 3/4 à quelques
+    degrés près, là où le prorata se trompe de 20°."""
+    from factory import imaging, prompts
+
+    n = 124
+    theta = 360.0 * (np.arange(n) / (n - 1)) ** 1.25
+    r = np.radians(theta)
+    torso = np.sqrt((150 * np.cos(r)) ** 2 + (110 * np.sin(r)) ** 2)
+    widths = np.maximum(372 * np.abs(np.cos(r)), torso).round().astype(int).tolist()
+    picks = imaging.orbit_picks(widths, {k: a for k, (a, _) in prompts.AZIMUTHS.items()})
+    true = {k: float(theta[v["frame"]]) for k, v in picks.items() if not k.startswith("_")}
+    err = {k: abs(chain_err(true[k], prompts.AZIMUTHS[k][0])) for k in true}
+    naive = abs(chain_err(float(theta[round(90 / 360 * n)]), 90.0))
+    check("orbite : frames choisies sur la silhouette, à quelques degrés près",
+          max(err.values()) <= 5.0 and naive > 10.0,
+          f"écarts {', '.join(f'{k} {e:.1f}°' for k, e in err.items())} ; au prorata, le profil serait à {naive:.0f}°")
+
+
+def chain_err(a: float, b: float) -> float:
+    return (a - b + 180.0) % 360.0 - 180.0
+
+
 def native_template() -> None:
     """Le workflow Ref2VA qui tourne sur la machine (nœud natif
     MiniMaxH3ReferenceToVideo, relevé sur DGX1) : prompt branché sur un
@@ -298,6 +324,7 @@ def main() -> int:
 
     comfy_route(tmp, ident)
     native_template()
+    orbit_selection()
 
     failed = [r for r in results if not r[1]]
     print(f"\n{len(results) - len(failed)}/{len(results)} vérifications passées\n")

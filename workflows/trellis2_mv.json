@@ -1,0 +1,921 @@
+{
+ "3": {
+  "inputs": {
+   "seed": "{{seed}}",
+   "steps": 12,
+   "cfg": 7.5,
+   "sampler_name": "euler",
+   "scheduler": "normal",
+   "denoise": 1,
+   "model": [
+    "108",
+    0
+   ],
+   "positive": [
+    "324",
+    0
+   ],
+   "negative": [
+    "324",
+    1
+   ],
+   "latent_image": [
+    "87",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "12": {
+  "inputs": {
+   "seed": "{{seed}}",
+   "steps": 12,
+   "cfg": 1,
+   "sampler_name": "euler",
+   "scheduler": "normal",
+   "denoise": 1,
+   "model": [
+    "319",
+    0
+   ],
+   "positive": [
+    "98",
+    0
+   ],
+   "negative": [
+    "98",
+    1
+   ],
+   "latent_image": [
+    "98",
+    2
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "15": {
+  "inputs": {
+   "clip_name": "dino_v3_L_naf_fp32.safetensors"
+  },
+  "class_type": "CLIPVisionLoader",
+  "_meta": {
+   "title": "Charger CLIP Vision"
+  }
+ },
+ "18": {
+  "inputs": {
+   "seed": "{{seed}}",
+   "steps": 20,
+   "cfg": 7.5,
+   "sampler_name": "euler",
+   "scheduler": "normal",
+   "denoise": 1,
+   "model": [
+    "126",
+    0
+   ],
+   "positive": [
+    "91",
+    0
+   ],
+   "negative": [
+    "91",
+    1
+   ],
+   "latent_image": [
+    "91",
+    2
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "23": {
+  "inputs": {
+   "seed": "{{seed}}",
+   "steps": 12,
+   "cfg": 7.5,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "denoise": 1,
+   "model": [
+    "126",
+    0
+   ],
+   "positive": [
+    "94",
+    0
+   ],
+   "negative": [
+    "94",
+    1
+   ],
+   "latent_image": [
+    "94",
+    2
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "87": {
+  "inputs": {
+   "batch_size": 1
+  },
+  "class_type": "EmptyTrellis2LatentStructure",
+  "_meta": {
+   "title": "EmptyTrellis2LatentStructure"
+  }
+ },
+ "91": {
+  "inputs": {
+   "positive": [
+    "324",
+    0
+   ],
+   "negative": [
+    "324",
+    1
+   ],
+   "voxel": [
+    "119",
+    0
+   ]
+  },
+  "class_type": "Trellis2ShapeStage",
+  "_meta": {
+   "title": "Trellis2ShapeStage"
+  }
+ },
+ "92": {
+  "inputs": {
+   "samples": [
+    "23",
+    0
+   ],
+   "vae": [
+    "117",
+    0
+   ]
+  },
+  "class_type": "VaeDecodeShapeTrellis",
+  "_meta": {
+   "title": "VaeDecodeShapeTrellis"
+  }
+ },
+ "93": {
+  "inputs": {
+   "samples": [
+    "12",
+    0
+   ],
+   "vae": [
+    "118",
+    0
+   ],
+   "shape_subdivides": [
+    "92",
+    1
+   ]
+  },
+  "class_type": "VaeDecodeTextureTrellis",
+  "_meta": {
+   "title": "VaeDecodeTextureTrellis"
+  }
+ },
+ "94": {
+  "inputs": {
+   "target_resolution": "1536",
+   "positive": [
+    "91",
+    0
+   ],
+   "negative": [
+    "91",
+    1
+   ],
+   "shape_latent": [
+    "18",
+    0
+   ],
+   "vae": [
+    "117",
+    0
+   ]
+  },
+  "class_type": "Trellis2UpsampleStage",
+  "_meta": {
+   "title": "Trellis2 Upsample Stage"
+  }
+ },
+ "98": {
+  "inputs": {
+   "positive": [
+    "94",
+    0
+   ],
+   "negative": [
+    "94",
+    1
+   ],
+   "shape_latent": [
+    "23",
+    0
+   ]
+  },
+  "class_type": "Trellis2TextureStage",
+  "_meta": {
+   "title": "Trellis2TextureStage"
+  }
+ },
+ "108": {
+  "inputs": {
+   "shift": 5,
+   "model": [
+    "125",
+    0
+   ]
+  },
+  "class_type": "ModelSamplingSD3",
+  "_meta": {
+   "title": "ModèleÉchantillonnageSD3"
+  }
+ },
+ "117": {
+  "inputs": {
+   "vae_name": "trellis_2_shape_vae_bf16.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Charger VAE"
+  }
+ },
+ "118": {
+  "inputs": {
+   "vae_name": "trellis_2_texture_vae_bf16.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Charger VAE"
+  }
+ },
+ "119": {
+  "inputs": {
+   "resolution": "32",
+   "samples": [
+    "3",
+    0
+   ],
+   "vae": [
+    "117",
+    0
+   ]
+  },
+  "class_type": "VaeDecodeStructureTrellis2",
+  "_meta": {
+   "title": "VaeDecodeStructureTrellis2"
+  }
+ },
+ "125": {
+  "inputs": {
+   "multiplier": 0.7,
+   "model": [
+    "199",
+    0
+   ]
+  },
+  "class_type": "RescaleCFG",
+  "_meta": {
+   "title": "RescaleCFG"
+  }
+ },
+ "126": {
+  "inputs": {
+   "multiplier": 0.5,
+   "model": [
+    "279",
+    0
+   ]
+  },
+  "class_type": "RescaleCFG",
+  "_meta": {
+   "title": "RescaleCFG"
+  }
+ },
+ "147": {
+  "inputs": {
+   "texture_size": [
+    "288",
+    0
+   ],
+   "mesh": [
+    "196",
+    0
+   ],
+   "voxel_colors": [
+    "93",
+    0
+   ],
+   "reference_mesh": [
+    "92",
+    0
+   ]
+  },
+  "class_type": "BakeTextureFromVoxel",
+  "_meta": {
+   "title": "Bake Texture From Voxel"
+  }
+ },
+ "164": {
+  "inputs": {
+   "images": [
+    "147",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Base Color"
+  }
+ },
+ "186": {
+  "inputs": {
+   "target_face_count": 700000,
+   "placement_mode": "midpoint",
+   "mesh": [
+    "241",
+    0
+   ]
+  },
+  "class_type": "DecimateMesh",
+  "_meta": {
+   "title": "Decimate Mesh"
+  }
+ },
+ "192": {
+  "inputs": {
+   "bg_removal_model": [
+    "193",
+    0
+   ],
+   "image": [
+    "401",
+    0
+   ]
+  },
+  "class_type": "RemoveBackground",
+  "_meta": {
+   "title": "Supprimer l’arrière-plan"
+  }
+ },
+ "193": {
+  "inputs": {
+   "bg_removal_name": "birefnet.safetensors"
+  },
+  "class_type": "LoadBackgroundRemovalModel",
+  "_meta": {
+   "title": "Charger le modèle de suppression d’arrière-plan"
+  }
+ },
+ "196": {
+  "inputs": {
+   "segmenter": "pec",
+   "resolution": [
+    "288",
+    0
+   ],
+   "padding": 1,
+   "weld_distance": 0.0002,
+   "mesh": [
+    "238",
+    0
+   ]
+  },
+  "class_type": "UnwrapMesh",
+  "_meta": {
+   "title": "Unwrap Mesh UVs"
+  }
+ },
+ "199": {
+  "inputs": {
+   "cfg": 1,
+   "start_percent": 0.667,
+   "end_percent": 1,
+   "model": [
+    "319",
+    0
+   ]
+  },
+  "class_type": "CFGOverride",
+  "_meta": {
+   "title": "Remplacement CFG"
+  }
+ },
+ "202": {
+  "inputs": {
+   "mesh": [
+    "92",
+    0
+   ]
+  },
+  "class_type": "GetMeshInfo",
+  "_meta": {
+   "title": "Get Mesh Info"
+  }
+ },
+ "207": {
+  "inputs": {
+   "images": [
+    "147",
+    1
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Metallic"
+  }
+ },
+ "208": {
+  "inputs": {
+   "images": [
+    "147",
+    2
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Roughness"
+  }
+ },
+ "210": {
+  "inputs": {
+   "mesh": [
+    "196",
+    0
+   ],
+   "base_color": [
+    "164",
+    0
+   ],
+   "metallic": [
+    "207",
+    0
+   ],
+   "roughness": [
+    "208",
+    0
+   ],
+   "occlusion": [
+    "235",
+    0
+   ],
+   "normal_map": [
+    "226",
+    0
+   ]
+  },
+  "class_type": "ApplyTextureToMesh",
+  "_meta": {
+   "title": "Apply Texture to Mesh"
+  }
+ },
+ "224": {
+  "inputs": {
+   "resolution": 2048,
+   "cage_distance": 0.05,
+   "ignore_backfaces": true,
+   "low_poly": [
+    "196",
+    0
+   ],
+   "high_poly": [
+    "241",
+    0
+   ]
+  },
+  "class_type": "BakeNormalMapFromMesh",
+  "_meta": {
+   "title": "Bake Normal Map from Mesh"
+  }
+ },
+ "226": {
+  "inputs": {
+   "images": [
+    "224",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Normal"
+  }
+ },
+ "233": {
+  "inputs": {
+   "resolution": 1024,
+   "samples": 64,
+   "max_distance": 0.71,
+   "strength": 1,
+   "bias": 0.01,
+   "low_poly": [
+    "196",
+    0
+   ],
+   "high_poly": [
+    "241",
+    0
+   ]
+  },
+  "class_type": "BakeAmbientOcclusion",
+  "_meta": {
+   "title": "Bake Ambient Occlusion"
+  }
+ },
+ "235": {
+  "inputs": {
+   "images": [
+    "233",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Ambiant Occlusion"
+  }
+ },
+ "238": {
+  "inputs": {
+   "crease_angle": 180,
+   "mesh": [
+    "186",
+    0
+   ]
+  },
+  "class_type": "MeshSmoothNormals",
+  "_meta": {
+   "title": "Smooth Mesh Normals"
+  }
+ },
+ "241": {
+  "inputs": {
+   "resolution": 768,
+   "sign_mode": "udf",
+   "sign_mode.qef": false,
+   "sign_mode.drop_inverted_components": false,
+   "sign_mode.drop_enclosed_components": false,
+   "band": 1,
+   "project_back": 0,
+   "fix_poles": false,
+   "smooth_iters": 20,
+   "drop_small_components": 0.01,
+   "precluster_max_verts": 20000000,
+   "mesh": [
+    "202",
+    0
+   ]
+  },
+  "class_type": "RemeshMesh",
+  "_meta": {
+   "title": "Remesh Mesh (Narrow-Band DC)"
+  }
+ },
+ "260": {
+  "inputs": {
+   "crease_angle": 180,
+   "mesh": [
+    "210",
+    0
+   ]
+  },
+  "class_type": "MeshSmoothNormals",
+  "_meta": {
+   "title": "Smooth Mesh Normals"
+  }
+ },
+ "279": {
+  "inputs": {
+   "cfg": 1,
+   "start_percent": 0.769,
+   "end_percent": 1,
+   "model": [
+    "319",
+    0
+   ]
+  },
+  "class_type": "CFGOverride",
+  "_meta": {
+   "title": "Remplacement CFG"
+  }
+ },
+ "288": {
+  "inputs": {
+   "value": 4096
+  },
+  "class_type": "PrimitiveInt",
+  "_meta": {
+   "title": "Texture Resolution"
+  }
+ },
+ "312": {
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "pad_factor": 1.1,
+   "grow_mask": 0,
+   "background": "#000000",
+   "images": [
+    "401",
+    0
+   ],
+   "masks": [
+    "192",
+    0
+   ]
+  },
+  "class_type": "ImageCropToMask",
+  "_meta": {
+   "title": "Crop Image to Mask"
+  }
+ },
+ "319": {
+  "inputs": {
+   "unet_name": "pixal3d_multiview_int8_convrot.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Charger Modèle Diffusion"
+  }
+ },
+ "324": {
+  "inputs": {
+   "fov": 20,
+   "clip_vision_model": [
+    "15",
+    0
+   ],
+   "front": [
+    "340",
+    0
+   ],
+   "left": [
+    "344",
+    0
+   ],
+   "back": [
+    "343",
+    0
+   ],
+   "right": [
+    "346",
+    0
+   ]
+  },
+  "class_type": "Pixal3DMultiViewConditioning",
+  "_meta": {
+   "title": "Pixal3D Multi-View Conditioning"
+  }
+ },
+ "340": {
+  "inputs": {
+   "filename_prefix": "front_view",
+   "format": "png",
+   "format.bit_depth": "8-bit",
+   "format.input_color_space": "sRGB",
+   "images": [
+    "312",
+    0
+   ]
+  },
+  "class_type": "SaveImageAdvanced",
+  "_meta": {
+   "title": "Enregistrer l’image (Avancé)"
+  }
+ },
+ "343": {
+  "inputs": {
+   "filename_prefix": "back_view",
+   "format": "png",
+   "format.bit_depth": "8-bit",
+   "format.input_color_space": "sRGB",
+   "images": [
+    "350",
+    0
+   ]
+  },
+  "class_type": "SaveImageAdvanced",
+  "_meta": {
+   "title": "Enregistrer l’image (Avancé)"
+  }
+ },
+ "344": {
+  "inputs": {
+   "filename_prefix": "left_view",
+   "format": "png",
+   "format.bit_depth": "8-bit",
+   "format.input_color_space": "sRGB",
+   "images": [
+    "349",
+    0
+   ]
+  },
+  "class_type": "SaveImageAdvanced",
+  "_meta": {
+   "title": "Enregistrer l’image (Avancé)"
+  }
+ },
+ "346": {
+  "inputs": {
+   "filename_prefix": "right_view",
+   "format": "png",
+   "format.bit_depth": "8-bit",
+   "format.input_color_space": "sRGB",
+   "images": [
+    "352",
+    0
+   ]
+  },
+  "class_type": "SaveImageAdvanced",
+  "_meta": {
+   "title": "Enregistrer l’image (Avancé)"
+  }
+ },
+ "348": {
+  "inputs": {
+   "bg_removal_model": [
+    "193",
+    0
+   ],
+   "image": [
+    "402",
+    0
+   ]
+  },
+  "class_type": "RemoveBackground",
+  "_meta": {
+   "title": "Supprimer l’arrière-plan"
+  }
+ },
+ "349": {
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "pad_factor": 1.1,
+   "grow_mask": 0,
+   "background": "#000000",
+   "images": [
+    "402",
+    0
+   ],
+   "masks": [
+    "348",
+    0
+   ]
+  },
+  "class_type": "ImageCropToMask",
+  "_meta": {
+   "title": "Crop Image to Mask"
+  }
+ },
+ "350": {
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "pad_factor": 1.1,
+   "grow_mask": 0,
+   "background": "#000000",
+   "images": [
+    "403",
+    0
+   ],
+   "masks": [
+    "351",
+    0
+   ]
+  },
+  "class_type": "ImageCropToMask",
+  "_meta": {
+   "title": "Crop Image to Mask"
+  }
+ },
+ "351": {
+  "inputs": {
+   "bg_removal_model": [
+    "193",
+    0
+   ],
+   "image": [
+    "403",
+    0
+   ]
+  },
+  "class_type": "RemoveBackground",
+  "_meta": {
+   "title": "Supprimer l’arrière-plan"
+  }
+ },
+ "352": {
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "pad_factor": 1.1,
+   "grow_mask": 0,
+   "background": "#000000",
+   "images": [
+    "404",
+    0
+   ],
+   "masks": [
+    "353",
+    0
+   ]
+  },
+  "class_type": "ImageCropToMask",
+  "_meta": {
+   "title": "Crop Image to Mask"
+  }
+ },
+ "353": {
+  "inputs": {
+   "bg_removal_model": [
+    "193",
+    0
+   ],
+   "image": [
+    "404",
+    0
+   ]
+  },
+  "class_type": "RemoveBackground",
+  "_meta": {
+   "title": "Supprimer l’arrière-plan"
+  }
+ },
+ "401": {
+  "inputs": {
+   "image": "view.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "REF 1"
+  }
+ },
+ "402": {
+  "inputs": {
+   "image": "view.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "REF 2"
+  }
+ },
+ "403": {
+  "inputs": {
+   "image": "view.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "REF 3"
+  }
+ },
+ "404": {
+  "inputs": {
+   "image": "view.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "REF 4"
+  }
+ },
+ "500": {
+  "inputs": {
+   "mesh": [
+    "260",
+    0
+   ],
+   "filename_prefix": "usine/mesh"
+  },
+  "class_type": "SaveGLB",
+  "_meta": {
+   "title": "OUT"
+  }
+ },
+ "_factory": {
+  "adopted_from": "3d_pixal3d_multi_views.json (modèle ComfyUI 0.35), converti par l'interface",
+  "changes": [
+   "planche 4 vues découpée → REF 1 face, REF 2 gauche, REF 3 dos, REF 4 droite",
+   "graines des quatre KSampler → {{seed}}",
+   "aperçus 3D et Save3DAdvanced retirés → SaveGLB « OUT » sur le mesh texturé"
+  ]
+ }
+}

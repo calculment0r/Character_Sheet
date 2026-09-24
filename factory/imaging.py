@@ -123,9 +123,27 @@ def matte_builtin(img: Image.Image) -> Image.Image:
     return out
 
 
-def matte(img: Image.Image, engine: str = "builtin") -> Image.Image:
+def with_mask(img: Image.Image, mask: Image.Image) -> Image.Image:
+    """Pose un masque de détoureur en alpha. On ne garde que la plus
+    grande tache — une ombre portée détachée, une poussière s'en vont —
+    et le contour garde la douceur du masque."""
+    soft = np.asarray(mask.convert("L").resize(img.size, Image.LANCZOS), dtype=np.float32)
+    solid = _clean(soft > 127)
+    inner = _shift_min(solid.astype(np.float32), 1) > 0.5
+    alpha = np.where(inner, 255.0, np.where(solid, np.maximum(soft, 128.0), 0.0))
+    out = img.convert("RGBA")
+    out.putalpha(Image.fromarray(alpha.astype(np.uint8)))
+    return out
+
+
+def matte(img: Image.Image, engine: str = "builtin", *, workdir: Path | None = None) -> Image.Image:
     if img.mode == "RGBA" and np.asarray(img)[..., 3].min() < 250:
         return img  # déjà détouré
+    if engine == "comfyui":
+        from . import comfy
+
+        mask = comfy.remove_background([img], workdir=workdir or Path.cwd() / ".matte")[0]
+        return with_mask(img, mask)
     if engine == "rembg":
         from rembg import new_session, remove  # facultatif, lourd
 
@@ -136,6 +154,71 @@ def matte(img: Image.Image, engine: str = "builtin") -> Image.Image:
             _REMBG = new_session("birefnet-general")
         return remove(img, session=_REMBG)
     return matte_builtin(img)
+
+
+# ── orbite ─────────────────────────────────────────────────────────
+
+def silhouette_width(mask: Image.Image) -> int:
+    a = np.asarray(mask.convert("L")) > 127
+    xs = np.nonzero(a.any(axis=0))[0]
+    return int(xs[-1] - xs[0]) if len(xs) else 0
+
+
+def orbit_picks(widths: list[int], azimuths: dict[str, float]) -> dict[str, dict]:
+    """Choisit les frames d'une orbite sur la largeur de la silhouette.
+
+    La caméra de H3 ne tourne pas à vitesse constante (départ lent,
+    relevé sur la machine) : on ne peut pas prendre les frames au prorata.
+    Mais en A-pose, bras écartés, la largeur est maximale de face et de
+    dos et minimale de profil, avec des creux nets. D'où les repères :
+    la face au départ (le prompt part de face), les deux profils aux deux
+    creux, le dos au sommet entre eux. Le 3/4 se lit sur l'envergure :
+    tant que les bras dominent, largeur ≈ envergure × cos(azimut).
+
+    Le sens de rotation est celui que le prompt demande — vers la gauche
+    du sujet, donc le premier creux est le profil gauche. Il est supposé,
+    pas mesuré : c'est ce que SAM 3D Body viendra vérifier."""
+    w = np.convolve(np.asarray(widths, dtype=np.float64), np.ones(3) / 3, mode="same")
+    w[0], w[-1] = widths[0], widths[-1]
+    n = len(w)
+    first = int(np.argmin(w[: n // 2 + n // 8]))
+    rest = w.copy()
+    rest[: first + n // 6] = np.inf
+    second = int(np.argmin(rest))
+    back = first + int(np.argmax(w[first: second + 1]))
+    front_w = float(w[0])
+    marks = {0.0: 0, 90.0: first, 180.0: back, 270.0: second}
+
+    def plateau(i: int) -> int:
+        """Combien de frames, de part et d'autre, restent à 1 % de la
+        largeur du repère : le repère peut être n'importe où là-dedans."""
+        tol, a, b = 0.01 * w[i], i, i
+        while a > 0 and abs(w[a - 1] - w[i]) <= tol:
+            a -= 1
+        while b < n - 1 and abs(w[b + 1] - w[i]) <= tol:
+            b += 1
+        return max(i - a, b - i)
+
+    picks = {"_marks": {"front": 0, "left": first, "back": back, "right": second, "frames": n}}
+    for name, az in azimuths.items():
+        if az == 0.0:
+            picks[name] = {"frame": 0, "azimuth": 0.0, "precision_deg": None, "source": "départ du plan"}
+        elif az in marks:
+            i = marks[az]
+            # Vitesse locale de la caméra : 90° entre ce repère et ses voisins.
+            around = [marks.get(az - 90.0, 0), marks.get(az + 90.0, n - 1)]
+            speed = max(90.0 / max(1, abs(i - j)) for j in around)
+            picks[name] = {"frame": i, "azimuth": az, "precision_deg": round(max(0.5, plateau(i)) * speed, 1),
+                           "source": "repère de silhouette"}
+        elif 0.0 < az < 90.0:
+            target = front_w * np.cos(np.radians(az))
+            i = int(np.argmin(np.abs(w[: first + 1] - target)))
+            est = float(np.degrees(np.arccos(np.clip(w[i] / front_w, -1.0, 1.0))))
+            picks[name] = {"frame": i, "azimuth": round(est, 1), "precision_deg": round(90.0 / max(1, first), 1),
+                           "source": "envergure (largeur ≈ cos)"}
+        else:
+            raise ValueError(f"azimut {az}° : pas de repère sur l'orbite pour le choisir")
+    return picks
 
 
 # ── mesure et normalisation ────────────────────────────────────────

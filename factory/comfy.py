@@ -122,15 +122,16 @@ class Comfy:
             time.sleep(poll)
         raise ComfyError(f"ComfyUI n'a pas rendu le travail en {timeout:.0f} s")
 
-    def outputs(self, entry: dict, workflow: dict) -> list[dict]:
-        """Les fichiers produits, dans l'ordre des nœuds OUT."""
-        wanted = [nid for nid, node in workflow.items() if node.get("_meta", {}).get("title") == "OUT"]
+    def outputs(self, entry: dict, workflow: dict, title: str = "OUT") -> list[dict]:
+        """Les fichiers produits, dans l'ordre des nœuds portant ce titre
+        (`OUT` par défaut ; sans nœud `OUT`, toutes les sorties)."""
+        wanted = [nid for nid, node in workflow.items() if node.get("_meta", {}).get("title") == title]
         produced = entry.get("outputs", {})
-        order = wanted or list(produced)
+        order = wanted or (list(produced) if title == "OUT" else [])
         files = []
         for nid in order:
             out = produced.get(nid, {})
-            for key in ("images", "gifs", "videos", "animated"):
+            for key in ("images", "gifs", "videos", "animated", "3d"):
                 for item in out.get(key, []) or []:
                     if isinstance(item, dict) and item.get("filename"):
                         files.append(item)
@@ -144,18 +145,65 @@ class Comfy:
         return dest
 
     def run(self, workflow: dict, dest_dir: Path, *, report=None, prefix: str = "out") -> list[Path]:
+        return self.run_titled(workflow, dest_dir, report=report, prefixes={"OUT": prefix})["OUT"]
+
+    def run_titled(self, workflow: dict, dest_dir: Path, *, report=None,
+                   prefixes: dict[str, str]) -> dict[str, list[Path]]:
+        """Lance un workflow et rapatrie les sorties de chaque titre
+        demandé, `{"OUT": "orbit", "OUT MASK": "mask"}` par exemple."""
         pid = self.queue(workflow)
         if report:
             report(0.02, f"envoyé à ComfyUI ({pid[:8]})")
         entry = self.wait(pid, report=report)
-        files = self.outputs(entry, workflow)
-        if not files:
-            raise ComfyError("ComfyUI a fini sans rien produire — le workflow a-t-il un nœud de sortie ?")
-        paths = []
-        for i, item in enumerate(files):
-            suffix = Path(item["filename"]).suffix or ".png"
-            paths.append(self.download(item, dest_dir / f"{prefix}_{i:03d}{suffix}"))
-        return paths
+        result = {}
+        for title, prefix in prefixes.items():
+            files = self.outputs(entry, workflow, title)
+            if not files:
+                raise ComfyError(f"ComfyUI a fini sans rien produire pour {title} — le workflow a-t-il ce nœud ?")
+            result[title] = [self.download(item, dest_dir / f"{prefix}_{i:03d}{Path(item['filename']).suffix or '.png'}")
+                             for i, item in enumerate(files)]
+        return result
+
+
+# ── détourage ──────────────────────────────────────────────────────
+
+def remove_background(images: list, *, workdir: Path, batch: int = 16, report=None) -> list:
+    """Les masques de BiRefNet (nœuds natifs LoadBackgroundRemovalModel
+    et RemoveBackground), une image en niveaux de gris par image, dans
+    l'ordre. Le workflow est construit ici : il n'y a rien à adopter.
+
+    La polarité du masque n'est pas documentée ; on la lit sur l'image :
+    le pourtour est du fond, il doit sortir noir."""
+    import numpy as np
+    from PIL import Image
+
+    comfy = Comfy()
+    model = config.setting("birefnet", "birefnet.safetensors")
+    workdir.mkdir(parents=True, exist_ok=True)
+    masks = []
+    for start in range(0, len(images), batch):
+        chunk = images[start:start + batch]
+        wf = {"1": {"class_type": "LoadBackgroundRemovalModel", "inputs": {"bg_removal_name": model}}}
+        for k, img in enumerate(chunk):
+            src = workdir / f"matte_{uuid.uuid4().hex[:10]}.png"
+            img.convert("RGB").save(src)
+            name = comfy.upload(src)
+            src.unlink()
+            base = 10 + 4 * k
+            wf[str(base)] = {"class_type": "LoadImage", "inputs": {"image": name}}
+            wf[str(base + 1)] = {"class_type": "RemoveBackground",
+                                 "inputs": {"bg_removal_model": ["1", 0], "image": [str(base), 0]}}
+            wf[str(base + 2)] = {"class_type": "MaskToImage", "inputs": {"mask": [str(base + 1), 0]}}
+            wf[str(base + 3)] = {"class_type": "SaveImage", "_meta": {"title": "OUT"},
+                                 "inputs": {"images": [str(base + 2), 0], "filename_prefix": "usine/matte"}}
+        if report:
+            report(start / len(images), f"détourage BiRefNet {start + len(chunk)}/{len(images)}")
+        for path in comfy.run(wf, workdir, prefix=f"mask{start:04d}"):
+            m = np.asarray(Image.open(path).convert("L"))
+            path.unlink()
+            rim = np.concatenate([m[0], m[-1], m[:, 0], m[:, -1]])
+            masks.append(Image.fromarray(255 - m if rim.mean() > 127 else m))
+    return masks
 
 
 # ── gabarits ───────────────────────────────────────────────────────
