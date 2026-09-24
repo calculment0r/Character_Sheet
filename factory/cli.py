@@ -116,7 +116,7 @@ def cmd_planche_ok(args) -> None:
 
 def cmd_vues(args) -> None:
     p = _p(args)
-    raw = chain.views(p, args.costume, method="orbit" if args.orbite else "per_view",
+    raw = chain.views(p, args.costume, method="orbit" if args.orbite else "per_view", names=args.vue,
                       threequarter=not args.sans_34, seed=args.graine)
     key, _ = p.costume(args.costume)
     print(f"{len(raw)} vue(s) ; contact : {p.path(f'costumes/{key}/views/contact_raw.png')}")
@@ -262,6 +262,8 @@ def build() -> argparse.ArgumentParser:
     perso(sp), costume(sp)
     sp.add_argument("--orbite", action="store_true", help="un plan en orbite redécoupé, au lieu d'une génération par vue")
     sp.add_argument("--sans-34", action="store_true", help="ne pas générer la vue 3/4")
+    sp.add_argument("--vue", action="append", choices=["front", "left", "back", "right", "threequarter"],
+                    help="ne refaire que cette vue (répétable) ; les autres restent")
     sp.add_argument("--graine", type=int)
 
     sp = cmd("prep", cmd_prep, "détourage, delight, recentrage, marges égales (§6.2, §6.3)")
