@@ -244,3 +244,31 @@ def load(path: str | Path) -> Image.Image:
     img = Image.open(path)
     img.load()
     return img
+
+
+VIDEO = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
+
+
+def frames_of(path: str | Path) -> list[Image.Image]:
+    """Toutes les frames d'une sortie : une image, une image animée
+    (WEBP, GIF, PNG animé) ou une vidéo — celle-ci par ffmpeg, que
+    ComfyUI a presque toujours à côté de lui."""
+    path = Path(path)
+    if path.suffix.lower() in VIDEO:
+        import shutil
+        import subprocess
+        import tempfile
+
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            raise RuntimeError(f"{path.name} est une vidéo et ffmpeg est introuvable — installe-le, ou ajoute "
+                               f"un SaveImage au workflow")
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run([ffmpeg, "-loglevel", "error", "-i", str(path), f"{tmp}/f_%05d.png"], check=True)
+            return [load(p).convert("RGB") for p in sorted(Path(tmp).glob("f_*.png"))]
+    img = Image.open(path)
+    out = []
+    for i in range(getattr(img, "n_frames", 1)):
+        img.seek(i)
+        out.append(img.convert("RGB").copy())
+    return out

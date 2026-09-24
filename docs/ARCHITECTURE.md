@@ -1,143 +1,98 @@
 # Character Factory — où en est la chaîne
 
-Document d'état. Pour reprendre le travail sur une machine qui voit les
-DGX, lire d'abord [`HANDOFF.md`](./HANDOFF.md). Le cadrage complet est dans
-[`BRIEF_CHARACTER_FACTORY.md`](./BRIEF_CHARACTER_FACTORY.md) ; ce
-fichier-ci dit seulement ce qui existe, ce qui n'existe pas, et où c'est.
+Document d'état. Le mode d'emploi est dans [`LOCAL.md`](./LOCAL.md), la
+reprise du travail dans [`HANDOFF.md`](./HANDOFF.md), le cadrage complet
+dans [`BRIEF_CHARACTER_FACTORY.md`](./BRIEF_CHARACTER_FACTORY.md).
 
 ## Le découpage
 
+Tout tourne sur la machine, sans serveur — décision de Cal : pas d'API
+pour l'instant.
+
 ```
-GitHub Pages (statique)                 ← index.html, aucun secret
-        │  HTTPS
-        ▼
-Cloudflare Tunnel                       ← pas d'ouverture de port sur le LAN
-        │
-        ▼
-API FastAPI (api/)                      ← jeton, CORS, SSE
-        │
-        ├── file de travaux             Redis + RQ, ou mémoire en mise au point
-        ├── stockage                    MinIO présigné, ou disque local
-        ├── relais /v1                  vers le serveur d'inférence local
-        └── workers                     un process par capacité, modèle résident
-```
-
-## Ce qui tourne aujourd'hui
-
-**Le front.** `index.html` plus `assets/` et `js/`. Deux vues.
-
-*La console* est la page d'accueil, reprise de la home du banc NL :
-carte héro, carte de compte, puis la pile des huit étages en dalles
-pleines. La famille corail marque le lot en cours, la verte marque
-l'aval. On entre dans un étage en cliquant sa dalle, on revient par le
-logotype ou par le bouton CONSOLE.
-
-*Le banc* est la vue de travail, en trois colonnes : le rack des huit
-étages à gauche, l'étage actif au centre, la fiche d'identité à droite.
-L'étage Identité est complet et fonctionne : la conversation remplit les
-vingt-et-un champs par appels d'outils, les widgets évitent d'avoir à
-taper, et deux fabricants de prompt sortent soit le gabarit historique,
-soit le format Ref2VA en six sections.
-
-**Le moteur de texte.** `js/llm.js` ne parle qu'un dialecte en interne
-et traduit vers la cible : OpenAI pour le DGX, natif pour Anthropic. Le
-repli ne se déclenche que sur une panne de transport — réseau coupé,
-tunnel fermé, 5xx, 429. Un 4xx qui refuse la requête elle-même ne
-bascule pas, parce que la même requête échouerait pareil en face.
-
-**L'API.** Les routes du §1.3 existent, avec jeton, CORS, SSE et
-stockage. Les étages GPU sont branchés sur le worker factice : la file,
-la progression et le rangement sont réels, seul le calcul est simulé.
-
-**Trois règles du brief sont tenues par le code, pas par la
-documentation.** Le visage ne se verrouille qu'une fois, un second appel
-rend 409. Le rig refuse un bind en T-pose, parce que la conversion vers
-la T-pose SOMA est un delta et pas un bind. Le contrôle d'alignement
-refuse au-delà de ±5°, en tenant compte du bouclage à 360°.
-
-## Ce qui n'existe pas encore
-
-| Étage | Manque |
-|---|---|
-| Visage, Costumes | un worker image résident |
-| Planche, Vues | un worker H3 résident |
-| Mesh 3D | TRELLIS 2 et Hunyuan3D 2.1 derrière l'interface `MeshEngine` |
-| Rig | UniRig, le mapping vers `SOMALayer.public_joint_names`, le delta de bind |
-| Animation | Kimodo, SAM 3D Body, la timeline et le mixage par masque de joints |
-
-Hors étages : la persistance (l'entrepôt de l'API est un dictionnaire en
-mémoire), le visualiseur three.js du §9, et la couche mains/visage du §13.
-
-## Faire tourner
-
-```sh
-./check.sh     # ce qui est déjà en place, et quoi lancer
-./start.sh     # la Factory, page et API sur un seul port
+./usine <commande>                     ← une commande par étage
+    │
+    ├── factory/                       la chaîne, en Python
+    │     project.py                   un dossier par personnage, un manifeste, les règles
+    │     chain.py                     visage → costumes → planche → vues → prep → contrôle → mesh
+    │     cli_motion.py                rig → prises → timeline → cuisson
+    │     h3.py · comfy.py             H3 par ComfyUI, qui le garde résident
+    │     mesh.py                      TRELLIS 2 et Hunyuan3D 2.1, une interface
+    │     rig.py · skeleton.py         SOMA 77, bind en A-pose, poses de contrôle
+    │     motion.py · mix.py · bake.py Kimodo, SAM 3D Body, mixage, NPZ + glTF
+    │     gltf.py                      lecture et écriture GLB, numpy seul
+    │
+    ├── ComfyUI (déjà sur la machine)  H3 résident ; workflows/ au format API
+    ├── projects/<perso>/              tout ce que la chaîne produit
+    └── viewer.html                    le viewer 3D, une page locale
 ```
 
-L'API sert aussi la page, donc un seul port : `http://localhost:8000`.
-Page et API partagent l'origine, ce qui supprime la question du CORS et
-dispense de coller quoi que ce soit dans l'écran MOTEUR — le front
-reconnaît sa propre origine comme moteur et adopte le modèle que l'API
-déclare servir.
+La page (`index.html`) reste l'outil de l'étage Identité : une
+conversation avec le modèle de texte local qui remplit la fiche, puis
+un export JSON que `./usine nouveau --identite` reprend.
 
-Pour ouvrir depuis l'extérieur, un seul tunnel suffit : voir
-[`CLOUDFLARE.md`](./CLOUDFLARE.md).
+`api/` — FastAPI, file RQ, MinIO, tunnel — reste dans le dépôt pour le
+jour où la page pilotera la chaîne à distance. Rien de la chaîne locale
+n'en dépend.
 
-Les deux morceaux peuvent aussi tourner séparément — `python3 -m
-http.server` d'un côté, `uvicorn` de l'autre — mais il faut alors régler
-`FACTORY_CORS_ORIGINS` et coller l'adresse de l'API dans MOTEUR.
+## Ce qui tourne
 
-## Les arbitrages
+**Les huit étages**, du portrait neutre à la timeline cuite, avec les
+refus que le brief impose : visage verrouillé une fois, pas d'étage
+sans le précédent, contrôle ±5° avant le mesh, pas de bind en T-pose.
 
-Le §14 du brief en liste cinq. Deux sont tranchés :
+**H3, à 768 px, par ComfyUI** — l'arbitrage du §14 est tranché : local.
+La ruse des cinq frames du §5.2 est appliquée partout : on demande le
+minimum, on garde la plus nette. Les prompts sont au format Ref2VA en
+six sections, sans négatif, chaque référence avec un rôle nommé. Le
+workflow est celui qui marche déjà dans ComfyUI, adopté par
+`./usine gabarit`.
 
-- **Thème.** Sombre NL, tel quel. Le §9 du brief demandait du clair avec
-  un accent orange acide ; l'artefact de référence fait foi. Tout est
-  dans `assets/tokens.css`, un passage en clair reste un changement d'un
-  seul fichier.
-- **Moteur de texte.** DGX local d'abord, repli Anthropic. Réglable dans
-  l'écran MOTEUR, y compris en DGX seul pour un fonctionnement souverain.
+**La passe de préparation des vues** (§6.2, §6.3) : détourage par écart
+à la couleur du fond, ou rembg ; recentrage ; même échelle, réglée sur la
+hauteur de la silhouette, le seul invariant d'un angle à l'autre ; même
+marge ; pieds sur la même ligne. Le rapport chiffré sort dans
+`prep.json`.
 
-Les trois autres restent ouverts : H3 local 768 px contre API 2K, vues
-séparées contre orbite continu découpé, et la conversion de pose
-MHR → SOMA. Le disque sur le visage est implémenté en option
-(`mask_face_in_fullbody`) et attend son A/B, comme le brief le demande.
+**Le rig SOMA** dans la convention de Kimodo, relevée dans son code :
+rotations locales relatives à la pose neutre, repères alignés sur le
+monde. La T-pose du personnage est reconstruite à partir de ses
+articulations en A-pose et des directions d'os SOMA ; le delta de bind
+en sort. Cinq poses de contrôle sont écrites dans le GLB.
 
-## Une note sur la typographie
+**Le mixage** par masque d'articulations — corps, main gauche, main
+droite, visage — en slerp, avec lissage par couche, racine continue
+d'une prise à l'autre et mise à l'échelle des hanches du personnage. Une
+bibliothèque de mains couvre les plans sans source de doigts.
 
-Quatre fontes, deux servies par Google Fonts et deux posées dans
-`assets/fonts/` :
+**Le viewer** du §9 : éclairages, canaux PBR, grille et silhouette, A/B
+en côte à côte ou en volet, clips et poses de contrôle, timeline à la
+molette.
 
-| Fonte | Rôle | Source |
+## Ce qui attend la machine
+
+| Capacité | Moteur réel | État |
 |---|---|---|
-| Chakra Petch | interface, texte courant | Google Fonts |
-| Azeret Mono | étiquettes, références, valeurs | Google Fonts |
-| Venus Rising | affichage — noms d'étages, rangées de rack, étiquettes de voie | `assets/fonts/` |
-| Norelli Black | logotype, et lui seul | `assets/fonts/` |
+| H3 | ComfyUI (déjà en place) | client écrit et testé contre un faux ComfyUI ; à relancer sur le vrai |
+| Mesh 3D | TRELLIS 2, Hunyuan3D 2.1 | interface écrite, adaptateurs à écrire |
+| Delight | hunyuan3d-delight-v2-0 | branchement prévu dans `prep` |
+| Rig | UniRig + mapping vers SOMA | squelette, bind et écriture glTF prêts ; prédiction à brancher |
+| Animation | Kimodo, SAM 3D Body | format de prise et mixage prêts ; modèles à brancher |
 
-Norelli remplace la « Four Zero » du banc NL d'origine. Son jeu ne
-compte que **54 signes : A-Z, a-z et l'espace. Pas un chiffre, pas un
-accent, pas un signe de ponctuation** — pas même la virgule ni le point.
-Toute chaîne qu'on lui confie doit donc être écrite pour elle. Deux le
-sont, et ce sont les deux seules : le logotype, et le titre de la
-console, « DU PROMPT AU PERSONNAGE », écrit sans virgule et sans accent
-exprès. Partout ailleurs le navigateur basculerait de police en plein
-mot sur le caractère manquant, et ça se verrait.
+Tant qu'une capacité n'a pas son moteur, elle tourne en factice et le
+dit : étiquette FACTICE sur les images, « (factice) » dans `./usine etat`.
 
-Venus Rising porte tout le reste de l'affichage : elle couvre les
-accents, les chiffres et 688 glyphes.
+## Les arbitrages du §14
 
-Les deux fichiers `.otf` sont des fontes commerciales Typodermic. Elles
-partent en clair dans un dépôt public, donc servies en téléchargement à
-qui visite le site : à vérifier contre la licence d'exploitation avant
-que la page soit diffusée largement.
-
-## Une note sur GitHub Pages
-
-Le site publié sert actuellement la branche
-`claude/interactive-character-generator-5IwJo`, pas `main` — qui ne
-contenait que deux fichiers. Tant que le réglage Pages pointe sur cette
-branche, cette refonte ne sera pas visible en ligne. Il faut soit
-fusionner vers la branche servie, soit basculer le réglage sur `main`
-une fois la fusion faite.
+- **H3** : local, 768 px. Tranché par Cal.
+- **Vues orthogonales** : une génération par vue par défaut, pour un
+  contrôle d'angle exact ; l'orbite redécoupée est disponible
+  (`--orbite`) pour le banc que le brief demande.
+- **Moteur 3D par défaut** : TRELLIS 2, MIT. Hunyuan3D 2.1 reste au
+  choix, avec l'avertissement de licence territoriale à chaque appel.
+- **Disque sur le visage** : `./usine planche --ab` sort les deux
+  planches de même graine ; la décision se prend sur pièces.
+- **Conversion MHR → SOMA** : ouverte, elle se tranche avec le
+  branchement de SAM 3D Body.
+- **Thème** : sombre NL, tel quel. **Fontes** : outil interne, elles
+  restent.

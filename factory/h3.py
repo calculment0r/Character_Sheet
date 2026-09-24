@@ -141,12 +141,8 @@ def _frames_comfyui(kind, text, refs, size, seed, frames, workdir, report) -> li
     paths = comfy.run(wf, workdir, report=report, prefix=kind)
     images = []
     for p in paths:
-        img = imaging.load(p)
-        # Une sortie vidéo animée (webp, gif) se déplie en frames.
-        n = getattr(img, "n_frames", 1)
-        for i in range(n):
-            img.seek(i)
-            images.append(img.convert("RGB").copy())
+        # Une sortie animée ou vidéo se déplie en frames.
+        images.extend(imaging.frames_of(p))
     if not images:
         raise RuntimeError("H3 n'a rendu aucune frame")
     return images

@@ -102,9 +102,9 @@ def adopt(workflow: dict) -> tuple[dict, list[str], list[str]]:
     for nid in outs:
         wf[nid].setdefault("_meta", {})["title"] = "OUT"
         changes.append(f"nœud {nid} ({wf[nid]['class_type']}) → OUT")
-    if not stills:
-        warnings.append("pas de SaveImage : ajoute-en un sur les frames décodées — la chaîne lit des PNG, "
-                        "ou à défaut un WEBP/GIF animé, pas un MP4")
+    if not stills and anims:
+        warnings.append("la sortie est une vidéo : la chaîne en tire les frames par ffmpeg ; un SaveImage "
+                        "sur les frames décodées évite la recompression")
     if not outs:
         warnings.append("aucun nœud de sortie reconnu")
     return wf, changes, warnings

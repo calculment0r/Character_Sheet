@@ -1,231 +1,127 @@
-# Passation — pour une session locale
+# Passation — pour une session sur la machine
 
-Ce document est écrit pour une session Claude Code lancée **sur le DGX**,
-ou sur une machine qui l'atteint. Il dit où en est le travail, ce qui a
-été vérifié et contre quoi, et ce qui reste entièrement à faire.
+Ce document est écrit pour une session Claude Code lancée **sur le DGX**.
+Il dit où en est le travail, ce qui a été vérifié et contre quoi, et ce
+qui reste à faire, dans l'ordre.
 
-Branche : `claude/dazzling-heisenberg-y3hfst`
+Branche : `claude/epic-wright-y2kbrc`
+Mode d'emploi : [`LOCAL.md`](./LOCAL.md)
 Cadrage complet : [`BRIEF_CHARACTER_FACTORY.md`](./BRIEF_CHARACTER_FACTORY.md)
 État technique : [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 
 ---
 
-## 1. Avertissement sur ce qui a été vérifié
+## 1. Les décisions de Cal
 
-La session qui a écrit ce code tournait dans un conteneur cloud isolé,
-**sans aucun accès aux DGX ni au réseau de Cal**.
-
-Ce qui a été réellement testé, dans ce conteneur :
-
-- le front, dans Chromium, avec les vraies fontes ;
-- la traduction du dialecte Anthropic vers le dialecte OpenAI, contre un
-  **faux serveur de 60 lignes de Python** écrit pour l'occasion ;
-- l'API : soumission d'un travail, progression en SSE, artefact PNG
-  servi, jeton, contrôle d'alignement, verrouillage du visage ;
-- le montage à un seul port, depuis un navigateur vierge.
-
-Ce qui n'a **jamais** été testé :
-
-- un vrai serveur d'inférence ;
-- un vrai DGX ;
-- ComfyUI, qui n'apparaît nulle part dans ce dépôt ;
-- un tunnel Cloudflare ;
-- Redis, RQ, MinIO — le code a un chemin pour eux, jamais exercé ;
-- tout ce qui est en aval de l'étage Identité.
-
-Traiter donc chaque réglage par défaut comme une hypothèse à vérifier,
-pas comme un fait.
+- **Tout en local, pas d'API pour l'instant.** La chaîne est `./usine`,
+  une commande par étage, un dossier par personnage. `api/` reste pour
+  plus tard, sans être étendue.
+- **H3 en local, 768 px** — il tourne déjà, **dans ComfyUI**.
+- **Outil interne** : les fontes commerciales restent dans le dépôt.
+- Thème sombre NL, tel quel.
 
 ---
 
-## 2. À faire en premier, dans cet ordre
+## 2. Ce qui a été vérifié, et contre quoi
+
+La session qui a écrit ce code tournait dans un conteneur cloud, sans
+accès aux DGX. Vérifié dans ce conteneur :
+
+- la chaîne entière, du visage à la timeline cuite, sur les moteurs
+  factices — `tools/chain_check.py`, 29 vérifications ;
+- le client ComfyUI, contre un **faux** ComfyUI (`tools/mock_comfy.py`) :
+  envoi des références, remplissage du gabarit, retrait des nœuds REF
+  inutiles, rapatriement des frames, choix de la plus nette ;
+- `./usine gabarit` sur un export API écrit pour l'occasion ;
+- le rig : le skinning glTF rejoué en numpy, et dans le viewer — les
+  cinq poses de contrôle déforment le mesh comme attendu ;
+- le viewer, dans Chromium, sur les fichiers de la chaîne ;
+- la page, étage Identité, contre un faux modèle de texte.
+
+**Jamais testé** : un vrai ComfyUI avec H3, un vrai GPU, et aucun des
+modèles de l'aval. Chaque réglage par défaut est une hypothèse.
+
+---
+
+## 3. À faire en premier, dans cet ordre
 
 ### a. L'inventaire
 
 ```sh
-./check.sh
+pip install -r requirements.txt
+./usine doctor
 ```
 
-Ne touche à rien. Cherche un serveur d'inférence sur les ports usuels et
-relève ses modèles, dit si `cloudflared` est là et si un tunnel tourne,
-liste les dépendances Python, repère Redis et MinIO. Termine en écrivant
-les commandes à lancer, remplies.
+Regarde le GPU, torch, ComfyUI et ses nœuds, les paquets des moteurs.
+Ne touche à rien. `--ecrire` range ce qu'il a trouvé dans
+`factory.local.json`.
 
-Si le serveur écoute ailleurs : `FACTORY_SCAN_PORTS="… …" ./check.sh`.
+### b. H3 par ComfyUI
 
-**Ne rien installer avant d'avoir lu cette sortie.** La machine sert
-probablement déjà la moitié de ce dont on a besoin.
-
-### b. Le premier tour réel
+Dans ComfyUI : ouvrir le workflow H3 Ref2VA qui donne de bonnes images,
+**Workflow → Export (API)**, puis
 
 ```sh
-export FACTORY_LLM_URL=…      # ce que check.sh a trouvé
-export FACTORY_LLM_MODEL=…
-./start.sh
+./usine gabarit export.json
 ```
 
-Ouvrir `http://localhost:8000`. La page doit se charger, reconnaître
-l'API comme moteur sans rien demander, afficher le nom du modèle servi,
-et remplir la fiche au premier message.
+Relire la liste des changements qu'il affiche. Une sortie vidéo passe
+(ffmpeg en tire les frames) ; un SaveImage sur les frames décodées évite
+la recompression.
 
-C'est le premier moment où le code rencontre un vrai modèle. **S'attendre
-à ce que ça casse là.** Les points fragiles connus :
+### c. Le premier personnage réel
 
-- Un modèle local suit rarement les appels d'outils aussi proprement
-  qu'un modèle propriétaire. `js/llm.js` tolère des arguments JSON
-  illisibles en rendant un objet vide, mais si le modèle n'appelle pas
-  les outils du tout, la fiche ne se remplira pas.
-- `data/methodology.md` a été écrit pour Claude. Il faudra probablement
-  le resserrer pour un modèle local — c'est le seul fichier à toucher
-  pour changer le comportement, il est chargé au démarrage.
-- Le contexte : la méthode fait 11 Ko, plus les images en base64. Un
-  modèle à 8 k de contexte ne tiendra pas.
-
-### c. L'accès depuis l'extérieur
-
-[`CLOUDFLARE.md`](./CLOUDFLARE.md). Si un tunnel tourne déjà, lui ajouter
-une entrée `ingress` vers le port 8000 plutôt que d'en ouvrir un second.
-
----
-
-## 3. La page en ligne — le point bloquant
-
-GitHub Pages sert aujourd'hui la branche
-`claude/interactive-character-generator-5IwJo`, **pas** `main`, et pas la
-branche de ce travail. Tant que c'est le cas, rien de cette refonte n'est
-visible sur `calculment0r.github.io/Character_Sheet`.
-
-Trois façons d'en sortir, au choix de Cal :
-
-1. Basculer le réglage Pages sur `claude/dazzling-heisenberg-y3hfst`
-   (Settings → Pages → Branch). Un clic, rien à pousser.
-2. Fusionner cette branche dans celle que Pages sert déjà.
-3. Fusionner dans `main` et basculer Pages sur `main`.
-
-À noter : servie par GitHub Pages, la page est sur une **autre origine**
-que l'API. Il faut alors poser `FACTORY_CORS_ORIGINS` côté DGX et coller
-l'adresse du tunnel dans l'écran MOTEUR. Servie par l'API à travers le
-tunnel, il n'y a rien à régler. Les deux marchent, la seconde est plus
-simple pour travailler.
-
----
-
-## 4. Ce qui existe
-
-**Front** — `index.html`, `assets/`, `js/`. Deux vues : la console
-d'accueil (dalles pleines, langage du banc NL) et le banc de travail en
-trois colonnes. Seul l'étage Identité fonctionne : 21 champs remplis par
-appels d'outils, widgets interactifs, deux fabricants de prompt (gabarit
-historique, et format Ref2VA en six sections).
-
-**Moteur** — `js/llm.js` ne parle qu'un dialecte en interne et traduit
-vers la cible. Repli sur panne de transport uniquement ; un 4xx qui
-refuse la requête ne bascule pas.
-
-**API** — `api/`. Les routes du §1.3 du brief, jeton, CORS, SSE,
-stockage. Démarre sans Redis ni MinIO, en le disant. Sert aussi le front,
-ce qui permet de n'ouvrir qu'un tunnel.
-
-**Trois règles du brief tenues par le code** : le visage ne se verrouille
-qu'une fois (409 au second appel) ; le rig refuse un bind en T-pose ;
-l'alignement des vues refuse au-delà de ±5°, bouclage à 360° compris.
-
-**Typographie** — Venus Rising porte l'affichage. Norelli ne contient
-que 54 signes (A-Z, a-z, espace : ni chiffre, ni accent, ni ponctuation)
-et ne sert donc que deux chaînes écrites pour elle : le logotype et le
-titre de la console. Les deux `.otf` sont des fontes commerciales
-Typodermic servies en clair depuis un dépôt public — à vérifier contre
-leur licence.
-
----
-
-## 5. Ce qui n'existe pas
-
-| Étage | Manque |
-|---|---|
-| Visage, Costumes | un worker image résident |
-| Planche, Vues | un worker H3 résident |
-| Mesh 3D | TRELLIS 2 et Hunyuan3D 2.1 derrière l'interface `MeshEngine` |
-| Rig | UniRig, le mapping vers `SOMALayer.public_joint_names`, le delta de bind |
-| Animation | Kimodo, SAM 3D Body, la timeline, le mixage par masque de joints |
-
-Hors étages : la persistance (l'entrepôt de l'API est un dictionnaire en
-mémoire, perdu au redémarrage), le visualiseur three.js du §9, la couche
-mains et visage du §13.
-
-**Si ComfyUI tourne déjà sur les DGX**, c'est probablement par lui que
-doit passer l'étage image, via son API (`POST /prompt`, puis
-`GET /history/{id}`), plutôt que par un worker Python à écrire. Le
-contrat d'un worker est volontairement minuscule — voir
-`api/workers/stub.py` :
-
-```python
-def run(*, report, job_id: str = "", **kwargs) -> dict:
-    report(0.5, "à mi-chemin")
-    return {"url": "…"}
+```sh
+./usine page                          # étage Identité, puis « Exporter l'identité .json »
+./usine nouveau --identite <fichier>
+./usine visage <perso> --variantes 4
 ```
 
-Un worker ComfyUI tient dans ce contrat : soumettre le workflow, suivre
-la file, récupérer l'image, la ranger avec `storage.put`, rendre son URL.
+C'est le premier contact avec H3. **S'attendre à ce que ça casse là** :
+nom des champs du nœud H3, format du prompt attendu (les six sections
+sont envoyées en texte, `section:\ncontenu`), nombre minimal de frames.
+Tout se corrige dans le gabarit ou dans `factory/prompts.py`.
+
+Puis la suite, étage par étage, jusqu'aux vues préparées : `LOCAL.md`.
+
+### d. L'aval, capacité par capacité
+
+Chaque capacité tourne en factice tant que son moteur n'est pas branché.
+L'ordre du brief (§15) : TRELLIS 2 puis Hunyuan3D, delight, UniRig,
+Kimodo, SAM 3D Body.
 
 ---
 
-## 6. Décisions encore ouvertes
+## 4. Ce qui reste ouvert
 
-Le §14 du brief en liste cinq. Deux ont été tranchées par Cal :
-
-- **Thème** : sombre NL, tel quel. Le §9 du brief demandait du clair ;
-  l'artefact de référence fait foi. Tout est dans `assets/tokens.css`.
-- **Moteur de texte** : DGX d'abord, repli Anthropic.
-
-Restent à trancher : H3 local 768 px contre API 2K ; vues séparées contre
-orbite continu découpé ; conversion de pose MHR → SOMA (mapping de
-joints, `PoseInversion`, ou détour SMPL-X). Le disque sur le visage est
-implémenté en option (`mask_face_in_fullbody`) et attend son A/B.
-
----
-
-## 7. Reprendre la direction artistique
-
-**Ouvrir `theme.html`** — c'est le catalogue du thème. Il charge les
-mêmes feuilles que l'application, donc il ne peut pas dériver : tous les
-jetons avec leur rôle, les quatre fontes avec leurs contraintes, et
-chaque composant réel, du bouton à la dalle de console.
-
-À côté :
-
-- `docs/reference/nl-bench.css` — le CSS du banc NL d'origine, dont tout
-  est tiré. L'artefact source n'est pas lisible hors du compte de Cal ;
-  ce fichier est la seule trace.
-- `docs/img/` — captures de référence : la console, le banc, le
-  spécimen typographique, la vue étroite.
-- `CLAUDE.md` — les règles dures, en tête de dépôt.
+- **Le banc des vues** (§6.1) : une génération par vue contre une orbite
+  redécoupée. Les deux méthodes existent (`./usine vues`, `--orbite`) ;
+  le critère — écart angulaire mesuré, dérive d'identité — demande un
+  estimateur de pose, que SAM 3D Body fournira.
+- **Le contrôle d'angle mesuré** : tant qu'aucun estimateur ne regarde
+  les images, le contrôle porte sur les angles demandés, et le dit.
+- **MHR → SOMA** (§11.2) : à trancher avec SAM 3D Body.
+- **Le disque sur le visage** : `./usine planche --ab`, à juger sur pièces.
+- **La base paramétrique** du §10.4 — SOMA comme corps, sans mesh
+  généré — n'est pas encore une option de `./usine rig`.
 
 ---
 
-## 8. Carte du dépôt
+## 5. Carte du dépôt
 
 ```
-index.html              la page — console + banc
-assets/tokens.css       toutes les couleurs et les fontes, source unique
-assets/rack.css         les composants du banc NL
-assets/factory.css      conversation, fiche, widgets
-assets/fonts/           Venus Rising, Norelli
-js/config.js            réglages, origine implicite
-js/llm.js               client unifié DGX / Anthropic
-js/schema.js            champs, outils, préambule, étages
-js/promptbuilder.js     gabarit historique + Ref2VA six sections
-js/ui.js                tout le DOM
-js/app.js               orchestration, boucle d'agent
-data/methodology.md     la méthode chargée au démarrage
-data/sheet_template.txt le gabarit de prompt historique
-api/                    FastAPI — voir api/README.md
-check.sh                inventaire de la machine
-start.sh                lancement, un seul port
-theme.html              le catalogue du thème — jetons, fontes, composants
-tools/mock_llm.py       un faux modèle, pour tester sans GPU
-tools/e2e.mjs           la vérification bout en bout
-docs/reference/         le CSS du banc NL, source de la DA
-docs/img/               captures de référence
-legacy/                 l'ancien kit UI, gardé pour mémoire
+usine                   la commande : ./usine <étage> …
+factory/                la chaîne, en Python — voir ARCHITECTURE.md
+workflows/              gabarits ComfyUI au format API (./usine gabarit)
+data/soma77.json        squelette SOMA 77, relevé dans Kimodo
+data/hand_poses.json    poses de main figées
+data/methodology.md     la méthode de l'étage Identité
+viewer.html             le viewer 3D, page locale
+index.html              la page : console et étage Identité
+theme.html              le catalogue du thème
+tools/chain_check.py    la chaîne de bout en bout, moteurs factices
+tools/mock_comfy.py     un faux ComfyUI
+tools/e2e.mjs           la page de bout en bout, dans un navigateur
+api/ · start.sh · check.sh · docs/CLOUDFLARE.md
+                        la version serveur, gardée pour plus tard
 ```

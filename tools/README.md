@@ -1,5 +1,37 @@
 # Outils
 
+## `chain_check.py` — la chaîne locale, de bout en bout
+
+Mène un personnage du visage à la timeline cuite par `./usine`, sur les
+moteurs factices, et vérifie à chaque étage les fichiers, le manifeste
+et les refus du brief. Rejoue le skinning glTF comme un viewer pour
+juger le rig sur des chiffres : mains au-dessus de la tête bras levés,
+hanches plus basses en accroupi, racine continue d'une prise à l'autre.
+Refait enfin le trajet H3 → ComfyUI contre le faux ComfyUI ci-dessous.
+
+```sh
+python3 tools/chain_check.py      # numpy et Pillow suffisent
+```
+
+Rend 0 si tout passe. À lancer après toute modification de `factory/`.
+
+## `mock_comfy.py` — un faux ComfyUI
+
+Parle les routes dont la chaîne se sert (`/upload/image`, `/prompt`,
+`/history`, `/view`…) et rend autant de frames que le workflow en
+demande, à la taille demandée, le mannequin factice vu sous l'azimut que
+le prompt décrit — une frame nette, les autres floues. Refuse un
+workflow où un `{{…}}` n'est pas rempli, ou qui cite une image jamais
+envoyée.
+
+```sh
+python3 tools/mock_comfy.py 8199
+FACTORY_COMFYUI_URL=http://127.0.0.1:8199 ./usine visage <perso>
+```
+
+`fixtures/h3_export_api.json` est un exemple d'export API, celui que
+`chain_check.py` fait adopter par `./usine gabarit`.
+
 ## `mock_llm.py` — un faux serveur de modèle
 
 Parle le dialecte OpenAI sur `/v1/models` et `/v1/chat/completions`, et
