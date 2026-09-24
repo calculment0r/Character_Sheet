@@ -8,7 +8,8 @@ ordre de priorité :
   2. la variable FACTORY_<CAPACITÉ>, par exemple FACTORY_H3=comfyui ;
   3. le fichier factory.local.json à la racine du dépôt, que
      `./usine doctor --ecrire` remplit avec ce qu'il a trouvé ;
-  4. le factice, qui fabrique de vrais fichiers de test et le dit.
+  4. le défaut : ComfyUI pour H3, le factice pour le reste — il
+     fabrique de vrais fichiers de test et le dit.
 """
 
 from __future__ import annotations
@@ -33,7 +34,10 @@ CAPABILITIES = {
     "sam3dbody": ("stub", "python"),
 }
 
-DEFAULTS = {"h3": "stub", "prep": "builtin", "delight": "off", "trellis": "stub",
+# H3 tourne déjà dans ComfyUI sur la machine (confirmé par Cal) : c'est
+# le moteur par défaut. Les autres capacités restent factices tant que
+# `./usine doctor` n'a pas trouvé leur modèle.
+DEFAULTS = {"h3": "comfyui", "prep": "builtin", "delight": "off", "trellis": "stub",
             "hunyuan3d": "stub", "unirig": "stub", "kimodo": "stub", "sam3dbody": "stub"}
 
 _override: dict[str, str] = {}

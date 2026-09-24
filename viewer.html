@@ -1,0 +1,1991 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CHARACTER FACTORY — viewer</title>
+<meta name="description" content="Viewer 3D local : GLB, canaux PBR, cinq éclairages, comparaison A/B, clips et poses de contrôle. Tout tourne sur la machine.">
+<!-- icône vide au chargement : le script la dessine depuis les jetons -->
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Azeret+Mono:wght@300;400;500&family=Saira+Semi+Condensed:wght@400;600&display=swap">
+<link rel="stylesheet" href="./assets/tokens.css">
+<link rel="stylesheet" href="./assets/rack.css">
+<link rel="stylesheet" href="./assets/viewer.css">
+<!-- Chrome refuse un module en fichier ouvert depuis file:// : le script
+     est donc écrit dans la page, et three.js vient du CDN par cette carte. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<header class="hdr">
+  <a class="logo" href="./index.html" title="revenir à la console">
+    <span class="sq"><i></i></span>
+    <span>
+      <b>Character Factory</b>
+      <small>viewer · local</small>
+    </span>
+  </a>
+
+  <span class="sp"></span>
+
+  <span class="pill" id="pill"><i></i><span id="pill-text">aucun modèle</span></span>
+  <button class="tb go sm" id="open-btn" type="button" title="un fichier remplit A, deux fichiers remplissent A et B">Ouvrir un .glb</button>
+</header>
+
+<main class="vw">
+
+  <!-- ── le moniteur, le transport, la timeline ──────────── -->
+  <section class="vw-stage">
+    <div class="monitor mode-a" id="monitor">
+      <canvas id="view" tabindex="0" aria-label="vue 3D — glisser pour tourner, clic droit pour déplacer, molette pour zoomer"></canvas>
+
+      <div class="layer a">
+        <div class="empty" id="empty-a">
+          <b>Dépose un .glb ici</b>
+          <span>ou utilise « Ouvrir un .glb ». Le fichier est lu sur place, rien ne quitte la machine.</span>
+        </div>
+      </div>
+      <div class="layer b">
+        <div class="empty" id="empty-b">
+          <b>Voie B vide</b>
+          <span>dépose un second .glb de ce côté pour comparer</span>
+        </div>
+      </div>
+
+      <span class="tag a"><b>A</b><span id="tag-a">vide</span></span>
+      <span class="tag b"><b>B</b><span id="tag-b">vide</span></span>
+
+      <div class="handle" id="handle" role="slider" tabindex="0" aria-label="volet A/B"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+        <span class="grip"><i></i><i></i></span>
+      </div>
+
+      <div class="readout ruler" id="ruler" title="longueur à la distance de la cible">
+        <i id="ruler-bar"></i><span id="ruler-text">1 m</span>
+      </div>
+      <span class="readout" id="readout" title="hauteur de la boîte englobante" hidden></span>
+    </div>
+
+    <div class="transport">
+      <button class="tb" id="play" type="button" title="lecture / pause — espace" aria-label="lecture" disabled>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path id="play-icon" d="M4 2.5v11l9-5.5z"/></svg>
+      </button>
+      <button class="tb ghost" id="prev" type="button" title="image précédente — ←" aria-label="image précédente" disabled>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h2v10H3zM13 3v10L6 8z"/></svg>
+      </button>
+      <button class="tb ghost" id="next" type="button" title="image suivante — →" aria-label="image suivante" disabled>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3h2v10h-2zM3 3v10l7-5z"/></svg>
+      </button>
+      <span class="lbl">boucle</span>
+      <button class="tb sm on" id="loop" type="button" aria-pressed="true">on</button>
+      <span class="lbl">vitesse</span>
+      <span class="seg" id="seg-speed">
+        <button class="tb" type="button" data-v="0.25">0,25×</button>
+        <button class="tb" type="button" data-v="0.5">0,5×</button>
+        <button class="tb on" type="button" data-v="1">1×</button>
+        <button class="tb" type="button" data-v="2">2×</button>
+      </span>
+      <span class="sp"></span>
+      <span class="lbl frame" id="frame-no">— / —</span>
+      <span class="timecode"><span id="tc-text">--:--:--</span><small id="tc-fps">30 i/s</small></span>
+    </div>
+
+    <div class="timeline" id="timeline">
+      <div class="tl">
+        <div class="track"><div class="fill" id="tl-fill"></div></div>
+        <div class="ticks" id="tl-ticks"></div>
+        <input type="range" id="tl-range" min="0" max="1000" step="1" value="0" aria-label="position dans le clip" disabled>
+      </div>
+      <div class="tl-foot">
+        <span id="tl-start">0</span>
+        <span id="tl-mid">molette : ±1 image · alt + molette : échelle du temps</span>
+        <span id="tl-end">0</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── la colonne de réglages ──────────────────────────── -->
+  <aside class="vw-side">
+
+    <section class="pan flat">
+      <div class="pan-head"><span class="t">Modèles</span><span class="sp"></span><span class="t" id="mode-note">A seul</span></div>
+      <div class="vw-body">
+        <div class="slot-row">
+          <div class="drop slot" id="drop-a" data-slot="a" role="button" tabindex="0" title="ouvrir un .glb dans la voie A">
+            <span class="k a">A</span><span class="nm" id="drop-a-name">Dépose un .glb ici</span>
+          </div>
+          <button class="tb ghost sm" id="clear-a" type="button" title="vider la voie A" aria-label="vider la voie A" hidden>×</button>
+        </div>
+        <div class="slot-row">
+          <div class="drop slot" id="drop-b" data-slot="b" role="button" tabindex="0" title="ouvrir un .glb dans la voie B">
+            <span class="k b">B</span><span class="nm" id="drop-b-name">Dépose un .glb ici</span>
+          </div>
+          <button class="tb ghost sm" id="clear-b" type="button" title="vider la voie B" aria-label="vider la voie B" hidden>×</button>
+        </div>
+        <span class="lbl">Comparer</span>
+        <div class="seg grid g4" id="seg-mode" role="group" aria-label="comparer">
+          <button class="tb on" type="button" data-v="a">A</button>
+          <button class="tb" type="button" data-v="b">B</button>
+          <button class="tb" type="button" data-v="side">Côte à côte</button>
+          <button class="tb" type="button" data-v="wipe">Volet</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="pan flat">
+      <div class="pan-head"><span class="t">Éclairage</span></div>
+      <div class="vw-body">
+        <div class="seg grid" id="seg-light" role="group" aria-label="éclairage">
+          <button class="tb on" type="button" data-v="studio">Studio</button>
+          <button class="tb" type="button" data-v="jour">Jour</button>
+          <button class="tb" type="button" data-v="interieur">Intérieur</button>
+          <button class="tb" type="button" data-v="contre">Contre-jour</button>
+          <button class="tb" type="button" data-v="plat">Plat</button>
+        </div>
+        <p class="vw-note" id="light-desc"></p>
+      </div>
+    </section>
+
+    <section class="pan flat">
+      <div class="pan-head"><span class="t">Canal</span></div>
+      <div class="vw-body">
+        <div class="seg grid" id="seg-chan" role="group" aria-label="canal">
+          <button class="tb on" type="button" data-v="final">Rendu</button>
+          <button class="tb" type="button" data-v="albedo">Albedo</button>
+          <button class="tb" type="button" data-v="metal">Métal</button>
+          <button class="tb" type="button" data-v="rough">Rugosité</button>
+          <button class="tb" type="button" data-v="normal">Normales</button>
+          <button class="tb" type="button" data-v="wire">Filaire</button>
+        </div>
+        <p class="vw-note" id="chan-desc"></p>
+      </div>
+    </section>
+
+    <section class="pan flat">
+      <div class="pan-head"><span class="t">Affichage</span></div>
+      <div class="vw-body">
+        <div class="vw-toggles">
+          <button class="tb sm" id="tg-grid" type="button">Grille</button>
+          <button class="tb sm" id="tg-sil" type="button">Silhouette 1,75 m</button>
+          <button class="tb sm" id="tg-skel" type="button">Squelette</button>
+          <button class="tb ghost sm" id="fit-btn" type="button" title="cadrer les modèles — F">Recadrer</button>
+        </div>
+        <dl class="kv">
+          <dt>repère</dt><dd>mètres · Y haut · +Z devant</dd>
+          <dt>grille</dt><dd>1 m · 0,1 m</dd>
+          <dt>origine</dt><dd>pieds au sol, centré sur Y</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="pan flat">
+      <div class="pan-head"><span class="t">Animation</span><span class="sp"></span><span class="t" id="clip-count">aucun clip</span></div>
+      <div class="vw-body">
+        <ul class="clips" id="clips"></ul>
+        <div class="vw-row"><span class="lbl">Poses de contrôle</span><span class="sp"></span><span class="lbl" id="pose-count">0/5</span></div>
+        <div class="poses" id="poses"></div>
+      </div>
+    </section>
+
+    <div class="meta a" id="meta-a" hidden>
+      <div class="meta-head"><b>A</b><span id="meta-a-src">fiche</span></div>
+      <dl class="kv" id="kv-a"></dl>
+      <span class="dots"></span>
+    </div>
+    <div class="meta b" id="meta-b" hidden>
+      <div class="meta-head"><b>B</b><span id="meta-b-src">fiche</span></div>
+      <dl class="kv" id="kv-b"></dl>
+      <span class="dots"></span>
+    </div>
+
+  </aside>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="file-input" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2" multiple hidden>
+
+<script type="module">
+/* ============================================================
+   CHARACTER FACTORY — viewer 3D local
+   Page statique, aucun serveur : le GLB est lu sur le disque (dépôt
+   ou sélecteur de fichier) ou, quand la page est servie en http,
+   récupéré depuis ?src=<url> pour la voie A et ?b=<url> pour la B.
+   Unités glTF : mètres, Y en haut, +Z devant.
+   ============================================================ */
+
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
+/* ── outils ─────────────────────────────────────────────── */
+
+const $ = (s, root = document) => root.querySelector(s);
+const $$ = (s, root = document) => [...root.querySelectorAll(s)];
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+let toastTimer = null;
+function toast(msg, ms = 3600) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), ms);
+}
+
+const fr = new Intl.NumberFormat('fr-FR');
+const fmtInt = (n) => fr.format(n);
+const fmtDec = (v, d = 2) => v.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtM = (v) => `${fmtDec(v)} m`;
+function fmtBytes(b) {
+  if (!b) return '—';
+  return b < 1048576 ? `${fmtDec(b / 1024, 0)} Ko` : `${fmtDec(b / 1048576, 1)} Mo`;
+}
+
+/* ── les jetons du thème, lus à l'exécution ─────────────── */
+// La scène n'écrit aucune teinte : elle emprunte celles de tokens.css,
+// comme le reste de la page. Le navigateur normalise la valeur (hex ou
+// rgba) quand on la pose sur un élément témoin.
+
+const rootStyle = getComputedStyle(document.documentElement);
+const probe = el('i');
+probe.hidden = true;
+document.body.appendChild(probe);
+
+function cssVar(name) {
+  return rootStyle.getPropertyValue(name).trim();
+}
+
+function token(name) {
+  probe.style.color = cssVar(name);
+  const [r = 0, g = 0, b = 0, a = 1] = (getComputedStyle(probe).color.match(/[\d.]+/g) || []).map(Number);
+  return { color: new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace), alpha: a };
+}
+const tint = (name) => token(name).color;
+
+// Teinte d'une lumière : le jeton ramené à une intensité unité. Une
+// saturation nulle donne le blanc de contrôle, qui ne colore pas
+// l'albedo qu'on cherche justement à juger.
+function lightTint(name, saturation = 1) {
+  const c = tint(name);
+  const grey = c.clone().setScalar((c.r + c.g + c.b) / 3);
+  c.lerp(grey, 1 - saturation);
+  return c.multiplyScalar(1 / Math.max(c.r, c.g, c.b, 1e-6));
+}
+
+// L'icône de l'onglet, dessinée depuis les jetons comme celle de la console.
+function drawFavicon() {
+  const c = el('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d');
+  g.fillStyle = cssVar('--or');
+  g.beginPath(); g.roundRect(0, 0, 32, 32, 6); g.fill();
+  g.fillStyle = cssVar('--on-or');
+  g.beginPath(); g.roundRect(12, 12, 8, 8, 2); g.fill();
+  $('link[rel="icon"]').href = c.toDataURL();
+}
+
+/* ── état ───────────────────────────────────────────────── */
+
+const state = {
+  mode: 'a',          // a | b | side | wipe
+  preset: 'studio',
+  channel: 'final',
+  split: 0.5,         // position du volet, en fraction de la largeur
+  grid: true,
+  silhouette: true,
+  skeleton: false,
+};
+const view = { w: 1, h: 1, ticks: 1, userMoved: false };
+let needsRender = true;
+function requestRender() { needsRender = true; }
+
+/* ── rendu, caméra, contrôles ───────────────────────────── */
+
+const monitor = $('#monitor');
+const canvas = $('#view');
+// Les maillages des modèles portent aussi ce calque : l'ombre de
+// contact et le filaire ne visent qu'eux.
+const LAYER_MODEL = 1;
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.toneMapping = THREE.NeutralToneMapping;   // Khronos PBR Neutral : les teintes restent justes
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 16 / 9, 0.01, 500);
+camera.position.set(1.4, 1.5, 4.5);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.09;
+controls.target.set(0, 0.9, 0);
+controls.addEventListener('change', requestRender);
+controls.addEventListener('start', () => { view.userMoved = true; });
+
+/* ── le sol : grille métrique et sol mat ────────────────── */
+// Grille calculée au fragment : 1 m en trait majeur, 0,1 m en trait
+// fin, épaisseur d'un pixel à toute distance, effacée au loin et quand
+// les traits se serrent. L'axe X à z = 0, la demi-droite +Z (l'avant
+// du personnage) en acier.
+
+const GRID_VS = /* glsl */`
+  varying vec3 vWorld;
+  void main() {
+    vec4 w = modelMatrix * vec4( position, 1.0 );
+    vWorld = w.xyz;
+    gl_Position = projectionMatrix * viewMatrix * w;
+  }`;
+
+const GRID_FS = /* glsl */`
+  uniform vec3 uMinor; uniform float uMinorA;
+  uniform vec3 uMajor; uniform float uMajorA;
+  uniform vec3 uAxis; uniform vec3 uFront;
+  uniform float uFade;
+  varying vec3 vWorld;
+
+  float lines( vec2 p, float pitch, float width ) {
+    vec2 c = p / pitch;
+    vec2 w = max( fwidth( c ), vec2( 1e-5 ) );
+    vec2 d = abs( fract( c - 0.5 ) - 0.5 ) / ( w * width );
+    float cover = 1.0 - min( min( d.x, d.y ), 1.0 );
+    return cover * ( 1.0 - smoothstep( 0.2, 0.45, max( w.x, w.y ) ) );
+  }
+
+  float axisLine( float x, float width ) {
+    float w = max( fwidth( x ), 1e-5 );
+    return 1.0 - min( abs( x ) / ( w * width ), 1.0 );
+  }
+
+  void main() {
+    vec2 p = vWorld.xz;
+    float fade = 1.0 - smoothstep( uFade * 0.3, uFade, length( p - cameraPosition.xz ) );
+    vec4 col = vec4( uMinor, lines( p, 0.1, 1.0 ) * uMinorA );
+    float major = lines( p, 1.0, 1.4 ) * uMajorA;
+    col = mix( col, vec4( uMajor, major ), step( col.a, major ) );
+    float ax = axisLine( p.y, 1.6 ) * 0.8;
+    col = mix( col, vec4( uAxis, ax ), step( col.a, ax ) );
+    float front = axisLine( p.x, 1.8 ) * step( 0.0, p.y );
+    col = mix( col, vec4( uFront, front ), step( col.a, front ) );
+    if ( col.a * fade < 0.003 ) discard;
+    gl_FragColor = vec4( col.rgb, col.a * fade );
+    #include <colorspace_fragment>
+  }`;
+
+function makeGrid() {
+  const minor = token('--line');
+  const major = token('--line-cy');
+  const material = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+    uniforms: {
+      uMinor: { value: minor.color }, uMinorA: { value: minor.alpha },
+      uMajor: { value: major.color }, uMajorA: { value: major.alpha * 0.7 },
+      uAxis: { value: tint('--ink3') }, uFront: { value: tint('--cy') },
+      uFade: { value: 12 },
+    },
+    vertexShader: GRID_VS,
+    fragmentShader: GRID_FS,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material);
+  mesh.scale.setScalar(400);
+  mesh.renderOrder = -1;
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+// Un sol mat qui s'éteint en disque : les lumières l'éclairent, les
+// ombres s'y lisent, et le fond sombre reste intact au-delà. Sur un
+// fond presque noir, une ombre seule ne se verrait pas.
+function makeFloor() {
+  const size = 128;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const r = Math.hypot((x / (size - 1)) * 2 - 1, (y / (size - 1)) * 2 - 1);
+      const i = (y * size + x) * 4;
+      data.fill(Math.round(255 * (1 - THREE.MathUtils.smoothstep(r, 0.12, 1))), i, i + 4);
+    }
+  }
+  const falloff = new THREE.DataTexture(data, size, size);
+  falloff.needsUpdate = true;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2),
+    new THREE.MeshStandardMaterial({
+      color: tint('--ink3').multiplyScalar(0.5), roughness: 0.92, metalness: 0,
+      alphaMap: falloff, transparent: true, depthWrite: false,
+    }),
+  );
+  mesh.receiveShadow = true;
+  mesh.renderOrder = -3;
+  return mesh;
+}
+
+const grid = makeGrid();
+const floor = makeFloor();
+scene.add(grid, floor);
+
+/* ── ombre de contact ───────────────────────────────────── */
+// Reprise de l'exemple three.js « shadow_contact » : le modèle est vu
+// d'en dessous par une caméra orthographique, sa profondeur devient une
+// tache sombre, deux flous l'adoucissent. Indépendante des lumières,
+// elle pose le personnage au sol. Une par voie, recalculée seulement
+// quand la pose change.
+
+const shadowDepth = new THREE.MeshDepthMaterial({ side: THREE.DoubleSide });
+shadowDepth.userData.darkness = { value: 1.25 };
+shadowDepth.onBeforeCompile = (shader) => {
+  shader.uniforms.darkness = shadowDepth.userData.darkness;
+  shader.fragmentShader = 'uniform float darkness;\n' + shader.fragmentShader.replace(
+    'gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );',
+    'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * darkness );',
+  );
+};
+
+// flou gaussien à neuf prises, dans la direction de uStep
+const shadowBlur = new THREE.ShaderMaterial({
+  depthTest: false, depthWrite: false,
+  uniforms: { tMap: { value: null }, uStep: { value: new THREE.Vector2() } },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tMap; uniform vec2 uStep; varying vec2 vUv;
+    void main() {
+      vec4 s = texture2D( tMap, vUv ) * 0.1633;
+      s += ( texture2D( tMap, vUv - uStep ) + texture2D( tMap, vUv + uStep ) ) * 0.1531;
+      s += ( texture2D( tMap, vUv - 2.0 * uStep ) + texture2D( tMap, vUv + 2.0 * uStep ) ) * 0.12245;
+      s += ( texture2D( tMap, vUv - 3.0 * uStep ) + texture2D( tMap, vUv + 3.0 * uStep ) ) * 0.0918;
+      s += ( texture2D( tMap, vUv - 4.0 * uStep ) + texture2D( tMap, vUv + 4.0 * uStep ) ) * 0.051;
+      gl_FragColor = s;
+    }`,
+});
+
+class ContactShadow {
+  constructor(size = 512) {
+    this.size = size;
+    this.rt = new THREE.WebGLRenderTarget(size, size);
+    this.rtBlur = new THREE.WebGLRenderTarget(size, size);
+    this.rt.texture.generateMipmaps = false;
+    this.rtBlur.texture.generateMipmaps = false;
+
+    // un plan tourné face au sol, que la caméra voit d'en dessous
+    const plane = new THREE.PlaneGeometry(1, 1).rotateX(Math.PI / 2);
+    this.plane = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({
+      map: this.rt.texture, transparent: true, depthWrite: false, toneMapped: false,
+    }));
+    this.plane.renderOrder = -2;
+    this.plane.position.y = 0.0005;
+    this.blurPlane = new THREE.Mesh(plane, shadowBlur);
+    this.blurPlane.layers.set(LAYER_MODEL);
+
+    this.cam = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0, 1);
+    this.cam.rotation.x = Math.PI / 2;   // regarde vers le haut
+    this.cam.layers.set(LAYER_MODEL);
+    this.cam.updateMatrixWorld();
+    this.blur = 2.5;
+  }
+
+  // cadre la caméra sur l'emprise au sol du modèle
+  fit(box) {
+    const size = box.getSize(new THREE.Vector3());
+    const span = Math.max(size.x, size.z, size.y * 0.5, 0.05) * 1.8;
+    const cam = this.cam;
+    cam.left = -span / 2; cam.right = span / 2;
+    cam.top = span / 2; cam.bottom = -span / 2;
+    cam.far = clamp(size.y * 0.45, 0.02, 50);
+    cam.updateProjectionMatrix();
+    this.plane.scale.set(span, -1, span);
+    this.blurPlane.scale.set(span, 1, span);
+    this.blurPlane.position.y = cam.far / 2;
+    this.blurPlane.updateMatrixWorld();
+  }
+
+  render(scene) {
+    const autoShadow = renderer.shadowMap.autoUpdate;
+    renderer.shadowMap.autoUpdate = false;
+    scene.overrideMaterial = shadowDepth;
+    renderer.setRenderTarget(this.rt);
+    renderer.render(scene, this.cam);
+    scene.overrideMaterial = null;
+    this.blurPass(this.blur);
+    this.blurPass(this.blur * 0.4);
+    renderer.setRenderTarget(null);
+    renderer.shadowMap.autoUpdate = autoShadow;
+  }
+
+  blurPass(amount) {
+    shadowBlur.uniforms.tMap.value = this.rt.texture;
+    shadowBlur.uniforms.uStep.value.set(amount / 256, 0);
+    renderer.setRenderTarget(this.rtBlur);
+    renderer.render(this.blurPlane, this.cam);
+    shadowBlur.uniforms.tMap.value = this.rtBlur.texture;
+    shadowBlur.uniforms.uStep.value.set(0, amount / 256);
+    renderer.setRenderTarget(this.rt);
+    renderer.render(this.blurPlane, this.cam);
+  }
+}
+
+/* ── la silhouette de référence ─────────────────────────── */
+// Un pictogramme plat de 1,75 m, posé à côté du modèle et tourné vers
+// la caméra autour de la verticale : la taille se juge d'un coup d'œil.
+
+const SIL_H = 1.75;
+const SIL_HALF = 0.25;   // demi-largeur, bras compris
+
+// demi-contour droit (x ≥ 0), du haut des épaules à l'entrejambe
+const SIL_RIGHT = [
+  [0, 1.49], [0.1, 1.486], [0.16, 1.47], [0.2, 1.44], [0.218, 1.4],
+  [0.228, 1.25], [0.238, 1.05], [0.244, 0.87], [0.24, 0.8], [0.222, 0.765], [0.2, 0.78],
+  [0.194, 0.87], [0.184, 1.05], [0.174, 1.24], [0.163, 1.29],
+  [0.155, 1.2], [0.146, 1.04], [0.162, 0.93],
+  [0.156, 0.84], [0.132, 0.5], [0.108, 0.1], [0.126, 0.025], [0.12, 0],
+  [0.036, 0], [0.032, 0.025], [0.036, 0.1], [0.046, 0.5], [0.03, 0.8], [0, 0.835],
+];
+
+function makeSilhouette() {
+  const left = SIL_RIGHT.slice(1, -1).reverse().map(([x, y]) => [-x, y]);
+  const body = new THREE.Shape([...SIL_RIGHT, ...left].map(([x, y]) => new THREE.Vector2(x, y)));
+  const head = new THREE.Shape().absellipse(0, 1.64, 0.085, 0.11, 0, Math.PI * 2, false, 0);
+  const fill = token('--ink2');
+  const edge = token('--line-cy');
+
+  const group = new THREE.Group();
+  const face = new THREE.Mesh(
+    new THREE.ShapeGeometry([body, head], 24),
+    new THREE.MeshBasicMaterial({
+      color: fill.color, transparent: true, opacity: 0.1,
+      side: THREE.DoubleSide, depthWrite: false, toneMapped: false,
+    }),
+  );
+  group.add(face);
+  for (const shape of [body, head]) {
+    group.add(new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints(shape.getPoints(48)),
+      new THREE.LineBasicMaterial({ color: edge.color, transparent: true, opacity: edge.alpha, toneMapped: false }),
+    ));
+  }
+  group.renderOrder = 1;
+  return group;
+}
+
+const silhouette = makeSilhouette();
+scene.add(silhouette);
+
+function silhouetteBox() {
+  const x = silhouette.position.x;
+  return new THREE.Box3(new THREE.Vector3(x - SIL_HALF, 0, -SIL_HALF), new THREE.Vector3(x + SIL_HALF, SIL_H, SIL_HALF));
+}
+
+/* ── éclairages ─────────────────────────────────────────── */
+// Cinq ambiances pour juger un matériau PBR. Chacune tient en un
+// environnement généré (un dégradé et des panneaux lumineux passés au
+// PMREMGenerator — aucun fichier HDRI) et quelques lumières
+// directionnelles. Les teintes viennent des jetons : blanc de contrôle
+// tiré de --ink, ciel de --cy, chaleur de la famille corail.
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+const lightRoot = new THREE.Group();
+scene.add(lightRoot);
+
+function definePresets() {
+  const white = lightTint('--ink', 0);
+  const warm = lightTint('--coral-3');
+  const amber = lightTint('--coral-2');
+  const sun = lightTint('--coral-3', 0.35);
+  const sky = lightTint('--cy');
+  const earth = tint('--coral-1');
+  const deep = tint('--bg');
+  const k = (c, f) => c.clone().multiplyScalar(f);
+
+  return {
+    studio: {
+      desc: 'trois points neutres — clé, douche et contre — avec ombre de contact',
+      // une pièce gris moyen, une grande boîte à lumière, un débouchage
+      // et deux bandes verticales derrière : les métaux ont de quoi refléter
+      env: {
+        top: k(white, 0.3), mid: k(white, 0.18), bottom: k(white, 0.04),
+        lamps: [
+          { dir: [-1, 0.6, 1], w: 4, h: 4, color: white, power: 8 },
+          { dir: [1.3, 0.3, 0.9], w: 3, h: 3, color: white, power: 3 },
+          { dir: [0.9, 0.25, -1], w: 1, h: 6, color: white, power: 6 },
+          { dir: [-0.9, 0.25, -1], w: 1, h: 6, color: white, power: 6 },
+        ],
+      },
+      envIntensity: 0.55,
+      lights: [
+        { dir: [-1, 1.3, 1.2], color: white, intensity: 2.2, shadow: true },
+        { dir: [1.3, 0.5, 1], color: white, intensity: 0.5 },
+        { dir: [0.3, 1, -1.4], color: white, intensity: 1.6 },
+      ],
+      contact: 0.85, floor: 0.75,
+    },
+    jour: {
+      desc: 'ciel généré, soleil haut et ombre portée — le matériau en plein air',
+      env: {
+        top: k(sky, 0.85), mid: k(white, 1.1), bottom: k(earth, 0.25),
+        lamps: [{ dir: [0.8, 1.2, 0.9], w: 0.5, h: 0.5, color: sun, power: 60 }],
+      },
+      envIntensity: 0.7,
+      lights: [{ dir: [0.8, 1.2, 0.9], color: sun, intensity: 2.8, shadow: true }],
+      contact: 0.7, floor: 0.9,
+    },
+    interieur: {
+      desc: 'lampe chaude sur le côté, rebond ambré du sol',
+      env: {
+        top: k(warm, 0.22), mid: k(amber, 0.32), bottom: k(earth, 0.12),
+        lamps: [
+          { dir: [-1, 1.1, 0.8], w: 1.2, h: 1.2, color: warm, power: 8 },
+          { dir: [0, 1, 0], w: 3, h: 3, color: warm, power: 0.6 },
+        ],
+      },
+      envIntensity: 0.8,
+      lights: [
+        { dir: [-1, 1.1, 0.8], color: warm, intensity: 2, shadow: true },
+        { dir: [0.8, -0.3, 0.6], color: amber, intensity: 0.35 },
+      ],
+      contact: 0.9, floor: 0.85,
+    },
+    contre: {
+      desc: 'contre-jour dur : la silhouette, les arêtes et le Fresnel',
+      env: {
+        top: deep, mid: deep, bottom: deep,
+        lamps: [{ dir: [0.2, 0.6, -1.3], w: 2, h: 3, color: white, power: 10 }],
+      },
+      envIntensity: 0.35,
+      lights: [
+        { dir: [0.15, 0.9, -1.2], color: white, intensity: 5.5, shadow: true },
+        { dir: [-1.2, 0.3, -0.8], color: white, intensity: 2.2 },
+        { dir: [1.2, 0.3, -0.8], color: white, intensity: 2.2 },
+        { dir: [0, 0.3, 1], color: white, intensity: 0.15 },
+      ],
+      contact: 0.6, floor: 0.8,
+    },
+    plat: {
+      desc: 'lumière uniforme, sans ombre ni direction — contrôle de l\'albedo',
+      env: { top: white, mid: white, bottom: white, lamps: [] },
+      envIntensity: 1,
+      lights: [],
+      contact: 0, floor: 0,
+    },
+  };
+}
+
+// un dégradé vertical sur une sphère vue de l'intérieur
+const ENV_VS = /* glsl */`
+  varying vec3 vDir;
+  void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`;
+const ENV_FS = /* glsl */`
+  uniform vec3 uTop; uniform vec3 uMid; uniform vec3 uBottom;
+  varying vec3 vDir;
+  void main() {
+    float h = normalize( vDir ).y;
+    vec3 c = h > 0.0 ? mix( uMid, uTop, pow( h, 0.5 ) ) : mix( uMid, uBottom, pow( -h, 0.35 ) );
+    gl_FragColor = vec4( c, 1.0 );
+  }`;
+
+function buildEnv({ top, mid, bottom, lamps }) {
+  const envScene = new THREE.Scene();
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(20, 48, 24), new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false,
+    uniforms: { uTop: { value: top }, uMid: { value: mid }, uBottom: { value: bottom } },
+    vertexShader: ENV_VS, fragmentShader: ENV_FS,
+  }));
+  envScene.add(dome);
+  // panneaux lumineux : des aplats plus clairs que 1, tournés vers le centre
+  for (const l of lamps) {
+    const panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(l.w, l.h),
+      new THREE.MeshBasicMaterial({ color: l.color.clone().multiplyScalar(l.power), side: THREE.DoubleSide }),
+    );
+    panel.position.set(...l.dir).normalize().multiplyScalar(8);
+    panel.lookAt(0, 0, 0);
+    envScene.add(panel);
+  }
+  const target = pmrem.fromScene(envScene, 0.02);
+  envScene.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+  return target.texture;
+}
+
+let PRESETS = null;
+const rigs = {};
+let sceneSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1);
+
+// construit l'ambiance à la première demande, puis la garde
+function rig(name) {
+  if (rigs[name]) return rigs[name];
+  const def = PRESETS[name];
+  const group = new THREE.Group();
+  const lights = def.lights.map((l) => {
+    const light = new THREE.DirectionalLight(l.color, l.intensity);
+    light.userData.dir = new THREE.Vector3(...l.dir).normalize();
+    if (l.shadow) {
+      light.castShadow = true;
+      light.shadow.mapSize.set(2048, 2048);
+      light.shadow.bias = -0.0004;
+    }
+    group.add(light, light.target);
+    return light;
+  });
+  lightRoot.add(group);
+  rigs[name] = { group, lights, env: buildEnv(def.env) };
+  fitRig(rigs[name]);
+  return rigs[name];
+}
+
+// lumières et cône d'ombre calés sur la sphère englobante de la scène
+function fitRig(r) {
+  const { center, radius } = sceneSphere;
+  for (const light of r.lights) {
+    light.target.position.copy(center);
+    light.position.copy(center).addScaledVector(light.userData.dir, radius * 6);
+    if (!light.castShadow) continue;
+    const cam = light.shadow.camera;
+    const e = radius * 1.35;
+    cam.left = -e; cam.right = e; cam.top = e; cam.bottom = -e;
+    cam.near = radius * 2;
+    cam.far = radius * 12;
+    cam.updateProjectionMatrix();
+    light.shadow.normalBias = radius * 0.012;
+  }
+}
+
+function setPreset(name) {
+  if (!PRESETS[name]) return;
+  state.preset = name;
+  const def = PRESETS[name];
+  const active = rig(name);
+  for (const r of Object.values(rigs)) r.group.visible = r === active;
+  scene.environment = active.env;
+  scene.environmentIntensity = def.envIntensity;
+  for (const slot of Object.values(slots)) {
+    slot.shadow.plane.visible = def.contact > 0 && !!slot.model;
+    slot.shadow.plane.material.opacity = def.contact;
+  }
+  floor.visible = def.floor > 0;
+  floor.material.opacity = def.floor;
+  pressSeg('#seg-light', name);
+  $('#light-desc').textContent = def.desc;
+  requestRender();
+}
+
+/* ── canaux ─────────────────────────────────────────────── */
+// Chaque canal remplace les matériaux par un matériau d'inspection,
+// fabriqué une fois par matériau d'origine et gardé en cache. Les
+// originaux restent rangés et reviennent tels quels sur « Rendu ». Les
+// matériaux three.js suivent le skinning tout seuls : ces vues
+// marchent sur un personnage animé.
+
+const CHANNELS = {
+  final: 'matériaux PBR d\'origine, tels que chargés',
+  albedo: 'couleur de base × facteur, sans lumière',
+  metal: 'canal bleu de la texture metallicRoughness × metalnessFactor, en gris',
+  rough: 'canal vert de la texture metallicRoughness × roughnessFactor, en gris',
+  normal: 'normales en repère caméra, normal map comprise',
+  wire: 'arêtes des triangles sur un fond mat, faces cachées retirées',
+};
+
+// Une donnée (métal, rugosité) s'affiche brute : 0,5 donne un gris
+// moyen. Le canal voulu est lu au fragment, et la conversion sRGB de
+// sortie est retirée pour ne pas éclaircir la mesure.
+function patchDataChannel(shader) {
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <map_fragment>', '#ifdef USE_MAP\n\tdiffuseColor.rgb *= texture2D( map, vMapUv ).CHAN;\n#endif')
+    .replace('#include <alphamap_fragment>', '#ifdef USE_ALPHAMAP\n\tdiffuseColor.a *= texture2D( alphaMap, vAlphaMapUv ).a;\n#endif')
+    .replace('#include <colorspace_fragment>', '');
+}
+
+function dataMaterial(o, kind) {
+  const pbr = !!o.isMeshStandardMaterial;
+  const map = pbr ? (kind === 'metal' ? o.metalnessMap : o.roughnessMap) : null;
+  // un matériau non PBR (unlit) : métal nul, rugosité pleine
+  const factor = pbr ? (kind === 'metal' ? o.metalness : o.roughness) : (kind === 'metal' ? 0 : 1);
+  const m = new THREE.MeshBasicMaterial({
+    map, side: o.side, toneMapped: false,
+    transparent: o.transparent, opacity: o.opacity, alphaTest: o.alphaTest,
+  });
+  m.color.setScalar(factor);
+  // les découpes (cheveux, cils) gardent l'alpha de la couleur de base
+  if (o.map && (o.alphaTest > 0 || o.transparent)) m.alphaMap = o.map;
+  m.defines = { CHAN: kind === 'metal' ? 'b' : 'g' };
+  m.onBeforeCompile = patchDataChannel;
+  return m;
+}
+
+const CHANNEL_MAKERS = {
+  albedo(o) {
+    const m = new THREE.MeshBasicMaterial({
+      map: o.map || null, alphaMap: o.alphaMap || null, vertexColors: !!o.vertexColors,
+      transparent: o.transparent, opacity: o.opacity, alphaTest: o.alphaTest,
+      side: o.side, depthWrite: o.depthWrite, toneMapped: false,
+    });
+    if (o.color) m.color.copy(o.color);
+    return m;
+  },
+  metal: (o) => dataMaterial(o, 'metal'),
+  rough: (o) => dataMaterial(o, 'rough'),
+  normal(o) {
+    const m = new THREE.MeshNormalMaterial({ side: o.side, flatShading: !!o.flatShading });
+    if (o.normalMap) {
+      m.normalMap = o.normalMap;
+      m.normalMapType = o.normalMapType;
+      m.normalScale.copy(o.normalScale);
+    }
+    return m;
+  },
+  // fond mat pour le filaire, repoussé en profondeur pour que les
+  // arêtes passent devant sans scintiller
+  wire: (o) => new THREE.MeshStandardMaterial({
+    color: tint('--panel3'), roughness: 1, metalness: 0,
+    side: o.side, flatShading: !!o.flatShading,
+    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+  }),
+};
+
+// les arêtes, tracées en seconde passe par-dessus le fond mat
+const wireOverlay = new THREE.MeshBasicMaterial({
+  color: tint('--cy'), wireframe: true, transparent: true, opacity: 0.6,
+  depthWrite: false, toneMapped: false,
+});
+
+function channelMaterial(slot, orig) {
+  let byOrig = slot.cache.get(state.channel);
+  if (!byOrig) slot.cache.set(state.channel, (byOrig = new Map()));
+  let m = byOrig.get(orig);
+  if (!m) byOrig.set(orig, (m = CHANNEL_MAKERS[state.channel](orig)));
+  return m;
+}
+
+function applyChannel(slot) {
+  for (const [mesh, orig] of slot.originals) {
+    if (state.channel === 'final') mesh.material = orig;
+    else mesh.material = Array.isArray(orig) ? orig.map((m) => channelMaterial(slot, m)) : channelMaterial(slot, orig);
+  }
+  requestRender();
+}
+
+function setChannel(name) {
+  if (!CHANNELS[name]) return;
+  state.channel = name;
+  Object.values(slots).forEach(applyChannel);
+  pressSeg('#seg-chan', name);
+  $('#chan-desc').textContent = CHANNELS[name];
+}
+
+/* ── les deux voies ─────────────────────────────────────── */
+
+function makeSlot(key) {
+  const group = new THREE.Group();
+  const pivot = new THREE.Group();
+  const shadow = new ContactShadow();
+  group.name = `voie-${key}`;
+  group.add(pivot, shadow.plane);
+  scene.add(group);
+  return {
+    key, group, pivot, shadow,
+    model: null, info: null, stats: null, box: null,
+    mixer: null, clips: [], action: null, skel: null,
+    originals: new Map(),   // maillage → matériau(x) d'origine
+    cache: new Map(),       // canal → (matériau d'origine → matériau d'inspection)
+    shadowDirty: false,
+    loadId: 0,
+  };
+}
+
+const slots = { a: makeSlot('a'), b: makeSlot('b') };
+
+function install(slot, gltf, info) {
+  const root = gltf.scene || gltf.scenes?.[0];
+  if (!root) throw new Error('le fichier ne contient aucune scène');
+  clearSlot(slot);
+  slot.model = root;
+  slot.info = info;
+  slot.pivot.position.set(0, 0, 0);
+  slot.pivot.add(root);
+
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = true;
+    o.receiveShadow = true;
+    o.layers.enable(LAYER_MODEL);
+    // un maillage animé sort de sa boîte de repos : on ne le coupe pas
+    if (o.isSkinnedMesh) o.frustumCulled = false;
+    slot.originals.set(o, o.material);
+  });
+
+  // pieds au sol, centré sur la verticale : A et B se superposent
+  slot.pivot.updateMatrixWorld(true);
+  const raw = new THREE.Box3().setFromObject(root);
+  if (raw.isEmpty()) raw.set(new THREE.Vector3(), new THREE.Vector3());
+  const center = raw.getCenter(new THREE.Vector3());
+  slot.pivot.position.set(-center.x, -raw.min.y, -center.z);
+  slot.pivot.updateMatrixWorld(true);
+  slot.box = raw.clone().translate(slot.pivot.position);
+  slot.stats = measure(root, raw);
+
+  slot.clips = uniqueClips(gltf.animations || []);
+  slot.mixer = slot.clips.length ? new THREE.AnimationMixer(root) : null;
+  if (slot.stats.skinned) addSkeleton(slot);
+
+  slot.shadow.fit(slot.box);
+  slot.shadowDirty = true;
+  applyChannel(slot);
+}
+
+// Comptes de la fiche : triangles, sommets, matériaux, textures, os.
+function measure(root, box) {
+  const materials = new Set();
+  const textures = new Set();
+  const bones = new Set();
+  let tris = 0;
+  let verts = 0;
+  let skinned = false;
+  root.traverse((o) => {
+    if (o.isSkinnedMesh) {
+      skinned = true;
+      o.skeleton.bones.forEach((b) => bones.add(b));
+    }
+    const pos = o.isMesh ? o.geometry.attributes.position : null;
+    if (!pos) return;
+    const copies = o.isInstancedMesh ? o.count : 1;
+    verts += pos.count * copies;
+    tris += Math.floor((o.geometry.index ? o.geometry.index.count : pos.count) / 3) * copies;
+    for (const m of [].concat(o.material)) {
+      materials.add(m);
+      for (const v of Object.values(m)) if (v && v.isTexture) textures.add(v);
+    }
+  });
+  return {
+    tris, verts, skinned,
+    materials: materials.size, textures: textures.size, bones: bones.size,
+    size: box.getSize(new THREE.Vector3()),
+  };
+}
+
+// des noms de clip présents et distincts : la liste s'appuie dessus
+function uniqueClips(list) {
+  const seen = new Map();
+  return list.map((clip, i) => {
+    const base = clip.name || `clip ${i + 1}`;
+    const n = (seen.get(base) || 0) + 1;
+    seen.set(base, n);
+    clip.name = n > 1 ? `${base} (${n})` : base;
+    return clip;
+  });
+}
+
+function addSkeleton(slot) {
+  const helper = new THREE.SkeletonHelper(slot.model);
+  // chaque os : la pointe en acier, l'attache au parent en vert
+  const tip = tint('--cy');
+  const joint = tint('--grn2');
+  const col = helper.geometry.getAttribute('color');
+  for (let i = 0; i < col.count; i += 2) {
+    col.setXYZ(i, tip.r, tip.g, tip.b);
+    col.setXYZ(i + 1, joint.r, joint.g, joint.b);
+  }
+  helper.frustumCulled = false;
+  helper.visible = false;
+  scene.add(helper);
+  slot.skel = helper;
+}
+
+// Libère ce qu'un modèle occupe sur la carte : géométries, matériaux,
+// textures, squelettes. Les images décodées en ImageBitmap sont fermées
+// aussi, sinon elles attendent le ramasse-miettes.
+function disposeTree(root, materials = new Set()) {
+  const textures = new Set();
+  root.traverse((o) => {
+    o.geometry?.dispose();
+    if (o.isSkinnedMesh) o.skeleton?.dispose();
+    if (o.material) [].concat(o.material).forEach((m) => materials.add(m));
+  });
+  for (const m of materials) {
+    for (const v of Object.values(m)) if (v && v.isTexture) textures.add(v);
+    m.dispose();
+  }
+  for (const t of textures) {
+    t.dispose();
+    const img = t.source?.data;
+    if (img && typeof img.close === 'function') img.close();
+  }
+}
+
+function clearSlot(slot) {
+  if (!slot.model) return;
+  if (slot.action) slot.action.stop();
+  if (slot.mixer) {
+    slot.mixer.stopAllAction();
+    slot.mixer.uncacheRoot(slot.model);
+  }
+  if (slot.skel) {
+    scene.remove(slot.skel);
+    slot.skel.dispose();
+  }
+  slot.pivot.remove(slot.model);
+  const materials = new Set();
+  for (const orig of slot.originals.values()) [].concat(orig).forEach((m) => materials.add(m));
+  for (const byOrig of slot.cache.values()) byOrig.forEach((m) => materials.add(m));
+  disposeTree(slot.model, materials);
+  slot.originals.clear();
+  slot.cache.clear();
+  Object.assign(slot, {
+    model: null, info: null, stats: null, box: null,
+    mixer: null, clips: [], action: null, skel: null, shadowDirty: false,
+  });
+}
+
+/* ── lecture des fichiers ───────────────────────────────── */
+
+let draco = null;
+let ktx2 = null;
+
+// Les décodeurs ne se chargent que si un fichier est compressé ; leurs
+// chemins suivent la carte d'imports, donc le même CDN.
+function makeLoader(manager) {
+  draco ??= new DRACOLoader().setDecoderPath(import.meta.resolve('three/addons/libs/draco/gltf/'));
+  ktx2 ??= new KTX2Loader().setTranscoderPath(import.meta.resolve('three/addons/libs/basis/')).detectSupport(renderer);
+  return new GLTFLoader(manager).setDRACOLoader(draco).setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
+}
+
+const baseName = (url) => decodeURIComponent(url.split(/[?#]/)[0].split('/').pop() || '');
+
+// les fichiers externes qu'un .gltf réclame (tampons et images)
+function externalUris(buffer) {
+  const json = JSON.parse(new TextDecoder().decode(buffer));
+  return [...(json.buffers || []), ...(json.images || [])]
+    .map((x) => x.uri)
+    .filter((u) => u && !u.startsWith('data:'))
+    .map(baseName);
+}
+
+// Un fichier local : lu en mémoire, sans réseau, donc aussi depuis
+// file://. Un .gltf retrouve ses .bin et ses images parmi les fichiers
+// déposés avec lui, par leur nom.
+async function readLocal(file, extras) {
+  const buffer = await file.arrayBuffer();
+  const byName = new Map(extras.map((f) => [f.name, f]));
+  if (/\.gltf$/i.test(file.name)) {
+    const missing = externalUris(buffer).filter((n) => !byName.has(n));
+    if (missing.length) throw new Error(`fichiers manquants : ${missing.join(', ')} — dépose-les avec le .gltf`);
+  }
+  const urls = [];
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier((url) => {
+    const f = byName.get(baseName(url));
+    if (!f) return url;
+    const blob = URL.createObjectURL(f);
+    urls.push(blob);
+    return blob;
+  });
+  try {
+    return await makeLoader(manager).parseAsync(buffer, '');
+  } finally {
+    urls.forEach((u) => URL.revokeObjectURL(u));
+  }
+}
+
+function reason(err) {
+  const msg = String(err?.message || err || 'erreur inconnue');
+  if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
+    return location.protocol === 'file:'
+      ? 'lecture réseau impossible depuis file:// — sers la page en http, ou glisse le fichier'
+      : 'fichier injoignable (adresse, réseau ou CORS)';
+  }
+  if (/Unexpected token|JSON|Unexpected end/i.test(msg)) return 'ce n\'est pas un glTF lisible';
+  return msg.replace(/^THREE\.GLTFLoader: /, '');
+}
+
+async function loadInto(key, src) {
+  const slot = slots[key];
+  const id = ++slot.loadId;
+  const tag = key.toUpperCase();
+  let bytes = src.file?.size || 0;
+  setPill('work', `lecture ${tag} · ${src.name}`);
+  try {
+    const gltf = src.file
+      ? await readLocal(src.file, src.extras || [])
+      : await makeLoader(new THREE.LoadingManager()).loadAsync(src.url, (e) => {
+        bytes = e.total || e.loaded;
+        if (e.total) setPill('work', `lecture ${tag} · ${Math.round((e.loaded / e.total) * 100)} %`);
+      });
+    // une lecture plus récente a pris la voie entre-temps
+    if (id !== slot.loadId) {
+      if (gltf.scene) disposeTree(gltf.scene);
+      return;
+    }
+    install(slot, gltf, { name: src.name, bytes, from: src.url ? 'url' : 'disque' });
+    afterChange(slot);
+  } catch (err) {
+    if (id !== slot.loadId) return;
+    console.warn(`viewer — lecture ${tag}`, err);
+    setPill('err', `lecture ${tag} impossible`);
+    toast(`${tag} · ${src.name} — ${reason(err)}`, 6500);
+  }
+}
+
+// Répartit un dépôt : un modèle va dans la voie visée (A par défaut),
+// deux modèles remplissent A puis B. Les autres fichiers accompagnent
+// un .gltf.
+function takeFiles(list, target = 'auto') {
+  const files = [...list];
+  const models = files.filter((f) => /\.(glb|gltf)$/i.test(f.name));
+  if (!models.length) {
+    toast('Aucun .glb ni .gltf dans ce dépôt');
+    return;
+  }
+  const extras = files.filter((f) => !models.includes(f));
+  const keys = target === 'auto' ? ['a', 'b'].slice(0, Math.min(models.length, 2)) : [target];
+  if (models.length > keys.length) toast(`${models.length} modèles déposés : seuls les ${keys.length === 2 ? 'deux premiers' : 'premier'} sont lus`);
+  keys.forEach((k, i) => loadInto(k, { name: models[i].name, file: models[i], extras }));
+}
+
+function loadFromUrl(key, raw) {
+  let url;
+  try {
+    url = new URL(raw, location.href).href;
+  } catch {
+    toast(`${key.toUpperCase()} · adresse illisible : ${raw}`);
+    return;
+  }
+  if (url.startsWith('file:')) {
+    toast(`${key.toUpperCase()} · ?src= demande une page servie en http — sur disque, glisse le fichier`, 6500);
+    return;
+  }
+  loadInto(key, { name: baseName(url) || url, url });
+}
+
+/* ── cadrage ────────────────────────────────────────────── */
+
+function unionBox() {
+  const box = new THREE.Box3();
+  for (const slot of Object.values(slots)) if (slot.box) box.union(slot.box);
+  return box;
+}
+
+// Après un chargement : silhouette à gauche des modèles, lumières et
+// sol recalés sur la sphère englobante de la scène.
+function refitScene() {
+  const box = unionBox();
+  const gap = box.isEmpty() ? 0 : Math.max(0.12, (box.max.x - box.min.x) * 0.15);
+  silhouette.position.set(box.isEmpty() ? 0 : Math.min(box.min.x, 0) - SIL_HALF - gap, 0, 0);
+  sceneSphere = (box.isEmpty() ? silhouetteBox() : box).getBoundingSphere(new THREE.Sphere());
+  sceneSphere.radius = Math.max(sceneSphere.radius, 0.05);
+  Object.values(rigs).forEach(fitRig);
+  floor.position.set(sceneSphere.center.x, 0, sceneSphere.center.z);
+  floor.scale.setScalar(Math.max(1.5, sceneSphere.radius * 3));
+  refreshSilhouette();
+}
+
+// la silhouette n'a de sens qu'à côté d'un modèle
+function refreshSilhouette() {
+  silhouette.visible = state.silhouette && !!(slots.a.model || slots.b.model);
+}
+
+function viewAspect() {
+  return state.mode === 'side' ? view.w / 2 / view.h : view.w / view.h;
+}
+
+function frameAll() {
+  const box = unionBox();
+  if (box.isEmpty() || state.silhouette) box.union(silhouetteBox());
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  const vfov = THREE.MathUtils.degToRad(camera.fov);
+  const hfov = 2 * Math.atan(Math.tan(vfov / 2) * viewAspect());
+  const dist = (sphere.radius / Math.sin(Math.min(vfov, hfov) / 2)) * 1.02;
+  const dir = new THREE.Vector3(0.42, 0.22, 1).normalize();
+  camera.position.copy(sphere.center).addScaledVector(dir, dist);
+  camera.near = Math.max(dist / 200, 0.001);
+  camera.far = dist * 60;
+  camera.updateProjectionMatrix();
+  controls.target.copy(sphere.center);
+  controls.minDistance = sphere.radius * 0.05;
+  controls.maxDistance = dist * 12;
+  controls.update();
+  view.userMoved = false;
+  requestRender();
+}
+
+/* ── comparaison A/B ────────────────────────────────────── */
+
+const MODES = {
+  a: 'A seul',
+  b: 'B seul',
+  side: 'côte à côte',
+  wipe: 'volet',
+};
+
+function setMode(mode) {
+  if (!MODES[mode]) return;
+  const aspectChanges = (mode === 'side') !== (state.mode === 'side');
+  state.mode = mode;
+  monitor.classList.remove('mode-a', 'mode-b', 'mode-side', 'mode-wipe');
+  monitor.classList.add(`mode-${mode}`);
+  pressSeg('#seg-mode', mode);
+  $('#mode-note').textContent = MODES[mode];
+  // la demi-largeur change le cadre : on recadre si l'utilisateur n'a pas bougé
+  if (aspectChanges && !view.userMoved) frameAll();
+  refreshReadout();
+  requestRender();
+}
+
+const handle = $('#handle');
+
+function setSplit(u) {
+  state.split = clamp(u, 0, 1);
+  monitor.style.setProperty('--split', `${(state.split * 100).toFixed(2)}%`);
+  handle.setAttribute('aria-valuenow', String(Math.round(state.split * 100)));
+  requestRender();
+}
+
+/* ── animation ──────────────────────────────────────────── */
+// Un clip choisi par son nom joue dans chaque voie qui le porte, sur
+// la même horloge : deux versions d'un même rig se comparent en
+// mouvement. Le temps est tenu ici, pas par les mixers.
+
+const anim = {
+  name: null,
+  time: 0,
+  duration: 0,
+  fps: 30,
+  playing: false,
+  loop: true,
+  speed: 1,
+  view: [0, 0],   // fenêtre visible de la timeline, en secondes
+};
+
+const CONTROL_POSES = [
+  { label: 'Bras bas', re: /down|bas|rest|repos|side|long/i },
+  { label: 'Bras levés', re: /up|lev|haut|raise/i },
+  { label: 'Accroupi', re: /squat|accroup|crouch/i },
+  { label: 'Torsion', re: /twist|tors|rot/i },
+  { label: 'Pas de marche', re: /walk|step|pas|march/i },
+];
+const isControl = (name) => /^control\//i.test(name);
+
+// cadence du clip, déduite de l'écart le plus serré entre deux clés
+function clipFps(clip) {
+  let step = Infinity;
+  for (const track of clip.tracks) {
+    const t = track.times;
+    for (let i = 1; i < t.length; i++) {
+      const d = t[i] - t[i - 1];
+      if (d > 1e-4 && d < step) step = d;
+    }
+  }
+  const fps = 1 / step;
+  if (!Number.isFinite(fps) || fps < 10) return 30;   // clés éparses : on compte à 30 i/s
+  return [12, 15, 24, 25, 30, 48, 50, 60, 90, 120].find((r) => Math.abs(r - fps) < 0.6) ?? Math.round(fps);
+}
+
+function clipNames() {
+  const names = [];
+  for (const slot of Object.values(slots)) {
+    for (const c of slot.clips) if (!names.includes(c.name)) names.push(c.name);
+  }
+  return names;
+}
+
+// Choisit un clip dans les deux voies. Un clip ordinaire part en
+// lecture ; une pose de contrôle se montre atteinte, sur sa dernière
+// image, à l'arrêt. null ramène la pose de repos.
+function selectClip(name, { pose = isControl(name || '') } = {}) {
+  for (const slot of Object.values(slots)) {
+    if (slot.action) slot.action.stop();
+    slot.action = null;
+    slot.shadowDirty = true;
+  }
+  let duration = 0;
+  let fps = 0;
+  for (const slot of Object.values(slots)) {
+    const clip = name && slot.clips.find((c) => c.name === name);
+    if (!clip || !slot.mixer) continue;
+    const action = slot.mixer.clipAction(clip);
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.play();
+    slot.action = action;
+    duration = Math.max(duration, clip.duration);
+    fps = Math.max(fps, clipFps(clip));
+  }
+  anim.name = duration > 0 || Object.values(slots).some((s) => s.action) ? name : null;
+  anim.duration = duration;
+  anim.fps = fps || 30;
+  anim.view = [0, duration];
+  anim.time = pose ? duration : 0;
+  anim.playing = !pose && duration > 0;
+  applyTime();
+  refreshTransport();
+  refreshClips();
+}
+
+// Après un chargement : le clip courant est gardé s'il existe encore,
+// sinon le modèle se montre dans sa pose de repos, telle qu'exportée.
+function syncClip() {
+  const keep = anim.name && clipNames().includes(anim.name);
+  selectClip(keep ? anim.name : null, { pose: keep && !anim.playing && anim.time === anim.duration && isControl(anim.name) });
+}
+
+// pose chaque voie à l'instant courant
+function applyTime() {
+  for (const slot of Object.values(slots)) {
+    const a = slot.action;
+    if (!a) continue;
+    a.enabled = true;
+    a.paused = false;
+    a.time = Math.min(anim.time, a.getClip().duration);
+    slot.mixer.update(0);
+    slot.shadowDirty = true;
+  }
+  refreshTimeline();
+  requestRender();
+}
+
+const snap = (t) => Math.round(t * anim.fps) / anim.fps;
+
+// la fenêtre zoomée suit la tête de lecture quand elle en sort
+function followPlayhead() {
+  const [v0, v1] = anim.view;
+  const span = v1 - v0;
+  if (anim.time >= v0 && anim.time <= v1) return;
+  const start = clamp(anim.time - span * 0.1, 0, Math.max(anim.duration - span, 0));
+  anim.view = [start, start + span];
+}
+
+function setTime(t) {
+  anim.time = clamp(t, 0, anim.duration);
+  followPlayhead();
+  applyTime();
+}
+
+function stepFrames(n) {
+  if (!(anim.duration > 0)) return;
+  anim.playing = false;
+  const last = Math.round(anim.duration * anim.fps);
+  let f = Math.round(anim.time * anim.fps) + n;
+  if (anim.loop) f = ((f % (last + 1)) + last + 1) % (last + 1);
+  setTime(clamp(f, 0, last) / anim.fps);
+  refreshTransport();
+}
+
+function togglePlay() {
+  if (!(anim.duration > 0)) return;
+  if (!anim.playing && anim.time >= anim.duration) anim.time = 0;   // relancer depuis le début
+  anim.playing = !anim.playing;
+  refreshTransport();
+}
+
+// avance l'horloge ; appelée à chaque image de la boucle
+function advance(dt) {
+  if (!anim.playing || !(anim.duration > 0)) return;
+  let t = anim.time + dt * anim.speed;
+  if (t >= anim.duration) {
+    if (anim.loop) t %= anim.duration;
+    else {
+      t = anim.duration;
+      anim.playing = false;
+      refreshTransport();
+    }
+  }
+  anim.time = t;
+  followPlayhead();
+  applyTime();
+}
+
+// Échelle du temps : la fenêtre visible se resserre ou s'ouvre autour
+// de la tête de lecture, qui garde sa place à l'écran. Huit images au
+// plus serré, le clip entier au plus large.
+function zoomTimeline(delta) {
+  if (!(anim.duration > 0)) return;
+  const [v0, v1] = anim.view;
+  const u = clamp((anim.time - v0) / (v1 - v0), 0, 1);
+  const pivot = anim.time;
+  const minSpan = Math.min(anim.duration, 8 / anim.fps);
+  const span = clamp((v1 - v0) * Math.exp(clamp(delta, -240, 240) * 0.0025), minSpan, anim.duration);
+  const start = clamp(pivot - u * span, 0, anim.duration - span);
+  anim.view = [start, start + span];
+  refreshTimeline();
+}
+
+// Molette seule : une image par cran. Les pavés tactiles envoient une
+// pluie de petits pas, cumulés jusqu'à valoir un cran.
+let wheelAcc = 0;
+function wheelStep(delta) {
+  if (Math.abs(delta) >= 40) {
+    wheelAcc = 0;
+    stepFrames(Math.sign(delta));
+    return;
+  }
+  wheelAcc += delta;
+  if (Math.abs(wheelAcc) >= 40) {
+    stepFrames(Math.sign(wheelAcc));
+    wheelAcc = 0;
+  }
+}
+
+/* ── affichage ──────────────────────────────────────────── */
+
+const ICON_PLAY = 'M4 2.5v11l9-5.5z';
+const ICON_PAUSE = 'M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z';
+const RULER_STEPS = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500];
+
+function pressSeg(sel, value) {
+  for (const b of $$(`${sel} .tb`)) {
+    const on = b.dataset.v === String(value);
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  }
+}
+
+function setPill(cls, text) {
+  $('#pill').className = cls ? `pill ${cls}` : 'pill';
+  $('#pill-text').textContent = text;
+}
+
+function refreshPill() {
+  const loaded = ['a', 'b'].filter((k) => slots[k].model).map((k) => k.toUpperCase());
+  if (!loaded.length) setPill('', 'aucun modèle');
+  else setPill('on', `${loaded.join(' · ')} ${loaded.length > 1 ? 'chargés' : 'chargé'}`);
+}
+
+function refreshSlots() {
+  for (const slot of Object.values(slots)) {
+    const k = slot.key;
+    const name = slot.info?.name;
+    $(`#tag-${k}`).textContent = name || 'vide';
+    $(`#empty-${k}`).hidden = !!slot.model;
+    $(`#drop-${k}`).classList.toggle('full', !!slot.model);
+    $(`#drop-${k}-name`).textContent = name ? `${name} · ${fmtBytes(slot.info.bytes)}` : 'Dépose un .glb ici';
+    $(`#clear-${k}`).hidden = !slot.model;
+  }
+}
+
+function refreshMeta() {
+  for (const slot of Object.values(slots)) {
+    const k = slot.key;
+    $(`#meta-${k}`).hidden = !slot.model;
+    if (!slot.model) continue;
+    const s = slot.stats;
+    $(`#meta-${k}-src`).textContent = `fiche · ${slot.info.from}`;
+    const rows = [
+      ['fichier', slot.info.name],
+      ['poids', fmtBytes(slot.info.bytes)],
+      ['hauteur', fmtM(s.size.y), 'big'],
+      ['emprise', `${fmtDec(s.size.x)} × ${fmtDec(s.size.z)} m`],
+      ['triangles', fmtInt(s.tris)],
+      ['sommets', fmtInt(s.verts)],
+      ['matériaux', fmtInt(s.materials)],
+      ['textures', fmtInt(s.textures)],
+      ['skinné', s.skinned ? 'oui' : 'non'],
+      ['os', fmtInt(s.bones)],
+      ['clips', slot.clips.length ? `${slot.clips.length} — ${slot.clips.map((c) => c.name).join(' · ')}` : 'aucun'],
+    ];
+    const dl = $(`#kv-${k}`);
+    dl.replaceChildren();
+    for (const [key, value, cls] of rows) dl.append(el('dt', null, key), el('dd', cls, value));
+  }
+}
+
+function refreshReadout() {
+  const keys = state.mode === 'a' || state.mode === 'b' ? [state.mode] : ['a', 'b'];
+  const parts = keys
+    .filter((k) => slots[k].box)
+    .map((k) => `${keys.length > 1 ? `${k.toUpperCase()} ` : ''}${fmtM(slots[k].box.max.y - slots[k].box.min.y)}`);
+  const out = $('#readout');
+  out.hidden = !parts.length;
+  out.textContent = parts.join(' · ');
+}
+
+// Règle d'échelle : une longueur ronde, mesurée à la distance de la cible.
+let rulerKey = '';
+function refreshRuler() {
+  const dist = camera.position.distanceTo(controls.target);
+  const pxPerM = view.h / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * dist);
+  const len = RULER_STEPS.find((s) => s * pxPerM >= 56) ?? RULER_STEPS[RULER_STEPS.length - 1];
+  const px = Math.round(len * pxPerM);
+  const key = `${len}|${px}`;
+  if (key === rulerKey) return;
+  rulerKey = key;
+  $('#ruler-bar').style.width = `${px}px`;
+  $('#ruler-text').textContent = len >= 1 ? `${fmtInt(len)} m` : len >= 0.01 ? `${Math.round(len * 100)} cm` : `${Math.round(len * 1000)} mm`;
+}
+
+function clipRow(name, label, detail) {
+  const li = el('li');
+  const b = el('button', name ? 'clip' : 'clip rest');
+  b.type = 'button';
+  b.classList.toggle('on', anim.name === name);
+  b.title = name || 'pose de repos du fichier';
+  b.append(el('span', 'nm', label), el('span', 'd', detail));
+  b.addEventListener('click', () => selectClip(name));
+  li.append(b);
+  return li;
+}
+
+function clipDetail(name) {
+  const who = ['a', 'b'].filter((k) => slots[k].clips.some((c) => c.name === name));
+  const d = Math.max(...who.map((k) => slots[k].clips.find((c) => c.name === name).duration));
+  const lanes = slots.a.model && slots.b.model ? `${who.map((k) => k.toUpperCase()).join('·')} · ` : '';
+  return `${lanes}${fmtDec(d)} s`;
+}
+
+function refreshClips() {
+  const names = clipNames();
+  const list = $('#clips');
+  list.replaceChildren();
+  $('#clip-count').textContent = names.length ? `${names.length} clip${names.length > 1 ? 's' : ''}` : 'aucun clip';
+  if (!names.length) {
+    list.append(el('li', 'none', slots.a.model || slots.b.model ? 'ce fichier ne porte aucun clip' : 'charge un .glb animé'));
+  } else {
+    list.append(clipRow(null, 'pose de repos', ''));
+    for (const n of names.filter((x) => !isControl(x))) list.append(clipRow(n, n, clipDetail(n)));
+  }
+  refreshPoses(names.filter(isControl));
+}
+
+// La rangée des cinq poses : présentes, elles s'allument ; absentes,
+// elles restent grisées — un rig se valide sur les cinq.
+function refreshPoses(controlNames) {
+  const box = $('#poses');
+  box.replaceChildren();
+  const free = [...controlNames];
+  const picks = CONTROL_POSES.map((p) => {
+    const i = free.findIndex((n) => p.re.test(n.slice(8)));
+    return i < 0 ? null : free.splice(i, 1)[0];
+  });
+  CONTROL_POSES.forEach((p, i) => box.append(poseButton(p.label, picks[i])));
+  free.forEach((n) => box.append(poseButton(n.slice(8), n)));   // noms inconnus, gardés tels quels
+  $('#pose-count').textContent = `${picks.filter(Boolean).length}/5`;
+}
+
+function poseButton(label, name) {
+  const b = el('button', 'tb sm', label);
+  b.type = 'button';
+  const on = !!name && anim.name === name;
+  b.classList.toggle('on', on);
+  b.classList.toggle('ghost', !on);
+  if (!name) {
+    b.disabled = true;
+    b.title = 'absente du fichier';
+    return b;
+  }
+  b.title = name;
+  b.addEventListener('click', () => selectClip(name));
+  return b;
+}
+
+function timecode(t, fps) {
+  const total = Math.round(t * fps);
+  const s = Math.floor(total / fps);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(Math.floor(s / 60))}:${p(s % 60)}:${p(total % fps)}`;
+}
+
+function refreshTransport() {
+  const has = anim.duration > 0;
+  for (const id of ['#play', '#prev', '#next', '#tl-range']) $(id).disabled = !has;
+  $('#play-icon').setAttribute('d', anim.playing ? ICON_PAUSE : ICON_PLAY);
+  $('#play').setAttribute('aria-label', anim.playing ? 'pause' : 'lecture');
+  const loop = $('#loop');
+  loop.textContent = anim.loop ? 'on' : 'off';
+  loop.classList.toggle('on', anim.loop);
+  loop.classList.toggle('ghost', !anim.loop);
+  loop.setAttribute('aria-pressed', String(anim.loop));
+  refreshTimeline();
+}
+
+function refreshTimeline() {
+  const has = anim.duration > 0;
+  const [v0, v1] = anim.view;
+  const span = Math.max(v1 - v0, 1e-6);
+  const u = has ? clamp((anim.time - v0) / span, 0, 1) : 0;
+  const frame = (t) => String(Math.round(t * anim.fps));
+  $('#tl-range').value = String(Math.round(u * 1000));
+  $('#tl-fill').style.width = `${u * 100}%`;
+  $('#tl-start').textContent = has ? frame(v0) : '0';
+  $('#tl-end').textContent = has ? frame(v1) : '0';
+  const zoom = has ? anim.duration / span : 1;
+  $('#tl-mid').textContent = zoom > 1.01
+    ? `échelle ×${fmtDec(zoom, 1)} · double-clic : tout le clip`
+    : 'molette : ±1 image · alt + molette : échelle du temps';
+  $('#tc-text').textContent = has ? timecode(anim.time, anim.fps) : '--:--:--';
+  $('#tc-fps').textContent = `${anim.fps} i/s`;
+  $('#frame-no').textContent = has ? `${frame(anim.time)} / ${frame(anim.duration)}` : '— / —';
+  refreshTicks();
+}
+
+// une marque par image, ou par paquet d'images quand elles se serrent
+function refreshTicks() {
+  const ticks = $('#tl-ticks');
+  if (!(anim.duration > 0)) {
+    ticks.style.removeProperty('--tick');
+    ticks.style.removeProperty('--tick-off');
+    return;
+  }
+  const [v0, v1] = anim.view;
+  const pxPerFrame = view.ticks / ((v1 - v0) * anim.fps);
+  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800].find((s) => s * pxPerFrame >= 7) ?? 3600;
+  const first = Math.ceil((v0 * anim.fps) / step) * step;
+  ticks.style.setProperty('--tick', `${(step * pxPerFrame).toFixed(3)}px`);
+  ticks.style.setProperty('--tick-off', `${((first - v0 * anim.fps) * pxPerFrame).toFixed(3)}px`);
+}
+
+// après un chargement ou un vidage : tout ce qui dépend des voies
+function afterChange(slot) {
+  if (slot?.key === 'b' && slot.model && state.mode === 'a') setMode('side');
+  refitScene();
+  setPreset(state.preset);
+  syncClip();
+  frameAll();
+  refreshSlots();
+  refreshMeta();
+  refreshReadout();
+  refreshPill();
+}
+
+/* ── câblage ────────────────────────────────────────────── */
+
+function wireSeg(sel, fn) {
+  $(sel).addEventListener('click', (e) => {
+    const b = e.target.closest('.tb[data-v]');
+    if (b && !b.disabled) fn(b.dataset.v);
+  });
+}
+
+function wireToggle(sel, key, apply) {
+  const b = $(sel);
+  const paint = () => {
+    b.classList.toggle('on', state[key]);
+    b.classList.toggle('ghost', !state[key]);
+    b.setAttribute('aria-pressed', String(state[key]));
+  };
+  b.addEventListener('click', () => {
+    state[key] = !state[key];
+    paint();
+    apply();
+    requestRender();
+  });
+  paint();
+  apply();
+}
+
+function wireUi() {
+  wireSeg('#seg-mode', setMode);
+  wireSeg('#seg-light', setPreset);
+  wireSeg('#seg-chan', setChannel);
+  wireSeg('#seg-speed', (v) => {
+    anim.speed = Number(v);
+    pressSeg('#seg-speed', v);
+  });
+
+  wireToggle('#tg-grid', 'grid', () => { grid.visible = state.grid; });
+  wireToggle('#tg-sil', 'silhouette', refreshSilhouette);
+  wireToggle('#tg-skel', 'skeleton', () => {});
+  $('#fit-btn').addEventListener('click', frameAll);
+
+  // fichiers : le bouton orange remplit A (ou A et B), chaque rangée sa voie
+  const input = $('#file-input');
+  let pickTarget = 'auto';
+  const pick = (target) => { pickTarget = target; input.click(); };
+  $('#open-btn').addEventListener('click', () => pick('auto'));
+  for (const row of $$('.slot[data-slot]')) {
+    row.addEventListener('click', () => pick(row.dataset.slot));
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(row.dataset.slot); }
+    });
+  }
+  input.addEventListener('change', () => {
+    if (input.files.length) takeFiles(input.files, pickTarget);
+    input.value = '';
+    pickTarget = 'auto';
+  });
+  for (const k of ['a', 'b']) {
+    $(`#clear-${k}`).addEventListener('click', () => {
+      slots[k].loadId++;
+      clearSlot(slots[k]);
+      if (k === 'b' && state.mode !== 'a') setMode('a');
+      afterChange(null);
+    });
+  }
+
+  wireDrop();
+  wireHandle();
+  wireTransport();
+  wireKeys();
+}
+
+// Glisser-déposer n'importe où. Sur le moniteur en comparaison, le
+// côté visé choisit la voie ; ailleurs, un fichier va dans A.
+function wireDrop() {
+  let depth = 0;
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  const targetOf = (e) => {
+    const row = e.target.closest?.('.slot[data-slot]');
+    if (row) return row.dataset.slot;
+    const r = monitor.getBoundingClientRect();
+    const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (!inside) return 'auto';
+    if (state.mode === 'b') return 'b';
+    if (state.mode === 'side' || state.mode === 'wipe') {
+      const cut = state.mode === 'side' ? 0.5 : state.split;
+      return (e.clientX - r.left) / r.width > cut ? 'b' : 'a';
+    }
+    return 'auto';
+  };
+  const mark = (t) => {
+    const lane = t === 'b' ? 'b' : 'a';
+    for (const l of $$('.monitor .layer')) l.classList.toggle('over', l.classList.contains(lane));
+    for (const r of $$('.slot[data-slot]')) r.classList.toggle('over', r.dataset.slot === lane);
+  };
+  const end = () => {
+    depth = 0;
+    document.body.classList.remove('dragging');
+    for (const n of $$('.over')) n.classList.remove('over');
+  };
+  window.addEventListener('dragenter', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth++;
+    document.body.classList.add('dragging');
+  });
+  window.addEventListener('dragover', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    mark(targetOf(e));
+  });
+  window.addEventListener('dragleave', () => { if (--depth <= 0) end(); });
+  window.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    const target = targetOf(e);
+    end();
+    takeFiles(e.dataTransfer.files, target);
+  });
+}
+
+function wireHandle() {
+  let dragging = false;
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    dragging = true;
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const r = monitor.getBoundingClientRect();
+    setSplit((e.clientX - r.left) / r.width);
+  });
+  const stop = () => { dragging = false; };
+  handle.addEventListener('pointerup', stop);
+  handle.addEventListener('pointercancel', stop);
+  handle.addEventListener('keydown', (e) => {
+    const d = { ArrowLeft: -0.02, ArrowRight: 0.02 }[e.key];
+    if (d) {
+      e.preventDefault();
+      setSplit(state.split + d);
+    }
+  });
+}
+
+function wireTransport() {
+  $('#play').addEventListener('click', togglePlay);
+  $('#prev').addEventListener('click', () => stepFrames(-1));
+  $('#next').addEventListener('click', () => stepFrames(1));
+  $('#loop').addEventListener('click', () => {
+    anim.loop = !anim.loop;
+    refreshTransport();
+  });
+
+  // la réglette : on suspend la lecture le temps de la glisser
+  const range = $('#tl-range');
+  let resume = false;
+  range.addEventListener('pointerdown', () => {
+    resume = anim.playing;
+    anim.playing = false;
+    refreshTransport();
+  });
+  range.addEventListener('input', () => {
+    const [v0, v1] = anim.view;
+    setTime(snap(v0 + (Number(range.value) / 1000) * (v1 - v0)));
+  });
+  range.addEventListener('change', () => {
+    if (!resume) return;
+    resume = false;
+    anim.playing = true;
+    refreshTransport();
+  });
+
+  // conventions du brief §11.3 : molette = image par image,
+  // alt + molette = échelle du temps
+  const timeline = $('#timeline');
+  timeline.addEventListener('wheel', (e) => {
+    if (!(anim.duration > 0)) return;
+    e.preventDefault();
+    const scale = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? 400 : 1;
+    const delta = (Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * scale;
+    if (e.altKey) zoomTimeline(delta);
+    else wheelStep(delta);
+  }, { passive: false });
+  timeline.addEventListener('dblclick', () => {
+    anim.view = [0, anim.duration];
+    refreshTimeline();
+  });
+}
+
+function wireKeys() {
+  window.addEventListener('keydown', (e) => {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    // les champs et les boutons gardent leurs touches
+    if (e.target !== document.body && e.target !== canvas) return;
+    if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); stepFrames(-1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); stepFrames(1); }
+    else if (e.key === 'f' || e.key === 'F') frameAll();
+  });
+}
+
+/* ── boucle de rendu ────────────────────────────────────── */
+// On ne dessine que si quelque chose a bougé : caméra, lecture,
+// réglage, chargement. Au repos, la carte ne travaille pas.
+
+function resize() {
+  const r = monitor.getBoundingClientRect();
+  view.w = Math.max(1, Math.round(r.width));
+  view.h = Math.max(1, Math.round(r.height));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(view.w, view.h, false);
+  view.ticks = $('#tl-ticks').clientWidth || 1;
+  refreshTicks();
+  requestRender();
+}
+
+function setAspect(aspect) {
+  if (camera.aspect === aspect) return;
+  camera.aspect = aspect;
+  camera.updateProjectionMatrix();
+}
+
+function showOnly(slot) {
+  for (const s of Object.values(slots)) {
+    s.group.visible = s === slot;
+    if (s.skel) s.skel.visible = s === slot && state.skeleton;
+  }
+}
+
+// seconde passe du filaire : les maillages seuls, arêtes par-dessus
+function drawWire() {
+  const mask = camera.layers.mask;
+  camera.layers.set(LAYER_MODEL);
+  scene.overrideMaterial = wireOverlay;
+  renderer.autoClear = false;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.render(scene, camera);
+  renderer.shadowMap.autoUpdate = true;
+  renderer.autoClear = true;
+  scene.overrideMaterial = null;
+  camera.layers.mask = mask;
+}
+
+// une voie dans un rectangle du canevas (repère en bas à gauche)
+function pass(slot, viewport, scissor) {
+  showOnly(slot);
+  if (slot.model && slot.shadowDirty && PRESETS[state.preset].contact > 0) {
+    slot.shadow.render(scene);
+    slot.shadowDirty = false;
+  }
+  renderer.setViewport(...viewport);
+  if (scissor) renderer.setScissor(...scissor);
+  renderer.setScissorTest(!!scissor);
+  renderer.render(scene, camera);
+  if (state.channel === 'wire' && slot.model) drawWire();
+}
+
+function drawFrame() {
+  const { w, h } = view;
+  // la silhouette se tourne vers la caméra, autour de la verticale
+  silhouette.rotation.y = Math.atan2(camera.position.x - silhouette.position.x, camera.position.z - silhouette.position.z);
+  grid.material.uniforms.uFade.value = Math.max(8, camera.position.distanceTo(controls.target) * 3);
+  refreshRuler();
+
+  if (state.mode === 'side') {
+    const half = Math.floor(w / 2);
+    setAspect(half / h);
+    pass(slots.a, [0, 0, half, h], [0, 0, half, h]);
+    pass(slots.b, [half, 0, w - half, h], [half, 0, w - half, h]);
+  } else if (state.mode === 'wipe') {
+    const x = Math.round(w * state.split);
+    setAspect(w / h);
+    pass(slots.a, [0, 0, w, h], [0, 0, x, h]);
+    pass(slots.b, [0, 0, w, h], [x, 0, w - x, h]);
+  } else {
+    setAspect(w / h);
+    pass(slots[state.mode], [0, 0, w, h], null);
+  }
+  renderer.setScissorTest(false);
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min((now - last) / 1000, 0.1);
+  last = now;
+  controls.update();
+  advance(dt);
+  if (!needsRender) return;
+  needsRender = false;
+  drawFrame();
+}
+
+/* ── démarrage ──────────────────────────────────────────── */
+
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  toast('Contexte WebGL perdu — recharge la page', 8000);
+});
+
+drawFavicon();
+PRESETS = definePresets();
+wireUi();
+setPreset('studio');
+setChannel('final');
+setSplit(0.5);
+refitScene();
+refreshSlots();
+refreshClips();
+refreshTransport();
+new ResizeObserver(resize).observe(monitor);
+resize();
+frameAll();
+renderer.setAnimationLoop(loop);
+
+// Servie en http : ?src=<url> pour A, ?b=<url> pour B, ?mode=a|b|side|wipe.
+const params = new URLSearchParams(location.search);
+if (params.get('src')) loadFromUrl('a', params.get('src'));
+if (params.get('b')) loadFromUrl('b', params.get('b'));
+if (MODES[params.get('mode')]) setMode(params.get('mode'));
+else if (params.get('b')) setMode('side');
+
+// accès pour la console et les tests, en lecture
+window.__viewer = { THREE, renderer, scene, camera, controls, slots, anim, state, drawFrame, requestRender };
+</script>
+</body>
+</html>

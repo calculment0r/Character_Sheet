@@ -53,7 +53,7 @@ LIMBS = [  # (a, b, largeur en mètres, partie)
     ("l_wrist", "l_hand", 0.07, "skin"), ("r_wrist", "r_hand", 0.07, "skin"),
     ("l_hip", "l_knee", 0.15, "bottom"), ("r_hip", "r_knee", 0.15, "bottom"),
     ("l_knee", "l_ankle", 0.11, "bottom"), ("r_knee", "r_ankle", 0.11, "bottom"),
-    ("l_ankle", "l_toe", 0.09, "shoes"), ("r_ankle", "r_toe", 0.09, "shoes"),
+    ("l_ankle", "l_toe", 0.07, "shoes"), ("r_ankle", "r_toe", 0.07, "shoes"),
     ("l_shoulder", "r_shoulder", 0.12, "top"),
 ]
 

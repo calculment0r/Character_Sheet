@@ -100,7 +100,9 @@ def mannequin_mesh() -> dict:
         P.append(p), N.append(n), UV.append(uv), I.append(idx + base)
         SEG += [(a, b, float(x)) for x in t]
         base += len(p)
-    p, n, uv, idx = _ellipsoid(np.array(JOINTS["head"]) + np.array([0, 0.01, 0]), (0.095, 0.115, 0.105))
+    # La tête tient entre les articulations Head et HeadEnd de SOMA, sans
+    # dépasser le sommet du crâne.
+    p, n, uv, idx = _ellipsoid(np.array(JOINTS["head"]) + np.array([0, 0.005, 0.01]), (0.078, 0.092, 0.09))
     uv = uv * 0.5
     P.append(p), N.append(n), UV.append(uv), I.append(idx + base)
     SEG += [("neck", "head", 1.0)] * len(p)

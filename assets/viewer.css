@@ -25,9 +25,8 @@
 .vw-side { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
 
 /* ── le moniteur 3D ─────────────────────────────────────── */
-/* rack.css le donne en 16/9 : ici il prend la hauteur de l'écran, et
-   le fond part des jetons au lieu du noir pur, pour que l'ombre de
-   contact se lise sous les pieds. */
+/* rack.css le donne en 16/9 : ici il prend la hauteur de l'écran. Le
+   canevas est transparent, le fond vient des jetons au lieu du noir pur. */
 .vw .monitor {
   aspect-ratio: auto;
   height: clamp(320px, calc(100vh - 262px), 1400px);
@@ -46,6 +45,11 @@
   border-radius: inherit; box-shadow: inset 0 0 0 1px var(--line);
 }
 body.dragging .vw .monitor::after { box-shadow: inset 0 0 0 1px var(--line-or); }
+/* côte à côte : un filet entre les deux vues */
+.vw .monitor.mode-side::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px;
+  z-index: 2; pointer-events: none; background: var(--line);
+}
 
 /* Les calques A et B ne portent que l'état vide et la cible de dépôt ;
    l'image vient du canevas, coupé au ciseau par le script. */
