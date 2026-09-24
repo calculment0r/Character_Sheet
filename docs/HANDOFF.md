@@ -41,6 +41,43 @@ accès aux DGX. Vérifié dans ce conteneur :
 **Jamais testé** : un vrai ComfyUI avec H3, un vrai GPU, et aucun des
 modèles de l'aval. Chaque réglage par défaut est une hypothèse.
 
+### 2 bis. Vérifié sur la machine, le 24/09/2026
+
+La chaîne tourne sur le PC de Cal (Windows, Git Bash, venv du dépôt) et
+parle au ComfyUI `ComfyUI-H3TEST` de DGX1 (`192.168.10.205:8189`),
+réglé dans `factory.local.json`. `chain_check` : 32/32 sous Windows.
+
+- **H3, de vrai** : le workflow Ref2VA natif qui tournait déjà sur DGX1
+  (export API relevé dans les métadonnées d'une de ses images) est
+  adopté par `./usine gabarit` → `workflows/h3_ref2va.json`.
+- Ce que le vrai nœud impose, et que le code suit désormais : tailles
+  par pas de 32 (1344, pas 1360), frames sur la grille 17k + 5 (5 pour
+  une image, 124 pour l'orbite), neuf références au plus, nommées
+  `<Picture 1…n>` dans le prompt.
+- Les prompts suivent le guide Ref2VA que MiniMax livre avec les poids
+  (`<Subject n>`, `[reference generation]`, rétention par sujet,
+  `[Shot 1]`).
+- Sur un personnage de test (`maren-ostrova`, photoréaliste, costume
+  décrit sans image) : visage, plein pied, planche A/B et vues rendus
+  par H3. La ruse des cinq frames marche. Compter 20 à 75 s par image,
+  modèle résident ; le premier appel charge ~50 Go.
+- **Vues : une génération par vue ne tient pas les angles.** Seule, H3
+  revient vers la pose de face du plein pied : « gauche 90° » sort vers
+  55°, le 3/4 presque de face. Un prompt plus explicite (nez, pieds, bras
+  caché) a fait pire (35°) ; sans le plein pied en référence, tout sort de
+  face. La planche, elle, a de vrais profils et un vrai dos.
+- **L'orbite marche** (`./usine vues --orbite`, 124 frames, 7 min) : un
+  vrai tour de 360°, identité et costume tenus. Mais la caméra ne tourne
+  pas à vitesse constante (départ lent : profil gauche vers la frame 52,
+  dos vers 76, profil droit vers 97, au lieu de 31, 62, 93) : le
+  redécoupage « au prorata » prend de mauvaises frames. Il faut choisir
+  les frames sur une mesure (largeur de silhouette ou SAM 3D Body).
+- **Le détourage intégré ne tient pas les fonds H3** : dégradé, vignetage
+  et grande ombre douce du sujet sur le fond. Un fond modélisé en surface
+  lisse ne suffit pas non plus (essayé, retiré). Il faut BiRefNet.
+- Le contrôle ±5° ne porte encore que sur l'angle demandé ou supposé :
+  il laisse passer ces vues fausses.
+
 ---
 
 ## 3. À faire en premier, dans cet ordre

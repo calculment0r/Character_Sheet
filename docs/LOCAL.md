@@ -17,8 +17,25 @@ pip install -r requirements.txt     # numpy, Pillow
 ./usine doctor --ecrire             # range les moteurs trouvés dans factory.local.json
 ```
 
-`./usine` prend `.venv/bin/python` s'il existe, sinon `python3` ;
-`FACTORY_PYTHON=/chemin/vers/python` en impose un autre.
+`./usine` prend `.venv/bin/python` (ou `.venv/Scripts/python.exe` sous
+Windows) s'il existe, sinon `python3` ; `FACTORY_PYTHON=/chemin/vers/python`
+en impose un autre.
+
+### Depuis le PC de Cal (Windows), les modèles sur les DGX
+
+La chaîne peut tourner sur le PC : elle ne fait que parler à ComfyUI,
+qui tourne sur les DGX et y garde H3 résident. Sous Git Bash :
+
+```sh
+python -m venv .venv && .venv/Scripts/python.exe -m pip install -r requirements.txt
+echo '{ "comfyui_url": "http://192.168.10.205:8189" }' > factory.local.json
+./usine doctor
+```
+
+`:8189` est l'instance `ComfyUI-H3TEST` de DGX1 : c'est elle qui a les
+nœuds du workflow H3 retenu (Spectrum, Sol-Attn, modèle Singularity,
+LoRA turbo). DGX2 a la même instance sur `192.168.10.247:8189`, avec
+moins de modèles.
 
 ### H3, par ComfyUI
 
@@ -50,6 +67,29 @@ restent vides, avec les liens qui partaient d'eux.
 
 Pour l'orbite (`./usine vues --orbite`) : même geste avec
 `--nom h3_orbit.json`, sur un workflow qui produit un plan long.
+
+**Le gabarit en place** (`workflows/h3_ref2va.json`) vient du workflow
+Ref2VA natif qui a tourné sur DGX1 (`MiniMaxH3ReferenceToVideo`, modèle
+Singularity ref2va int8, LoRA turbo 4 pas, 8 pas, Sol-Attn, Spectrum).
+Son export API, relevé dans les métadonnées d'une de ses images, est
+gardé dans `tools/fixtures/h3_ref2va_native_api.json` ; le refaire :
+
+```sh
+./usine gabarit tools/fixtures/h3_ref2va_native_api.json --force
+```
+
+Ce que le vrai nœud impose, relevé sur `/object_info` :
+
+- largeur et hauteur par pas de 32 : 768 × 768, 768 × 1344, 1344 × 768 ;
+- frames sur la grille 17k + 5 : 5 pour une image, 124 pour l'orbite ;
+- jusqu'à neuf images, sur l'entrée extensible `ref_images` ; dans le
+  prompt, la première est `<Picture 1>`.
+
+Le prompt suit le guide que MiniMax livre avec les poids
+(`VIDEO_PROMPT_WRITING_GUIDE_ref_en.md`, dans
+`ComfyUI/models/diffusers/MiniMax-H3/docs/` sur DGX1) : `<Subject n>`
+qui citent leurs `<Picture n>`, `[reference generation]`, une ligne de
+rétention par sujet, `[Shot 1]`. Voir `factory/prompts.py`.
 
 Si ComfyUI n'écoute pas sur `127.0.0.1:8188` :
 `export FACTORY_COMFYUI_URL=http://127.0.0.1:<port>`.
