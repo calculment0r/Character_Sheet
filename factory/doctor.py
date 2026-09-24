@@ -29,6 +29,13 @@ COMFY_CAPS = {
 }
 # Capacité lancée par ssh → le script d'entrée qu'elle exécute.
 REMOTE_CAPS = {"kimodo": "kimodo_entry.py", "unirig": "unirig_entry.py"}
+# Ce qui doit aussi être là, sur la machine : (ce que c'est, test shell).
+REMOTE_NEEDS = {
+    "kimodo": [("poids Kimodo-SOMA-RP-v1", "test -d ~/kimodo/checkpoints/Kimodo-SOMA-RP-v1"),
+               ("encodeur de texte Llama-3-8B-Instruct (dépôt Meta à accès restreint, licence à accepter sur "
+                "Hugging Face, puis téléchargement)",
+                "ls ~/.cache/huggingface/hub/models--meta-llama--Meta-Llama-3-8B-Instruct/snapshots/*/*.safetensors")],
+}
 
 
 def ok(msg: str) -> None:
@@ -134,7 +141,14 @@ def check_remote(cap: str) -> bool:
         no(f"{cap} : {python} absent sur {lines[0]}")
         return False
     ok(f"{cap} : {python} sur {lines[0]}")
-    return True
+    good = True
+    for what, test in REMOTE_NEEDS.get(cap, []):
+        if remote._ssh(host, f"{test} >/dev/null 2>&1", timeout=30).returncode:
+            no(f"{cap} : {what}")
+            good = False
+        else:
+            ok(f"{cap} : {what.split(' (')[0]}")
+    return good
 
 
 def run(*, write: bool = False) -> None:

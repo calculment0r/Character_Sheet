@@ -9,7 +9,8 @@ Une prise est un NPZ au format de la chaîne :
     expression     (T, 72)     facultatif — les paramètres MHR du visage
     foot_contacts  (T, 4)      facultatif — rendu par Kimodo
 
-Kimodo canonicalise tout : racine en XZ = (0, 0) à la frame 0, cap
+Kimodo canonicalise tout : racine près de XZ = (0, 0) à la frame 0 (imposé à
+l'entraînement, seulement approché à l'inférence), cap
 initial donné à part (`first_heading_angle`, 0 = face à +Z). Le format
 de la chaîne garde cette convention.
 """
