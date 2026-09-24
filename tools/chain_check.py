@@ -98,6 +98,55 @@ def clip_pose(g: GLB, name: str) -> tuple[np.ndarray, dict]:
     return skinned(g, _pose_overrides(g, anim, float(times[-1])))
 
 
+# ── le trajet H3 → ComfyUI ─────────────────────────────────────────
+
+def comfy_route(tmp: Path, ident: Path) -> None:
+    """Le vrai client ComfyUI, contre tools/mock_comfy.py : un workflow
+    exporté est adopté par `./usine gabarit`, puis visage, plein pied,
+    planche et vues passent par lui."""
+    import socket
+    import urllib.request
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    server = subprocess.Popen([sys.executable, str(REPO / "tools/mock_comfy.py"), str(port)],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(50):
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{port}/system_stats", timeout=1)
+                break
+            except OSError:
+                subprocess.run([sys.executable, "-c", "import time; time.sleep(0.1)"])
+        os.environ.update(FACTORY_H3="comfyui", FACTORY_COMFYUI_URL=f"http://127.0.0.1:{port}",
+                          FACTORY_WORKFLOWS=str(tmp / "workflows"), FACTORY_PROJECTS=str(tmp / "comfy"))
+        out = usine("gabarit", str(REPO / "tools/fixtures/h3_export_api.json"))
+        check("gabarit : références, prompt, graine, taille, frames et sortie marqués",
+              all(x in out for x in ("REF 3", "{{prompt}}", "{{seed}}", "{{frames}}", "{{width}}", "→ OUT")))
+        usine("nouveau", "--identite", str(ident))
+        usine("visage", "test-pilote", "--variantes", "1")
+        usine("visage-ok", "test-pilote", "1")
+        usine("costume", "test-pilote", "veste")
+        usine("pleinpied", "test-pilote", "--variantes", "1")
+        usine("pleinpied-ok", "test-pilote", "1")
+        usine("planche", "test-pilote")
+        usine("planche-ok", "test-pilote", "s001")
+        usine("vues", "test-pilote", "--sans-34")
+        root = tmp / "comfy" / "test-pilote"
+        meta = json.loads((root / "costumes/veste/views/raw/left.json").read_text(encoding="utf-8"))
+        check("H3 par ComfyUI : cinq frames rendues, la plus nette gardée",
+              meta["backend"] == "comfyui" and meta["frames_returned"] == 5 and meta["frame_kept"] == 2)
+        sent = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/__prompts").read())
+        refs = [sum(1 for k in wf["5"]["inputs"] if k.startswith("image_")) for wf in sent]
+        check("chaque étage envoie ses références nommées : 0, 1, 2, puis 3 par vue",
+              refs == [0, 1, 2, 3, 3, 3, 3], str(refs))
+        sizes = {(wf["5"]["inputs"]["width"], wf["5"]["inputs"]["height"]) for wf in sent}
+        check("768 px de petit côté partout", all(min(s) == 768 for s in sizes), str(sorted(sizes)))
+    finally:
+        server.terminate()
+
+
 # ── le parcours ────────────────────────────────────────────────────
 
 def main() -> int:
@@ -212,6 +261,8 @@ def main() -> int:
     gb = GLB.load(root / tl["baked"]["glb"])
     check("GLB animé : un seul clip, celui de la timeline",
           [a["name"] for a in gb.doc["animations"]] == ["timeline/main"])
+
+    comfy_route(tmp, ident)
 
     failed = [r for r in results if not r[1]]
     print(f"\n{len(results) - len(failed)}/{len(results)} vérifications passées\n")

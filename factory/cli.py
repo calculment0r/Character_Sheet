@@ -176,6 +176,12 @@ def cmd_page(args) -> None:
     serve_page(port=args.port, open_browser=not args.sans_navigateur)
 
 
+def cmd_gabarit(args) -> None:
+    from .gabarit import run
+
+    run(args.fichier, name=args.nom, force=args.force)
+
+
 def cmd_doctor(args) -> None:
     from .doctor import run
 
@@ -285,6 +291,11 @@ def build() -> argparse.ArgumentParser:
     sp = cmd("page", cmd_page, "servir la page en local (étage Identité, conversation avec le modèle)")
     sp.add_argument("--port", type=int, default=8765)
     sp.add_argument("--sans-navigateur", action="store_true")
+
+    sp = cmd("gabarit", cmd_gabarit, "adopter un workflow ComfyUI exporté au format API comme gabarit H3")
+    sp.add_argument("fichier", help="le workflow exporté (Workflow → Export (API))")
+    sp.add_argument("--nom", default="h3_ref2va.json", help="h3_ref2va.json (images fixes) ou h3_orbit.json")
+    sp.add_argument("--force", action="store_true", help="remplacer un gabarit existant")
 
     sp = cmd("doctor", cmd_doctor, "ce qui tourne sur la machine, et quels moteurs régler")
     sp.add_argument("--ecrire", action="store_true", help="écrire factory.local.json avec ce qui a été trouvé")
