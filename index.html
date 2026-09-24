@@ -126,10 +126,14 @@
     <!-- étage en attente d'un worker -->
     <div id="stage-pending" class="stage-body" hidden>
       <div class="pan">
-        <p class="warn">Étage verrouillé — il attend un <span id="stage-needs">worker</span> résident sur le DGX.</p>
+        <p class="stage-blurb" style="margin-top:0">
+          Cet étage tourne en local, sur la machine, en ligne de commande :
+        </p>
+        <pre class="cmd" id="stage-needs">./usine</pre>
         <p class="stage-note" style="margin-top:12px">
-          Un worker = une capacité = un modèle résident. Les poids ne sont jamais chargés à la demande :
-          le temps de démarrage de H3, Kimodo ou Hunyuan3D-Paint l'interdit.
+          Pas de serveur. Chaque commande écrit dans projects/&lt;perso&gt;/ et range ce qu'elle a fait
+          dans project.json. ./usine etat &lt;perso&gt; dit où en est le personnage et quoi lancer ensuite ;
+          ./usine doctor dit quels moteurs tournent déjà sur la machine.
         </p>
       </div>
 
@@ -175,6 +179,7 @@
           <span>Disque sur le visage des plein pieds</span>
         </label>
         <button class="tb ghost block sm" id="export-json">Exporter l'identité .json</button>
+        <p class="stage-note">puis, sur la machine : ./usine nouveau --identite &lt;fichier&gt;</p>
       </div>
     </div>
 

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# La chaîne, en local : ./usine <commande>. ./usine -h pour la liste.
+# Prend le python du venv du dépôt s'il existe, sinon celui du système ;
+# FACTORY_PYTHON en impose un autre — celui où vivent les modèles.
+cd "$(dirname "$0")" || exit 1
+PY="${FACTORY_PYTHON:-}"
+if [ -z "$PY" ]; then
+  if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi
+fi
+exec "$PY" -m factory "$@"

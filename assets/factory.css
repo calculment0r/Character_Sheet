@@ -135,6 +135,14 @@
 .sheet-val.flash { animation: flashIn .8s ease-out; border-radius: 2px; }
 .sheet-actions { padding: var(--s3) var(--s4) var(--s4); display: flex; flex-direction: column; gap: 6px; box-shadow: inset 0 1px 0 var(--line); }
 
+/* ── commande locale d'un étage ─────────────────────────── */
+.cmd {
+  margin: 10px 0 0; padding: var(--s3) var(--s4); border-radius: var(--r2);
+  background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line-gr);
+  font-family: var(--f-mono); font-size: 11px; line-height: 1.6; letter-spacing: .02em;
+  color: var(--cy); white-space: pre-wrap; word-break: break-word;
+}
+
 /* ── sortie texte ───────────────────────────────────────── */
 .out { background: var(--panel); border-radius: var(--r3); overflow: hidden; }
 .out pre {

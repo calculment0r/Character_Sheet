@@ -1,0 +1,8 @@
+# La chaîne locale (./usine). Les modèles eux-mêmes — H3, TRELLIS 2,
+# Hunyuan3D, UniRig, Kimodo, SAM 3D Body — s'installent chacun avec
+# leur propre dépôt ; ./usine doctor dit ce qu'il trouve sur la machine.
+numpy>=1.24
+Pillow>=10
+
+# Facultatif : un détourage plus fort que celui intégré, pour un fond chargé.
+# rembg[gpu]>=2.0

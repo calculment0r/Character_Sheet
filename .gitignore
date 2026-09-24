@@ -4,3 +4,5 @@ _artifacts/
 .venv/
 venv/
 .DS_Store
+projects/
+factory.local.json

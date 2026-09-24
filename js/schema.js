@@ -122,8 +122,9 @@ const LOTS = {
 };
 
 /* ── les étages de la chaîne ────────────────────────────────
-   `ready` distingue ce qui tourne aujourd'hui dans le navigateur
-   de ce qui attend un worker GPU sur le DGX. Le rack affiche la
+   `ready` distingue ce qui tourne dans le navigateur de ce qui
+   tourne en local sur le DGX, en ligne de commande : `needs` donne
+   alors la commande `./usine` de l'étage. Le rack affiche la
    différence au lieu de la masquer.
    ─────────────────────────────────────────────────────────── */
 
@@ -137,43 +138,43 @@ const STAGES = [
   {
     id: 'face', lot: 'LOT 2', ref: 'ST-02', name: 'Visage',
     sub: 'portrait neutre · verrouillage',
-    ready: false, needs: 'worker image',
+    ready: false, needs: './usine visage <perso>',
     blurb: "Portrait neutre — lumière égale, bouche fermée, regard caméra, fond uni. Une fois validé il devient face_locked_url et sert de référence d'identité à toutes les générations suivantes.",
   },
   {
     id: 'costume', lot: 'LOT 2', ref: 'ST-03', name: 'Costumes',
     sub: 'N costumes · plein pied de référence',
-    ready: false, needs: 'worker image',
+    ready: false, needs: './usine costume <perso> <nom> · ./usine pleinpied <perso>',
     blurb: "N costumes indépendants par personnage. Le visage verrouillé reste la référence d'identité ; le costume vient d'images de vêtement, de texte, ou des deux.",
   },
   {
     id: 'sheet', lot: 'LOT 3', ref: 'ST-04', name: 'Planche',
     sub: 'H3 Ref2VA · 5 frames',
-    ready: false, needs: 'worker h3',
+    ready: false, needs: './usine planche <perso> --ab',
     blurb: "La planche sert à valider le design et la cohérence, pas à nourrir la 3D : un panneau de planche 2K fait 400 à 500 px de large, c'est insuffisant pour Hunyuan3D.",
   },
   {
     id: 'views', lot: 'LOT 3', ref: 'ST-05', name: 'Vues orthogonales',
     sub: '0° · 90° · 180° · 270° · ±5°',
-    ready: false, needs: 'worker h3',
+    ready: false, needs: './usine vues <perso> · prep · controle',
     blurb: "Une génération plein cadre par vue. Même lumière, angles alignés à ±5°, marge de silhouette constante. Des entrées mal alignées donnent un résultat pire qu'une seule image.",
   },
   {
     id: 'mesh', lot: 'LOT 3', ref: 'ST-06', name: 'Mesh 3D',
     sub: 'TRELLIS 2 · Hunyuan3D 2.1',
-    ready: false, needs: 'worker 3d',
+    ready: false, needs: './usine mesh <perso> · ./usine voir <perso>',
     blurb: "Deux moteurs derrière une même interface. TRELLIS 2 est MIT sans restriction ; Hunyuan3D 2.1 texture mieux mais porte une exclusion territoriale UE à lire ligne à ligne.",
   },
   {
     id: 'rig', lot: 'LOT 4', ref: 'ST-07', name: 'Rig',
     sub: 'UniRig · SOMA 77 · A-pose',
-    ready: false, needs: 'worker rig',
+    ready: false, needs: './usine rig <perso> · ./usine voir <perso>',
     blurb: "Bind pose en A-pose, delta de bind stocké, conversion appliquée au retarget. On ne modélise jamais en T-pose : le skinning calculé à 90° fait remonter les épaules.",
   },
   {
     id: 'anim', lot: 'LOT 5', ref: 'ST-08', name: 'Animation',
     sub: 'Kimodo · SAM 3D Body · timeline',
-    ready: false, needs: 'worker anim',
+    ready: false, needs: './usine prise · timeline · bake',
     blurb: "Pistes typées body / hands_l / hands_r / face, mixage par masque de joints, crossfade en quaternions. ALT + molette change l'échelle du temps.",
   },
 ];

@@ -104,7 +104,7 @@ function renderConsole(progress = {}) {
       line.appendChild(el('span', 'ref', st.ref.replace('-', '\u2014')));
       line.appendChild(el('span', 'nm', st.name));
       body.appendChild(line);
-      body.appendChild(el('span', 'sub', st.ready ? st.sub : `verrouillé · ${st.needs}`));
+      body.appendChild(el('span', 'sub', st.ready ? st.sub : `en local · ${st.needs}`));
       bar.appendChild(body);
 
       bar.appendChild(el('span', 'dots'));
@@ -159,7 +159,7 @@ function renderRack(activeId, progress = {}) {
     const txt = el('span', 'txt');
     txt.appendChild(el('span', 'ref', st.ref));
     txt.appendChild(el('span', 'nm', st.name));
-    txt.appendChild(el('span', 'sub', st.ready ? st.sub : `verrouillé — ${st.needs}`));
+    txt.appendChild(el('span', 'sub', st.ready ? st.sub : `en local — ${st.needs}`));
     btn.appendChild(txt);
     btn.appendChild(el('span', 'dots'));
 
