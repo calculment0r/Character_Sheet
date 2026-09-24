@@ -78,6 +78,36 @@ réglé dans `factory.local.json`. `chain_check` : 32/32 sous Windows.
 - Le contrôle ±5° ne porte encore que sur l'angle demandé ou supposé :
   il laisse passer ces vues fausses.
 
+### 2 ter. Corrigé et câblé le même jour
+
+- **Détourage** : BiRefNet par ComfyUI (moteur `prep` = `comfyui`, par
+  défaut). Vérifié sur les vraies vues : ombres et dégradé partis.
+- **Orbite** : BiRefNet tourne sur les 124 frames dans le même workflow,
+  les frames se choisissent sur la largeur de silhouette
+  (`imaging.orbit_picks`). Vérifié sur maren-ostrova : face 0, profil
+  gauche 48 (±6°), dos 78 (±4,7°), profil droit 97 (±2,4°), 3/4 à 46° ;
+  `prep` puis `controle` passent, et les vues préparées sont justes à
+  l'œil. Le sens de rotation (profil gauche d'abord) est celui du
+  prompt, supposé, pas mesuré.
+- **Poids installés** sur DGX1 et DGX2 (`~/ComfyUI/models`, partagé
+  avec `ComfyUI-H3TEST`) : BiRefNet, TRELLIS.2 (image unique et
+  multi-vues Pixal3D, VAE forme et texture, DINOv3), SAM 3D Body.
+  Copie DGX1 → DGX2 par le câble direct (169.254.x), 330 Mo/s.
+- **Câblé, jamais lancé** (Cal : « on câble uniquement pour l'instant ») :
+  mesh TRELLIS.2 par ComfyUI sur DGX2 (`mesh_comfy.py`, gabarits
+  `trellis2_mv.json` et `trellis2_single.json`, remise en mètres / Y en
+  haut / pieds au sol) ; mesure d'azimut SAM 3D Body (`sam3d.py`,
+  `./usine controle --mesurer`, signe à confirmer) ; appel des modèles
+  par ssh (`remote.py`, testé à vide) ; Kimodo (`motion_kimodo.py`).
+  `./usine doctor` valide tous les gabarits à blanc sur leur machine.
+- **Hunyuan3D 2.1** : le nœud de DGX2 ne se charge pas (« Numba needs
+  NumPy 2.4 or less. Got NumPy 2.5 ») ; le réparer demande de toucher
+  l'environnement ComfyUI partagé de DGX2 — pas fait sans Cal. Le
+  modèle natif de ComfyUI ne fait que la forme, sans texture.
+- **Reste ouvert** : UniRig vers SOMA (mapping des noms à écrire une fois
+  qu'on voit la sortie d'UniRig), SAM 3D Body vers SOMA pour la vidéo
+  (route MHR → SOMA à trancher, §11.2).
+
 ---
 
 ## 3. À faire en premier, dans cet ordre

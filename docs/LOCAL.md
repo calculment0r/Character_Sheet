@@ -161,19 +161,52 @@ Les règles dures du brief sont des refus, pas des conseils :
 
 ## Les moteurs
 
-| Capacité | Moteurs | Défaut |
-|---|---|---|
-| `h3` | `comfyui`, `python`, `stub` | `comfyui` |
-| `prep` | `builtin`, `rembg` | `builtin` |
-| `delight` | `off`, `hunyuan` | `off` |
-| `trellis` | `python`, `stub` | `stub` |
-| `hunyuan3d` | `python`, `stub` | `stub` |
-| `unirig` | `python`, `stub` | `stub` |
-| `kimodo` | `python`, `stub` | `stub` |
-| `sam3dbody` | `python`, `stub` | `stub` |
+| Capacité | Moteurs | Défaut | Sur la machine |
+|---|---|---|---|
+| `h3` | `comfyui`, `python`, `stub` | `comfyui` | DGX1, `ComfyUI-H3TEST` :8189 |
+| `prep` | `comfyui` (BiRefNet), `builtin`, `rembg` | `comfyui` | DGX1 :8189 |
+| `delight` | `off`, `hunyuan` | `off` | — |
+| `trellis` | `comfyui`, `python`, `stub` | `stub` | DGX2 :8188, nœuds natifs TRELLIS.2 |
+| `hunyuan3d` | `python`, `stub` | `stub` | nœud présent sur DGX2 mais cassé (numpy 2.5) |
+| `unirig` | `python` (ssh), `stub` | `stub` | DGX2, `~/UniRig` |
+| `kimodo` | `python` (ssh), `stub` | `stub` | DGX2, `~/kimodo` |
+| `sam3dbody` | `python`, `stub` | `stub` | mesure d'azimut : ComfyUI DGX1 |
 
 Le choix se fait par `FACTORY_<CAPACITÉ>=…`, par `factory.local.json`
 (`./usine doctor --ecrire`), ou le temps d'un appel par `--moteur`.
+
+Le réglage en place sur le PC de Cal :
+
+```json
+{
+  "comfyui_url": "http://192.168.10.205:8189",
+  "comfyui_url_trellis": "http://192.168.10.247:8188",
+  "backends": {"h3": "comfyui", "prep": "comfyui", "trellis": "comfyui"},
+  "remote_kimodo": "dgx2", "python_kimodo": "/home/dgx/kimodo/.venv/bin/python",
+  "remote_unirig": "dgx2", "python_unirig": "/home/dgx/UniRig/.venv/bin/python", "cwd_unirig": "/home/dgx/UniRig"
+}
+```
+
+- `comfyui_url_<capacité>` envoie une capacité sur un autre ComfyUI que
+  H3 : la 3D part sur DGX2, qui a la mémoire libre, H3 reste sur DGX1.
+- Kimodo et UniRig n'ont pas de nœud ComfyUI : `factory/remote.py` copie
+  les fichiers sur la machine, lance `tools/remote/<nom>_entry.py` dans
+  le venv du modèle, rapatrie le résultat. Il refuse de lancer si l'alias
+  ssh répond avec le nom de l'autre DGX (ce sont des clones).
+- `./usine doctor` valide à blanc chaque gabarit contre le ComfyUI qui le
+  sert (nœuds présents, fichiers de poids connus) et vérifie les venvs
+  par ssh. Il n'exécute rien.
+
+### Les vues, en pratique
+
+Une génération par vue ne tient pas les angles avec H3 (voir
+`HANDOFF.md`) : passer par l'orbite.
+
+```sh
+./usine vues <perso> --orbite     # 124 frames, BiRefNet sur chaque frame, frames choisies sur la silhouette
+./usine prep <perso>              # BiRefNet, recentrage, même échelle
+./usine controle <perso>          # angles estimés sur la silhouette ; --mesurer : SAM 3D Body
+```
 
 **Le factice** (`stub`) produit de vrais fichiers — PNG sur fond neutre,
 GLB PBR, GLB skinné, prises NPZ — aux bonnes dimensions et avec la bonne
