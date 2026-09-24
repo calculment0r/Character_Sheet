@@ -130,11 +130,11 @@ def fullbody(sheet: dict, notes: list[str], *, garments: int, costume_prompt: st
         "subject_definitions": _definitions(refs, sheet, describe_outfit(sheet, costume_prompt)),
         "summary": ("A single full-body reference frame of the subject seen from directly in front, the whole "
                     "figure from head to feet inside the frame with an even margin on every side."),
-        "retention_analysis": " ".join([
+        "retention_analysis": " ".join(filter(None, [
             "The identity of the face is defined exclusively by Image 1.",
             TAKE_AS_IS if garments else "",
             LIGHT,
-        ]).strip(),
+        ])),
         "detailed_description": " ".join(filter(None, [
             POSE_APOSE,
             f"The colour palette of the character is: {sheet['color_palette']}." if sheet.get("color_palette") else "",

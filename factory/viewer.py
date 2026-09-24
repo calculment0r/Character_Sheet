@@ -68,10 +68,20 @@ def serve(p: Project, *, costume: str | None, a: str | None, b: str | None, port
     query = {"src": _url(resolve(p, costume, a))}
     if b:
         query["b"] = _url(resolve(p, costume, b))
+    _run(f"viewer.html?{urllib.parse.urlencode(query)}", port, open_browser, "viewer")
+
+
+def serve_page(*, port: int = 8765, open_browser: bool = True) -> None:
+    """La page (étage Identité) servie en local. Le modèle de texte est
+    celui de la machine : son URL se pose dans l'écran MOTEUR."""
+    _run("index.html", port, open_browser, "page")
+
+
+def _run(path: str, port: int, open_browser: bool, label: str) -> None:
     handler = functools.partial(_Handler, directory=str(config.REPO))
     server = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
-    url = f"http://127.0.0.1:{port}/viewer.html?{urllib.parse.urlencode(query)}"
-    print(f"viewer : {url}")
+    url = f"http://127.0.0.1:{port}/{path}"
+    print(f"{label} : {url}")
     print("  Ctrl+C pour arrêter")
     if open_browser:
         webbrowser.open(url)

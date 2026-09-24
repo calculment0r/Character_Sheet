@@ -170,6 +170,12 @@ def cmd_voir(args) -> None:
     serve(_p(args), costume=args.costume, a=args.a, b=args.b, port=args.port, open_browser=not args.sans_navigateur)
 
 
+def cmd_page(args) -> None:
+    from .viewer import serve_page
+
+    serve_page(port=args.port, open_browser=not args.sans_navigateur)
+
+
 def cmd_doctor(args) -> None:
     from .doctor import run
 
@@ -274,6 +280,10 @@ def build() -> argparse.ArgumentParser:
     sp.add_argument("--a", help="version A (défaut : la dernière), ex. 2 ou rig:1")
     sp.add_argument("--b", help="version B, pour comparer")
     sp.add_argument("--port", type=int, default=8766)
+    sp.add_argument("--sans-navigateur", action="store_true")
+
+    sp = cmd("page", cmd_page, "servir la page en local (étage Identité, conversation avec le modèle)")
+    sp.add_argument("--port", type=int, default=8765)
     sp.add_argument("--sans-navigateur", action="store_true")
 
     sp = cmd("doctor", cmd_doctor, "ce qui tourne sur la machine, et quels moteurs régler")
