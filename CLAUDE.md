@@ -4,8 +4,9 @@ Chaîne souveraine : prompt ou photo → visage validé → costumes → planche
 → vues orthogonales → mesh PBR → rig SOMA → animation. **Tout tourne en
 local, sur la machine** — pas d'API pour l'instant, décision de Cal.
 
+Reprise sur la machine : `REPRISE.md` — **à lire en premier**
 Cadrage : `docs/BRIEF_CHARACTER_FACTORY.md`
-Mode d'emploi de la chaîne : `docs/LOCAL.md` — **à lire en premier**
+Mode d'emploi de la chaîne : `docs/LOCAL.md`
 Reprise du travail : `docs/HANDOFF.md`
 État technique : `docs/ARCHITECTURE.md`
 
