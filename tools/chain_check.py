@@ -148,6 +148,39 @@ def comfy_route(tmp: Path, ident: Path) -> None:
         server.terminate()
 
 
+def native_template() -> None:
+    """Le workflow Ref2VA qui tourne sur la machine (nœud natif
+    MiniMaxH3ReferenceToVideo, relevé sur DGX1) : prompt branché sur un
+    primitif, frames calculées, une seule image sur une entrée
+    extensible, sortie vidéo avec son. `./usine gabarit` doit en faire
+    un gabarit que chaque étage remplit sans lien pendant."""
+    from factory import comfy, gabarit
+
+    src = json.loads((REPO / "tools/fixtures/h3_ref2va_native_api.json").read_text(encoding="utf-8"))
+    wf, _, warnings = gabarit.adopt(src)
+    tpl = {k: v for k, v in wf.items() if not k.startswith("_")}
+    target = next(n for n in tpl.values() if n["class_type"] == "MiniMaxH3ReferenceToVideo")["inputs"]
+    out = [n for n in tpl.values() if n.get("_meta", {}).get("title") == "OUT"]
+    check("gabarit natif : prompt, frames, taille et graine branchés sur la chaîne",
+          (target["prompt"], target["length"], target["width"], target["height"])
+          == ("{{prompt}}", "{{frames}}", "{{width}}", "{{height}}")
+          and any(n["inputs"].get("noise_seed") == "{{seed}}" for n in tpl.values()) and not warnings)
+    check("gabarit natif : sortie en PNG sans recompression, son et calculs retirés",
+          [n["class_type"] for n in out] == ["SaveImage"]
+          and not any(n["class_type"] in ("VHS_VideoCombine", "VAEDecodeAudio", "ComfyMathExpression",
+                                          "PrimitiveStringMultiline") for n in tpl.values()))
+    counts, dangling = [], []
+    for n in (0, 1, 3, 9):
+        f = comfy.fill(tpl, {"prompt": "p", "seed": 1, "width": 768, "height": 1344, "frames": 5},
+                       [f"r{i}.png" for i in range(n)])
+        node = next(x for x in f.values() if x["class_type"] == "MiniMaxH3ReferenceToVideo")["inputs"]
+        counts.append(sorted(int(k.rsplit("_", 1)[1]) for k in node if k.startswith("ref_images.")))
+        dangling += [k for x in f.values() for k, v in x["inputs"].items()
+                     if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str) and v[0] not in f]
+    check("gabarit natif : 0 à 9 références, dans l'ordre <Picture 1…n>, sans lien pendant",
+          counts == [[], [0], [0, 1, 2], list(range(9))] and not dangling, str([len(c) for c in counts]))
+
+
 # ── le parcours ────────────────────────────────────────────────────
 
 def main() -> int:
@@ -264,6 +297,7 @@ def main() -> int:
           [a["name"] for a in gb.doc["animations"]] == ["timeline/main"])
 
     comfy_route(tmp, ident)
+    native_template()
 
     failed = [r for r in results if not r[1]]
     print(f"\n{len(results) - len(failed)}/{len(results)} vérifications passées\n")

@@ -53,7 +53,8 @@ def face(p: Project, *, prompt: str = "", refs: list[str] = (), variants: int = 
     p.face["refs"] = list(dict.fromkeys(p.face["refs"] + imported))
     if prompt:
         p.face["prompt"] = prompt
-    sections = prompts.face(p.sheet, p.data["notes"], has_source=bool(p.face["refs"]), extra=p.face["prompt"])
+    sections = prompts.face(p.sheet, p.data["notes"], has_source=bool(p.face["refs"]), extra=p.face["prompt"],
+                            style=p.data["style"])
     base = _seed(seed)
     made = []
     for i in range(variants):
@@ -101,7 +102,8 @@ def fullbody(p: Project, costume: str | None, *, variants: int = 2, seed: int | 
         cos["prompt"] = prompt
     report = report or _report()
     refs = [p.path(locked)] + [p.path(r) for r in cos["refs"]]
-    sections = prompts.fullbody(p.sheet, p.data["notes"], garments=len(cos["refs"]), costume_prompt=cos["prompt"])
+    sections = prompts.fullbody(p.sheet, p.data["notes"], garments=len(cos["refs"]), costume_prompt=cos["prompt"],
+                                style=p.data["style"])
     base = _seed(seed)
     made = []
     for i in range(variants):
@@ -145,7 +147,7 @@ def sheet(p: Project, costume: str | None, *, mask_face: bool = False, ab: bool 
         sid = p.next_id("s", cos["sheets"])
         folder = p.dir(f"costumes/{key}/sheets/{sid}")
         sections = prompts.plate(p.sheet, p.data["notes"], garments=len(cos["refs"]), mask_face=mask,
-                                 costume_prompt=cos["prompt"])
+                                 costume_prompt=cos["prompt"], style=p.data["style"])
         (folder / "prompt.txt").write_text(prompts.to_text(sections), encoding="utf-8")
         print(f"  planche {sid}{' · disque sur le visage' if mask else ''} · graine {s}")
         out = h3.still("sheet", sections=sections, refs=refs, dest=folder / "sheet.png", seed=s, report=report,
@@ -195,7 +197,7 @@ def views(p: Project, costume: str | None, *, method: str = "per_view", names: l
     v["method"] = method
     if method == "orbit":
         azimuths = {n: prompts.AZIMUTHS[n][0] for n in names}
-        sections = prompts.orbit(p.sheet, p.data["notes"], costume_prompt=cos["prompt"])
+        sections = prompts.orbit(p.sheet, p.data["notes"], costume_prompt=cos["prompt"], style=p.data["style"])
         print(f"  orbite · {len(names)} azimuts à extraire · graine {s}")
         stills = h3.orbit(sections=sections, refs=refs, dest_dir=folder, seed=s, azimuths=azimuths,
                           report=report, identity_seed=identity_seed(p))
@@ -204,7 +206,8 @@ def views(p: Project, costume: str | None, *, method: str = "per_view", names: l
                            "seed": s, "backend": st.backend, "at": now()}
     else:
         for n in names:
-            sections = prompts.view(p.sheet, p.data["notes"], name=n, costume_prompt=cos["prompt"])
+            sections = prompts.view(p.sheet, p.data["notes"], name=n, costume_prompt=cos["prompt"],
+                                    style=p.data["style"])
             az = prompts.AZIMUTHS[n][0]
             print(f"  vue {n} · {az:g}° · graine {s}")
             st = h3.still("view", sections=sections, refs=refs, dest=folder / f"{n}.png", seed=s, report=report,

@@ -21,16 +21,19 @@ from pathlib import Path
 
 from . import config, imaging, prompts, stubs
 
-# 768 de petit côté, arrondi au multiple de 16 que les VAE vidéo exigent.
+# 768 de petit côté. Le nœud MiniMaxH3ReferenceToVideo prend largeur et
+# hauteur par pas de 32 : 1344 × 768 est son format par défaut.
 SIZES = {
     "face": (768, 768),
-    "fullbody": (768, 1360),
-    "sheet": (1360, 768),
-    "view": (768, 1360),
-    "orbit": (768, 1360),
+    "fullbody": (768, 1344),
+    "sheet": (1344, 768),
+    "view": (768, 1344),
+    "orbit": (768, 1344),
 }
+# Le nombre de frames suit la grille 17k + 5 du modèle (pas de 17,
+# minimum 5, relevés sur le nœud réel).
 FRAMES_STILL = 5          # le minimum du nœud, environ 0,2 s
-FRAMES_ORBIT = 121        # environ cinq secondes à 24 i/s
+FRAMES_ORBIT = 124        # 17 × 7 + 5, environ cinq secondes à 24 i/s
 
 
 @dataclass
