@@ -23,6 +23,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
+sys.stdout.reconfigure(encoding="utf-8")   # Windows : une sortie redirigée serait en cp1252
 
 import numpy as np  # noqa: E402
 
@@ -38,7 +39,7 @@ def check(name: str, ok: bool, detail: str = "") -> None:
 
 def usine(*args: str, expect: int = 0) -> str:
     res = subprocess.run([sys.executable, "-m", "factory", *args], cwd=REPO, capture_output=True, text=True,
-                         env=os.environ)
+                         encoding="utf-8", env=os.environ)
     if res.returncode != expect:
         print(res.stdout, res.stderr)
         raise SystemExit(f"./usine {' '.join(args)} → {res.returncode}, attendu {expect}")
