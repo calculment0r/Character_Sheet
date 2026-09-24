@@ -170,6 +170,44 @@ def orbit_selection() -> None:
           f"écarts {', '.join(f'{k} {e:.1f}°' for k, e in err.items())} ; au prorata, le profil serait à {naive:.0f}°")
 
 
+def sam3d_yaw() -> None:
+    """La lecture du BVH de SAM 3D Body : un bassin tourné de −90° autour
+    de Y (le sujet regarde vers la gauche de l'image) doit donner la vue
+    gauche, 90°, par rapport à une face à 0°."""
+    from factory import sam3d
+
+    def bvh(ry: float) -> str:
+        return ("HIERARCHY\nROOT Hips\n{\n  OFFSET 0 0 0\n  CHANNELS 6 Xposition Yposition Zposition Zrotation "
+                "Xrotation Yrotation\n}\nMOTION\nFrames: 1\nFrame Time: 0.041667\n"
+                f"0 0.9 0 0 0 {ry}\n")
+
+    front, left = sam3d.root_yaw(bvh(0.0)), sam3d.root_yaw(bvh(-90.0))
+    az = (sam3d.SIGN * (left - front)) % 360.0
+    check("SAM 3D Body : cap du bassin lu dans le BVH, vue gauche à 90°", abs(az - 90.0) < 1e-6, f"{az:.1f}°")
+
+
+def dry_validation() -> None:
+    """La validation à blanc de `./usine doctor` : elle doit voir un nœud
+    absent et un fichier de poids inconnu, dans les deux formes de liste
+    que rend /object_info, et laisser passer images et `{{…}}`."""
+    from factory import comfy
+
+    info = {"UNETLoader": {"input": {"required": {"unet_name": [["a.safetensors"]]}}},
+            "VAELoader": {"input": {"required": {"vae_name": ["COMBO", {"options": ["v.safetensors"]}]}}},
+            "LoadImage": {"input": {"required": {"image": [["x.png"]]}}},
+            "KSampler": {"input": {"required": {"seed": ["INT", {}]}}}}
+    good = {"1": {"class_type": "UNETLoader", "inputs": {"unet_name": "a.safetensors"}},
+            "2": {"class_type": "VAELoader", "inputs": {"vae_name": "v.safetensors"}},
+            "3": {"class_type": "LoadImage", "inputs": {"image": "pas-encore-envoyee.png"}},
+            "4": {"class_type": "KSampler", "inputs": {"seed": "{{seed}}"}}}
+    bad = {**good, "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "b.safetensors"}},
+           "2": {"class_type": "VAELoader", "inputs": {"vae_name": "w.safetensors"}},
+           "5": {"class_type": "Trellis2ShapeStage", "inputs": {}}}
+    found = comfy.validate(bad, info)
+    check("doctor : validation à blanc — nœud absent et poids inconnus vus, le reste laissé passer",
+          not comfy.validate(good, info) and len(found) == 3, f"{len(found)} problèmes relevés")
+
+
 def chain_err(a: float, b: float) -> float:
     return (a - b + 180.0) % 360.0 - 180.0
 
@@ -325,6 +363,8 @@ def main() -> int:
     comfy_route(tmp, ident)
     native_template()
     orbit_selection()
+    sam3d_yaw()
+    dry_validation()
 
     failed = [r for r in results if not r[1]]
     print(f"\n{len(results) - len(failed)}/{len(results)} vérifications passées\n")

@@ -134,7 +134,7 @@ def cmd_prep(args) -> None:
 
 def cmd_controle(args) -> None:
     p = _p(args)
-    res = chain.check(p, args.costume, angles=_angles(args.angle))
+    res = chain.check(p, args.costume, angles=_angles(args.angle), measure=args.mesurer)
     for n, row in res["angles"].items():
         flag = "ok " if abs(row["error"]) <= res["tolerance"] else "NON"
         prec = f" ±{row['precision_deg']:g}°" if row.get("precision_deg") is not None else ""
@@ -276,6 +276,8 @@ def build() -> argparse.ArgumentParser:
     sp = cmd("controle", cmd_controle, "contrôle d'alignement, ±5° (§6.2)")
     perso(sp), costume(sp)
     sp.add_argument("--angle", action="append", metavar="VUE=DEGRÉS", help="angle relevé à la main, ex. left=93")
+    sp.add_argument("--mesurer", action="store_true",
+                    help="mesurer l'azimut de chaque vue par SAM 3D Body (ComfyUI), relatif à la face")
 
     sp = cmd("mesh", cmd_mesh, "mesh PBR — TRELLIS 2 par défaut, ou Hunyuan3D 2.1 (§7)")
     perso(sp), costume(sp)

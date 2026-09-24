@@ -1,9 +1,12 @@
-"""`./usine doctor` : ce qui tourne déjà sur la machine, et quels moteurs
-régler. Ne modifie rien, sauf `--ecrire`, qui range ce qu'il a trouvé
-dans factory.local.json.
+"""`./usine doctor` : ce qui tourne déjà, et où. Ne modifie rien, sauf
+`--ecrire`, qui range ce qu'il a trouvé dans factory.local.json.
 
-La machine sert probablement déjà la moitié de ce dont la chaîne a
-besoin — H3 dans ComfyUI, en particulier. On regarde avant d'installer.
+Il n'exécute rien non plus sur les machines : pour chaque capacité
+servie par ComfyUI, il valide à blanc les gabarits contre `/object_info`
+du ComfyUI de cette capacité — chaque nœud existe, chaque fichier de
+poids cité est connu du serveur. Pour les capacités lancées par ssh
+(Kimodo, UniRig), il vérifie la machine (`hostname`, les DGX sont des
+clones) et la présence du python de leur venv.
 """
 
 from __future__ import annotations
@@ -15,26 +18,17 @@ import subprocess
 import sys
 
 from . import config
-from .comfy import Comfy, ComfyError
+from .comfy import Comfy, ComfyError, load_template, matte_workflow, validate
 
-# Des mots qui trahissent un nœud ComfyUI utile, par capacité.
-NODE_HINTS = {
-    "h3": ("minimax", "hailuo", "h3"),
-    "hunyuan3d": ("hunyuan3d", "hy3d"),
-    "trellis": ("trellis",),
-    "unirig": ("unirig",),
+# Capacité → les gabarits (ou workflows construits) qu'elle envoie à ComfyUI.
+COMFY_CAPS = {
+    "h3": ("h3_ref2va.json", "h3_orbit.json"),
+    "prep": ("<détourage BiRefNet>",),
+    "trellis": ("trellis2_mv.json", "trellis2_single.json"),
+    "sam3dbody": ("<mesure d'azimut SAM 3D Body>",),
 }
-
-# Les paquets Python que chaque moteur `python` importe.
-PY_MODULES = {
-    "trellis": ("trellis2",),
-    "hunyuan3d": ("hy3dshape", "hy3dpaint"),
-    "delight": ("diffusers",),
-    "unirig": ("lightning",),
-    "kimodo": ("kimodo",),
-    "sam3dbody": ("sam_3d_body",),
-    "prep": ("rembg",),
-}
+# Capacité lancée par ssh → le script d'entrée qu'elle exécute.
+REMOTE_CAPS = {"kimodo": "kimodo_entry.py", "unirig": "unirig_entry.py"}
 
 
 def ok(msg: str) -> None:
@@ -67,21 +61,86 @@ def gpus() -> list[str]:
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 
-def comfy_nodes(url: str) -> tuple[bool, dict[str, list[str]]]:
+def _workflows(cap: str) -> dict[str, dict]:
+    if cap == "prep":
+        return {"détourage BiRefNet": matte_workflow(["x.png"])}
+    if cap == "sam3dbody":
+        from . import sam3d
+
+        return {"mesure SAM 3D Body": sam3d._workflow("x.png")}
+    out = {}
+    for name in COMFY_CAPS[cap]:
+        try:
+            out[name] = load_template(name)
+        except ComfyError as exc:
+            out[name] = {"_absent": str(exc)}
+    return out
+
+
+def check_comfy(cap: str, cache: dict) -> bool:
+    url = config.comfyui_url(cap)
+    if url not in cache:
+        try:
+            cache[url] = Comfy(url, timeout=10).object_info()
+        except ComfyError:
+            cache[url] = None
+    info = cache[url]
+    if info is None:
+        no(f"{cap} : ComfyUI ne répond pas sur {url}")
+        return False
+    good = True
+    for name, wf in _workflows(cap).items():
+        if "_absent" in wf:
+            no(f"{cap} : {wf['_absent']}")
+            good = False
+            continue
+        problems = validate(wf, info)
+        if problems:
+            good = False
+            no(f"{cap} : {name} sur {url}")
+            for pb in problems[:6]:
+                print(f"              {pb}")
+            if len(problems) > 6:
+                print(f"              … et {len(problems) - 6} autres")
+        else:
+            ok(f"{cap} : {name} valide sur {url}")
+    return good
+
+
+def check_remote(cap: str) -> bool:
+    from . import remote
+
+    host, python = config.setting(f"remote_{cap}"), config.setting(f"python_{cap}")
+    if not host or not python:
+        no(f"{cap} : remote_{cap} / python_{cap} non réglés")
+        return False
+    entry = config.REPO / "tools" / "remote" / REMOTE_CAPS[cap]
+    if not entry.exists():
+        no(f"{cap} : script d'entrée absent ({entry.relative_to(config.REPO)})")
+        return False
     try:
-        info = Comfy(url, timeout=5).object_info()
-    except ComfyError:
-        return False, {}
-    found: dict[str, list[str]] = {}
-    for cap, hints in NODE_HINTS.items():
-        found[cap] = sorted(n for n in info if any(h in n.lower() for h in hints))
-    return True, found
+        res = remote._ssh(host, f"hostname && test -x {python} && echo PY", timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        no(f"{cap} : ssh {host} impossible ({exc})")
+        return False
+    lines = res.stdout.split()
+    if not lines:
+        no(f"{cap} : {host} injoignable ({res.stderr.strip()[-200:]})")
+        return False
+    if host.lower().startswith("dgx") and lines[0].lower() != host.lower():
+        no(f"{cap} : l'alias {host} répond {lines[0]} — vérifie ~/.ssh/config (les DGX sont des clones)")
+        return False
+    if "PY" not in lines:
+        no(f"{cap} : {python} absent sur {lines[0]}")
+        return False
+    ok(f"{cap} : {python} sur {lines[0]}")
+    return True
 
 
 def run(*, write: bool = False) -> None:
     proposal: dict[str, str] = {}
 
-    print("\n=== MACHINE ===========================================")
+    print("\n=== CE POSTE ==========================================")
     ok(f"python {sys.version.split()[0]} ({sys.executable})")
     for mod in ("numpy", "PIL"):
         (ok if _has(mod) else no)(f"{mod}{'' if _has(mod) else ' — requis : pip install -r requirements.txt'}")
@@ -89,79 +148,38 @@ def run(*, write: bool = False) -> None:
     for c in cards:
         ok(f"GPU {c}")
     if not cards:
-        no("aucun GPU visible (nvidia-smi absent ou muet)")
-    if _has("torch"):
-        try:
-            import torch
+        see("pas de GPU ici : les modèles tournent sur les machines ci-dessous")
 
-            ok(f"torch {torch.__version__}, CUDA {'oui' if torch.cuda.is_available() else 'non'}")
-        except Exception as exc:  # noqa: BLE001
-            see(f"torch présent mais ne se charge pas : {exc}")
-    else:
-        no("torch — les moteurs `python` en ont besoin, pas ComfyUI")
+    print("\n=== COMFYUI, PAR CAPACITÉ =============================")
+    cache: dict = {}
+    for cap in COMFY_CAPS:
+        # La mesure SAM 3D Body n'est pas un moteur : elle ne se règle pas.
+        if check_comfy(cap, cache) and "comfyui" in config.CAPABILITIES.get(cap, ()):
+            proposal[cap] = "comfyui"
 
-    print("\n=== COMFYUI ===========================================")
-    url = config.comfyui_url()
-    candidates = [url] + [f"http://127.0.0.1:{p}" for p in (8188, 8189, 8000, 8080) if f":{p}" not in url]
-    alive = None
-    for u in candidates:
-        up, nodes = comfy_nodes(u)
-        if up:
-            alive = u
-            ok(f"ComfyUI répond sur {u}")
-            for cap, names in nodes.items():
-                if names:
-                    ok(f"nœuds {cap} : {', '.join(names[:8])}{' …' if len(names) > 8 else ''}")
-            if nodes.get("h3"):
-                proposal["h3"] = "comfyui"
-            else:
-                see("aucun nœud H3 reconnu — vérifie le nom des nœuds, ou lance H3 par son script")
-            break
-    if not alive:
-        no(f"ComfyUI ne répond pas ({', '.join(candidates)})")
-
-    print("\n=== MOTEURS PYTHON ====================================")
-    for cap, mods in PY_MODULES.items():
-        present = [m for m in mods if _has(m)]
-        if len(present) == len(mods):
-            ok(f"{cap} : {', '.join(mods)}")
-            if cap in ("trellis", "hunyuan3d", "kimodo", "sam3dbody") and cap not in proposal:
-                proposal[cap] = "python"
-            if cap == "delight":
-                proposal.setdefault("delight", "hunyuan") if _has("hy3dpaint") or _has("hy3dgen") else None
-            if cap == "prep":
-                proposal["prep"] = "rembg"
-        else:
-            no(f"{cap} : {', '.join(m for m in mods if m not in present)}")
-    unirig = config.setting("unirig_dir")
-    if unirig:
-        ok(f"UniRig : {unirig}")
-        proposal["unirig"] = "python"
-    else:
-        no("UniRig : pose FACTORY_UNIRIG_DIR sur le dépôt cloné")
+    print("\n=== PAR SSH ===========================================")
+    for cap in REMOTE_CAPS:
+        if check_remote(cap):
+            proposal[cap] = "python"
 
     print("\n=== RÉGLAGE ACTUEL ====================================")
     for cap in config.CAPABILITIES:
         cur = config.backend(cap)
+        where = ""
+        if cur == "comfyui":
+            where = f"  ({config.comfyui_url(cap)})"
+        elif cur == "python" and cap in REMOTE_CAPS:
+            where = f"  (ssh {config.setting(f'remote_{cap}') or '?'})"
         hint = f"  → {proposal[cap]} disponible" if cap in proposal and proposal[cap] != cur else ""
-        print(f"  {cap:10s} {cur}{hint}")
+        print(f"  {cap:10s} {cur}{where}{hint}")
 
-    print("\n=== À FAIRE ===========================================")
-    if not proposal:
-        print("  rien de détecté : la chaîne tournera en factice, étiqueté comme tel.")
-    else:
-        for cap, value in proposal.items():
-            print(f"  export FACTORY_{cap.upper()}={value}")
-        if alive and alive != url:
-            print(f"  export FACTORY_COMFYUI_URL={alive}")
-        print("  ou : ./usine doctor --ecrire   (range tout dans factory.local.json)")
     if write:
         data = {}
         if config.LOCAL_CONFIG.exists():
             data = json.loads(config.LOCAL_CONFIG.read_text(encoding="utf-8"))
         data.setdefault("backends", {}).update(proposal)
-        if alive:
-            data["comfyui_url"] = alive
         config.LOCAL_CONFIG.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         print(f"\n  écrit : {config.LOCAL_CONFIG}")
+    elif any(proposal.get(c) != config.backend(c) for c in proposal):
+        print("\n  ./usine doctor --ecrire   range les moteurs disponibles dans factory.local.json")
     print()

@@ -27,7 +27,11 @@ from . import config, gltf
 from .comfy import Comfy, fill, load_template
 from .project import ChainError
 
-TEMPLATES = {"trellis2": ("trellis", "trellis2_mv.json")}
+# Le moteur exposé → sa capacité, son gabarit multi-vues, son gabarit
+# image unique. Le second vient du modèle `3d_pixal3d_trellis2_image_to_model`
+# de ComfyUI, aiguillages figés sur la branche TRELLIS.2 pure (sans
+# Pixal3D ni MoGe).
+TEMPLATES = {"trellis2": ("trellis", "trellis2_mv.json", "trellis2_single.json")}
 ORDER = ("front", "left", "back", "right")
 
 
@@ -35,16 +39,18 @@ def generate(engine: str, *, views: dict[str, Path], single_view: Path | None, d
              texture: bool = True, height_m: float = 1.75, report=lambda p, m: None) -> dict:
     if engine not in TEMPLATES:
         raise ChainError(f"{engine} n'a pas encore de gabarit ComfyUI")
-    if single_view is not None:
-        raise ChainError("TRELLIS.2 image unique par ComfyUI : gabarit pas encore écrit — passe par les quatre vues")
-    missing = [k for k in ORDER if k not in views]
-    if missing:
-        raise ChainError(f"vues préparées manquantes pour le multi-vues : {', '.join(missing)}")
-    capability, name = TEMPLATES[engine]
+    capability, multi, single = TEMPLATES[engine]
     comfy = Comfy(config.comfyui_url(capability))
-    report(0.05, f"envoi des quatre vues à {comfy.url}")
-    names = [comfy.upload(Path(views[k])) for k in ORDER]
-    wf = fill(load_template(name), {"seed": seed}, names)
+    if single_view is not None:
+        report(0.05, f"envoi de la vue unique à {comfy.url}")
+        name, refs = single, [comfy.upload(Path(single_view))]
+    else:
+        missing = [k for k in ORDER if k not in views]
+        if missing:
+            raise ChainError(f"vues préparées manquantes pour le multi-vues : {', '.join(missing)}")
+        report(0.05, f"envoi des quatre vues à {comfy.url}")
+        name, refs = multi, [comfy.upload(Path(views[k])) for k in ORDER]
+    wf = fill(load_template(name), {"seed": seed}, refs)
     work = dest.parent / ".comfy"
     paths = [p for p in comfy.run(wf, work, report=report, prefix="trellis2") if p.suffix.lower() == ".glb"]
     if not paths:

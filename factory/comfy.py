@@ -167,6 +167,22 @@ class Comfy:
 
 # ── détourage ──────────────────────────────────────────────────────
 
+def matte_workflow(names: list[str]) -> dict:
+    """BiRefNet sur des images déjà déposées dans ComfyUI : un masque en
+    niveaux de gris par image, sorties `OUT` dans l'ordre."""
+    wf = {"1": {"class_type": "LoadBackgroundRemovalModel",
+                "inputs": {"bg_removal_name": config.setting("birefnet", "birefnet.safetensors")}}}
+    for k, name in enumerate(names):
+        base = 10 + 4 * k
+        wf[str(base)] = {"class_type": "LoadImage", "inputs": {"image": name}}
+        wf[str(base + 1)] = {"class_type": "RemoveBackground",
+                             "inputs": {"bg_removal_model": ["1", 0], "image": [str(base), 0]}}
+        wf[str(base + 2)] = {"class_type": "MaskToImage", "inputs": {"mask": [str(base + 1), 0]}}
+        wf[str(base + 3)] = {"class_type": "SaveImage", "_meta": {"title": "OUT"},
+                             "inputs": {"images": [str(base + 2), 0], "filename_prefix": "usine/matte"}}
+    return wf
+
+
 def remove_background(images: list, *, workdir: Path, batch: int = 16, report=None) -> list:
     """Les masques de BiRefNet (nœuds natifs LoadBackgroundRemovalModel
     et RemoveBackground), une image en niveaux de gris par image, dans
@@ -177,25 +193,18 @@ def remove_background(images: list, *, workdir: Path, batch: int = 16, report=No
     import numpy as np
     from PIL import Image
 
-    comfy = Comfy()
-    model = config.setting("birefnet", "birefnet.safetensors")
+    comfy = Comfy(config.comfyui_url("prep"))
     workdir.mkdir(parents=True, exist_ok=True)
     masks = []
     for start in range(0, len(images), batch):
         chunk = images[start:start + batch]
-        wf = {"1": {"class_type": "LoadBackgroundRemovalModel", "inputs": {"bg_removal_name": model}}}
-        for k, img in enumerate(chunk):
+        names = []
+        for img in chunk:
             src = workdir / f"matte_{uuid.uuid4().hex[:10]}.png"
             img.convert("RGB").save(src)
-            name = comfy.upload(src)
+            names.append(comfy.upload(src))
             src.unlink()
-            base = 10 + 4 * k
-            wf[str(base)] = {"class_type": "LoadImage", "inputs": {"image": name}}
-            wf[str(base + 1)] = {"class_type": "RemoveBackground",
-                                 "inputs": {"bg_removal_model": ["1", 0], "image": [str(base), 0]}}
-            wf[str(base + 2)] = {"class_type": "MaskToImage", "inputs": {"mask": [str(base + 1), 0]}}
-            wf[str(base + 3)] = {"class_type": "SaveImage", "_meta": {"title": "OUT"},
-                                 "inputs": {"images": [str(base + 2), 0], "filename_prefix": "usine/matte"}}
+        wf = matte_workflow(names)
         if report:
             report(start / len(images), f"détourage BiRefNet {start + len(chunk)}/{len(images)}")
         for path in comfy.run(wf, workdir, prefix=f"mask{start:04d}"):
@@ -204,6 +213,42 @@ def remove_background(images: list, *, workdir: Path, batch: int = 16, report=No
             rim = np.concatenate([m[0], m[-1], m[:, 0], m[:, -1]])
             masks.append(Image.fromarray(255 - m if rim.mean() > 127 else m))
     return masks
+
+
+# ── validation à blanc ─────────────────────────────────────────────
+
+def _options(spec) -> list | None:
+    """Les valeurs permises d'une entrée COMBO, dans les deux formes
+    que rend /object_info : [[…options]] ou ["COMBO", {"options": […]}]."""
+    if not isinstance(spec, list) or not spec:
+        return None
+    if isinstance(spec[0], list):
+        return spec[0]
+    if spec[0] == "COMBO" and len(spec) > 1 and isinstance(spec[1], dict):
+        return spec[1].get("options")
+    return None
+
+
+def validate(workflow: dict, info: dict) -> list[str]:
+    """Ce que ComfyUI refuserait, sans rien exécuter : un nœud absent, ou
+    une valeur de liste — un fichier de poids surtout — que le serveur ne
+    connaît pas. Les images d'entrée et les `{{…}}` ne sont pas jugés."""
+    problems = []
+    for nid, node in workflow.items():
+        if nid.startswith("_"):
+            continue
+        cls = node.get("class_type")
+        if cls not in info:
+            problems.append(f"nœud {nid} : {cls} absent de ce ComfyUI")
+            continue
+        spec = {**info[cls].get("input", {}).get("required", {}), **info[cls].get("input", {}).get("optional", {})}
+        for key, val in node.get("inputs", {}).items():
+            if not isinstance(val, str) or "{{" in val or key == "image":
+                continue
+            opts = _options(spec.get(key))
+            if opts is not None and val not in opts:
+                problems.append(f"nœud {nid} ({cls}).{key} : « {val} » inconnu ici")
+    return problems
 
 
 # ── gabarits ───────────────────────────────────────────────────────

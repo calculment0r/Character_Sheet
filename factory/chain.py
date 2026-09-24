@@ -271,14 +271,26 @@ def angular_error(measured: float, target: float) -> float:
     return (measured - target + 180.0) % 360.0 - 180.0
 
 
-def check(p: Project, costume: str | None, *, angles: dict[str, float] | None = None) -> dict:
+def check(p: Project, costume: str | None, *, angles: dict[str, float] | None = None, measure: bool = False,
+          report=None) -> dict:
     """Refus explicite au-delà de ±5° (§6.2). Les angles viennent, par
-    ordre de préférence : de la ligne de commande, d'une mesure, ou de
-    ce qui a été demandé au générateur — et le rapport dit lequel."""
+    ordre de préférence : de la ligne de commande, d'une mesure (SAM 3D
+    Body, `measure`), d'une estimation (silhouette de l'orbite), ou de ce
+    qui a été demandé au générateur — et le rapport dit lequel."""
     key, cos = p.costume(costume)
     v = cos["views"]
     if not v["prepared"]:
         raise ChainError("vues non préparées — `./usine prep` d'abord")
+    if measure:
+        from . import sam3d
+
+        names = [n for n in (*ORTHO, "threequarter") if n in v["raw"]]
+        got = sam3d.measure_azimuths({n: p.path(v["raw"][n]["file"]) for n in names},
+                                     workdir=p.dir(f"costumes/{key}/views/.sam3d"), report=report or _report())
+        for n, m in got.items():
+            v["raw"][n]["azimuth_measured"] = m["azimuth"]
+            v["raw"][n]["azimuth_measure"] = {"engine": "sam3dbody", "yaw_raw": m["yaw_raw"],
+                                              "reference": "front", "at": now()}
     errors, table = {}, {}
     for n in ORTHO:
         target = prompts.AZIMUTHS[n][0]
