@@ -53,6 +53,15 @@ détourage est crénelé. Ce qui a changé :
 - Essai réel sur DGX2 : « Essai atelier », brief lu en 42 s (chargement
   compris), quatre visages Z-Image en 44 s, modèle de texte resté chargé.
 
+- **Onglet Costume (retour de Cal)** : le bouton de rendu est toujours
+  là, grisé tant qu'il n'y a pas de visage verrouillé, avec un bandeau qui
+  le dit et mène au visage ; pas de bouton « Enregistrer » — le texte de
+  la tenue se garde en quittant le champ, les images dès qu'elles sont
+  déposées ; une tenue vide est refusée. Un verrouillage ou une validation
+  rend l'atelier à l'étape suivante.
+- **Portraits en gros plan**, coupés au cou : un vêtement sur le visage de
+  référence passerait dans toutes les générations qui le prennent.
+
 **Reste à faire** : le costume par brief n'a pas encore tourné pour de
 vrai (plein pied H3 à partir d'un prompt écrit par le modèle) ; l'orbite
 et la suite passent encore par l'ancienne interface de bloc ; `doctor`
