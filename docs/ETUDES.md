@@ -145,6 +145,26 @@ tenue exacte), `<image3>` une mise en page faite des squelettes A-pose
   pas de capuche) ; les squelettes la tiennent (zip, cordons, capuche).
 - Face et dos en A-pose, même tenue, même visage, même échelle.
 
+**Le workflow lui-même, rejoué** (zip téléchargé par Cal ; JSON et
+`Mannequin.png` gardés hors du dépôt, public ; `tools/remote/civitai_sheet_try.py`
+lit les prompts dans le JSON). Ce qu'il fait vraiment : modèle de base
+INT8 **sans turbo**, 30 pas, CFG 3,5, long prompt négatif, encodeur à
+`resolution` 0, sortie 16:9 d'un mégapixel (1344 × 768) ; `<image1>` le
+mannequin (bras le long du corps), `<image2>` le visage, `<image3>` une
+planche de garde-robe générée d'abord depuis une image de la tenue.
+Sur `essai-atelier` [V, 25/09] :
+- la garde-robe **invente** harnais, holster, ceinturon et un hoodie
+  délavé taché : son prompt énumère « harnesses, holsters, straps,
+  weathering » et le modèle les dessine — et ils passent dans toutes les
+  planches tirées d'elle ;
+- avec notre mannequin en A-pose, la base remet les bras le long du
+  corps ; le gros plan porte un t-shirt dans trois planches sur quatre ;
+- 217 s la garde-robe, 375 à 430 s la planche, contre 66 s la nôtre.
+
+Notre version (A-pose validée comme tenue, squelettes comme mise en page,
+visage coupé au col, turbo) reste celle de la chaîne. Le mode « base »
+(pas, CFG, négatif) est gardé dans `qwen21.generate(base=…)`.
+
 Deux usages, deux méthodes [V, pratique publiée ; I, choix] :
 
 - **Pour la chaîne** : pas de planche générée d'un coup. Les vues HD,

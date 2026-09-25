@@ -47,13 +47,18 @@ def sigmas(width: int, height: int) -> str:
     return ", ".join(["1"] + [f"{shift / (shift + 1 / x - 1):.10f}" for x in NODES] + ["0"])
 
 
-def workflow(n_refs: int, width: int, height: int, resolution: int = 1024) -> dict:
+def workflow(n_refs: int, width: int, height: int, resolution: int = 1024, base: tuple[int, float] | None = None
+             ) -> dict:
+    """`base` = (pas, cfg) : le modèle de base sans le LoRA turbo, avec un
+    prompt négatif — les réglages du workflow Civitai de la planche (30
+    pas, CFG 3,5) ; sinon le turbo, 6 pas sans CFG."""
     wf = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": config.setting("qwen21_unet", UNET),
                                                      "weight_dtype": "default"}},
         "2": {"class_type": "LoraLoaderBypassModelOnly",
               "inputs": {"model": ["1", 0], "lora_name": config.setting("qwen21_lora", LORA), "strength_model": 1.0}},
-        "3": {"class_type": "QwenImage21Cache", "inputs": {"model": ["2", 0], "device": "off", "dtype": "default"}},
+        "3": {"class_type": "QwenImage21Cache", "inputs": {"model": ["1", 0] if base else ["2", 0], "device": "off",
+                                                           "dtype": "default"}},
         "4": {"class_type": "CLIPLoader", "inputs": {"clip_name": config.setting("qwen21_clip", CLIP),
                                                      "type": "qwen_image", "device": "default"}},
         "5": {"class_type": "VAELoader", "inputs": {"vae_name": VAE}},
@@ -65,8 +70,8 @@ def workflow(n_refs: int, width: int, height: int, resolution: int = 1024) -> di
         images[f"images.image_{k + 1}"] = [nid, 0]
     wf.update({
         "6": {"class_type": "TextEncodeQwenImage21",
-              "inputs": {"clip": ["4", 0], "vae": ["5", 0], "prompt": "{{prompt}}", "negative_prompt": "",
-                         "resolution": resolution, **images}},
+              "inputs": {"clip": ["4", 0], "vae": ["5", 0], "prompt": "{{prompt}}",
+                         "negative_prompt": "{{negative}}" if base else "", "resolution": resolution, **images}},
         "7": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
         "8": {"class_type": "ManualSigmas", "inputs": {"sigmas": sigmas(width, height)}},
         "9": {"class_type": "BasicGuider", "inputs": {"model": ["3", 0], "conditioning": ["6", 0]}},
@@ -79,14 +84,23 @@ def workflow(n_refs: int, width: int, height: int, resolution: int = 1024) -> di
         "14": {"class_type": "SaveImage", "inputs": {"images": ["13", 0], "filename_prefix": "usine/qwen21"},
                "_meta": {"title": "OUT"}},
     })
+    if base:
+        del wf["2"], wf["8"], wf["9"], wf["10"], wf["11"]
+        steps, cfg = base
+        wf["12"] = {"class_type": "KSampler",
+                    "inputs": {"model": ["3", 0], "positive": ["6", 0], "negative": ["6", 1], "latent_image": ["7", 0],
+                               "seed": "{{seed}}", "steps": steps, "cfg": cfg, "sampler_name": "euler",
+                               "scheduler": "simple", "denoise": 1.0}}
     return wf
 
 
 def generate(*, prompt: str, refs: list[Path], dest: Path, seed: int, size: tuple[int, int],
-             report=lambda p, m: None, stub=None, resolution: int = 1024) -> Path:
+             report=lambda p, m: None, stub=None, resolution: int = 1024, negative: str = "",
+             base: tuple[int, float] | None = None) -> Path:
     """Rend une image dans `dest`. `refs` : <image1>, <image2>… (trois au
     plus). `stub` : l'image à écrire en factice. `resolution` : taille à
-    laquelle l'encodeur lit les références."""
+    laquelle l'encodeur lit les références (0 : leur taille). `base` :
+    (pas, cfg) pour le modèle de base, avec le prompt `negative`."""
     refs = list(refs)[:MAX_REFS]
     dest.parent.mkdir(parents=True, exist_ok=True)
     if config.backend("portrait") == "stub":
@@ -95,7 +109,8 @@ def generate(*, prompt: str, refs: list[Path], dest: Path, seed: int, size: tupl
         return dest
     comfy = Comfy(config.comfyui_url("portrait"))
     names = [comfy.upload(Path(r)) for r in refs]
-    wf = fill(workflow(len(names), *size, resolution=resolution),{"prompt": prompt, "seed": seed}, names)
+    wf = fill(workflow(len(names), *size, resolution=resolution, base=base),
+              {"prompt": prompt, "seed": seed, "negative": negative}, names)
     files = comfy.run(wf, dest.parent / f".{dest.stem}", report=report, prefix="qwen21")
     Path(files[0]).replace(dest)
     return dest
