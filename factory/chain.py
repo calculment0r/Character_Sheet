@@ -224,11 +224,23 @@ def apose_ok(p: Project, costume: str | None, candidate: str) -> str:
 
 # ── planche ────────────────────────────────────────────────────────
 
-def sheet(p: Project, costume: str | None, *, mask_face: bool = False, ab: bool = False,
-          seed: int | None = None, report=None) -> list[dict]:
-    """La planche en cinq frames (§5.2). Avec --ab, deux planches de
-    même graine, avec et sans disque sur le visage des plein pieds : le
-    §5.5 veut que l'astuce se tranche sur pièces, pas a priori."""
+def sheet(p: Project, costume: str | None, *, engine: str = "qwen21", variants: int = 1, mask_face: bool = False,
+          ab: bool = False, seed: int | None = None, report=None) -> list[dict]:
+    """La planche de référence.
+
+      qwen21  par défaut : trois cases — face et dos en pied en A-pose, gros
+              plan tête et épaules — par Qwen-Image 2.1 turbo, le visage en
+              <image1>, l'A-pose validée en <image2>, une mise en page faite
+              des squelettes en <image3> (`pose.py`). Elle se fait après
+              l'A-pose et sert à Cal comme au turnaround H3 de la fin ;
+      h3      l'ancienne planche H3 en cinq frames (§5.2). Avec --ab, deux
+              planches de même graine, avec et sans disque sur le visage.
+
+    Aucune n'ouvre ni ne ferme les vues (Cal, 25/09)."""
+    if engine == "qwen21":
+        return _sheet_qwen21(p, costume, variants=variants, seed=seed, report=report)
+    if engine != "h3":
+        raise ChainError(f"moteur de planche inconnu : {engine} (possibles : qwen21, h3)")
     locked = p.require_face()
     key, cos = p.costume(costume)
     body = p.require_fullbody(cos)
@@ -254,6 +266,42 @@ def sheet(p: Project, costume: str | None, *, mask_face: bool = False, ab: bool 
         _contact(p, f"costumes/{key}/sheets/ab-{made[0]['id']}-{made[1]['id']}.png",
                  [(f"{m['id']} · {'disque' if m['mask_face'] else 'sans disque'}", p.path(m["file"])) for m in made],
                  cell=640, cols=2)
+    return made
+
+
+def _sheet_qwen21(p: Project, costume: str | None, *, variants: int, seed: int | None, report) -> list[dict]:
+    from . import pose, qwen21
+    from . import stubs as sketches
+
+    locked = p.require_face()
+    key, cos = p.costume(costume)
+    p.require_fullbody(cos)
+    body = p.require_apose(cos)
+    report = report or _report()
+    sid = p.next_id("s", cos["sheets"])
+    folder = p.dir(f"costumes/{key}/sheets/{sid}")
+    skel = pose.skeletons(p.path(body), folder / "skeleton.png", [180], report=report)
+    layout = pose.sheet_layout(skel[0], skel[180], folder / "layout.png")
+    head = pose.head_only(p.path(locked), folder / "face.png")
+    text = pose.text_sheet(p.data["style"])
+    (folder / "prompt.txt").write_text(text, encoding="utf-8")
+    base = _seed(seed)
+    made = []
+    for i in range(variants):
+        s = base + i
+        if i:
+            sid = p.next_id("s", cos["sheets"])
+            p.dir(f"costumes/{key}/sheets/{sid}")
+        dest = p.path(f"costumes/{key}/sheets/{sid}/sheet.png")
+        print(f"  planche {sid} · Qwen-Image 2.1 turbo · graine {s}")
+        qwen21.generate(prompt=text, refs=[head, p.path(body), layout], dest=dest, seed=s, size=pose.SHEET_SIZE,
+                        resolution=pose.RESOLUTION, report=report,
+                        stub=lambda: sketches.mannequin(pose.SHEET_SIZE, azimuth=0.0, seed=identity_seed(p)))
+        entry = {"id": sid, "file": p.rel(dest), "engine": "qwen21", "mask_face": False, "seed": s,
+                 "backend": config.backend("portrait"), "layout": p.rel(layout), "at": now()}
+        cos["sheets"].append(entry)
+        made.append(entry)
+        p.save()
     return made
 
 

@@ -55,6 +55,13 @@ def render(p: Project) -> str:
                           else f"./usine pose {slug} --costume {key}")
             continue
 
+        # La planche ne ferme pas les vues : elle se propose, sans bloquer.
+        sheet = next((s for s in cos["sheets"] if s["id"] == cos.get("sheet")), None)
+        row("ST-04b", "Planche", f"{sheet['id']} validée{_fake(sheet)}" if sheet
+            else f"{len(cos['sheets'])} planche(s), aucune validée")
+        if not sheet and not cos["views"]["raw"]:
+            nxt = nxt or f"./usine planche {slug} --costume {key}"
+
         v = cos["views"]
         chk = v.get("check")
         state = f"{len(v['raw'])} brute(s)"

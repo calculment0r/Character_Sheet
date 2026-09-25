@@ -132,7 +132,7 @@ def comfy_route(tmp: Path, ident: Path) -> None:
         usine("costume", "test-pilote", "veste")
         usine("pleinpied", "test-pilote", "--variantes", "1")
         usine("pleinpied-ok", "test-pilote", "1")
-        usine("planche", "test-pilote")
+        usine("planche", "test-pilote", "--moteur-planche", "h3")
         usine("planche-ok", "test-pilote", "s001")
         usine("pose", "test-pilote", "--variantes", "1")
         usine("pose-ok", "test-pilote", "1")
@@ -266,6 +266,8 @@ def studio_route(tmp: Path) -> None:
                  run(slug, "fullbody_ok", costume="voyage", candidate="1"),
                  run(slug, "apose", costume="voyage", variants=2),
                  run(slug, "apose_ok", costume="voyage", candidate="2"),
+                 run(slug, "sheet", costume="voyage", variants=1),
+                 run(slug, "sheet_ok", costume="voyage", id="s001"),
                  run(slug, "views", costume="voyage", method="orbit"),
                  run(slug, "prep", costume="voyage"),
                  run(slug, "check", costume="voyage"),
@@ -278,7 +280,7 @@ def studio_route(tmp: Path) -> None:
         failed = [(i, s.get("error")) for i, s in enumerate(steps) if s["status"] != "done"]
         check("studio : du costume au rig accepté, un travail par étage, la file vide ensuite",
               not failed and bad == 409 and len(cos["refs"]) == 1 and cos["apose"]["validated"]
-              and all(stages[k] == "done" for k in ("face", "costumes", "fullbody", "pose", "views", "mesh", "rig"))
+              and all(stages[k] == "done" for k in ("face", "costumes", "fullbody", "pose", "sheet", "views", "mesh", "rig"))
               and detail["summary"]["next"] is None, str(failed or stages))
 
         code, ctype, img = call(f"/files/{slug}/{detail['character']['face']['locked']}")
@@ -497,7 +499,7 @@ def main() -> int:
     usine("planche", "test-pilote", expect=2)
     check("pas de planche sans plein pied validé", True)
     usine("pleinpied-ok", "test-pilote", "1")
-    usine("planche", "test-pilote", "--ab", "--graine", "3")
+    usine("planche", "test-pilote", "--moteur-planche", "h3", "--ab", "--graine", "3")
     sheets = manifest()["costumes"]["veste"]["sheets"]
     check("A/B du disque : deux planches, même graine",
           len(sheets) == 2 and sheets[0]["seed"] == sheets[1]["seed"] and sheets[1]["mask_face"])
@@ -512,6 +514,15 @@ def main() -> int:
           and sent["refs"] == ["costumes/veste/fullbody.png", "costumes/veste/apose/skeleton.png"]
           and "<image2>" in sent["prompt"])
     usine("pose-ok", "test-pilote", "2")
+    usine("planche", "test-pilote", "--variantes", "2", "--graine", "9")
+    cos = manifest()["costumes"]["veste"]
+    made = [s for s in cos["sheets"] if s.get("engine") == "qwen21"]
+    from PIL import Image
+    layout = Image.open(root / made[0]["layout"])
+    check("planche Qwen : deux planches trois cases après l'A-pose, mise en page en squelettes 1920 × 1088",
+          len(made) == 2 and layout.size == (1920, 1088) and (root / made[0]["file"]).exists()
+          and "<image3>" in (root / "costumes/veste/sheets" / made[0]["id"] / "prompt.txt").read_text(encoding="utf-8"))
+    usine("planche-ok", "test-pilote", made[1]["id"])
 
     usine("vues", "test-pilote")
     raw = manifest()["costumes"]["veste"]["views"]["raw"]

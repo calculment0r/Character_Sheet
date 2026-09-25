@@ -115,7 +115,8 @@ def cmd_pose_ok(args) -> None:
 
 def cmd_planche(args) -> None:
     p = _p(args)
-    made = chain.sheet(p, args.costume, mask_face=args.disque, ab=args.ab, seed=args.graine)
+    made = chain.sheet(p, args.costume, engine=args.moteur_planche, variants=args.variantes, mask_face=args.disque,
+                       ab=args.ab, seed=args.graine)
     for s in made:
         print(f"planche {s['id']}{' (disque)' if s['mask_face'] else ''} : {p.path(s['file'])}")
     print(f"  valider : ./usine planche-ok {p.data['slug']} <id>")
@@ -281,10 +282,13 @@ def build() -> argparse.ArgumentParser:
     perso(sp), costume(sp)
     sp.add_argument("candidat")
 
-    sp = cmd("planche", cmd_planche, "character sheet H3 en cinq frames (§5) — hors validation depuis le 25/09")
+    sp = cmd("planche", cmd_planche, "planche de référence : face et dos en A-pose, gros plan (Qwen-Image 2.1)")
     perso(sp), costume(sp)
-    sp.add_argument("--disque", action="store_true", help="disque neutre sur le visage des plein pieds")
-    sp.add_argument("--ab", action="store_true", help="deux planches, avec et sans disque, même graine")
+    sp.add_argument("--moteur-planche", choices=["qwen21", "h3"], default="qwen21",
+                    help="qwen21 (par défaut, après l'A-pose) ou h3 (l'ancienne planche en cinq frames)")
+    sp.add_argument("--variantes", type=int, default=1)
+    sp.add_argument("--disque", action="store_true", help="h3 : disque neutre sur le visage des plein pieds")
+    sp.add_argument("--ab", action="store_true", help="h3 : deux planches, avec et sans disque, même graine")
     sp.add_argument("--graine", type=int)
 
     sp = cmd("planche-ok", cmd_planche_ok, "retenir une planche")

@@ -314,8 +314,9 @@ def a_apose_ok(p: Project, q: dict, report):
 
 
 def a_sheet(p: Project, q: dict, report):
-    return {"made": chain.sheet(p, _costume(p, q), mask_face=bool(q.get("mask_face")), ab=bool(q.get("ab")),
-                                seed=_seed(q), report=report)}
+    return {"made": chain.sheet(p, _costume(p, q), engine=q.get("engine") or "qwen21",
+                                variants=_int(q.get("variants"), 1, 1, 3), mask_face=bool(q.get("mask_face")),
+                                ab=bool(q.get("ab")), seed=_seed(q), report=report)}
 
 
 def a_sheet_ok(p: Project, q: dict, report):
@@ -398,7 +399,8 @@ ACTIONS = {
     "fullbody_ok":  (a_fullbody_ok, "plein pied validé", None),
     "apose":        (a_apose, "A-pose", ("qwen21", "portrait")),
     "apose_ok":     (a_apose_ok, "A-pose validée", None),
-    "sheet":        (a_sheet, "planche", ("h3", "h3")),
+    "sheet":        (a_sheet, "planche",
+                     lambda q, p=None: ("h3", "h3") if q.get("engine") == "h3" else ("qwen21", "portrait")),
     "sheet_ok":     (a_sheet_ok, "planche validée", None),
     "views":        (a_views, "vues orthogonales", _gpu_views),
     "prep":         (a_prep, "préparation des vues", ("birefnet", "prep")),
@@ -451,6 +453,10 @@ def _next(p: Project) -> dict | None:
         ap = apose(cos)
         if not ap.get("validated"):
             return {"action": "apose_ok" if ap["candidates"] else "apose", "costume": key}
+        # La planche vient dans l'ordre, sans fermer les vues.
+        if not cos.get("sheet") and not cos["views"]["raw"]:
+            return {"action": "sheet_ok" if any(s.get("engine") == "qwen21" for s in cos["sheets"]) else "sheet",
+                    "costume": key}
         v = cos["views"]
         if not v["raw"]:
             return {"action": "views", "costume": key}
@@ -489,6 +495,7 @@ def summary(p: Project) -> dict:
                                                   any_(lambda c: c["fullbody"]["candidates"]))),
         ("ST-05", "pose", "A-pose", state(any_(lambda c: apose(c).get("validated")),
                                           any_(lambda c: apose(c)["candidates"]))),
+        ("ST-05b", "sheet", "Planche", state(any_(lambda c: c.get("sheet")), any_(lambda c: c["sheets"]))),
         ("ST-06", "views", "Vues", state(any_(lambda c: (c["views"].get("check") or {}).get("ok")),
                                          any_(lambda c: c["views"]["raw"]))),
         ("ST-07", "mesh", "Mesh 3D", state(any_(lambda c: c["meshes"]), False)),

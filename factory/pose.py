@@ -54,6 +54,68 @@ VIEWS = {
 }
 
 
+SHEET_SIZE = (1920, 1088)
+
+
+def text_sheet(style: str = "photoreal") -> str:
+    """La planche de référence, façon « Qwen Image 2.1 Character Reference
+    Sheet Generator » (Civitai 2960890) : trois cases, identité, tenue et
+    mise en page données à part. Essai du 25/09 : voir `docs/ETUDES.md`."""
+    return " ".join([
+        "A professional character reference sheet of one and the same person: <image1> gives only the face, hair, "
+        "skin tone and age; <image2> gives the body and the exact outfit, every garment, colour, material and detail "
+        "unchanged, and the person wears that outfit in all three panels, the portrait included.",
+        "Three panels side by side, laid out exactly like <image3>, which only gives the composition, pose, scale and "
+        "framing and does not change the person's appearance: on the left, a full-body front view; in the centre, a "
+        "full-body back view; on the right, a large head-and-shoulders portrait facing the camera.",
+        f"In both full-body views the person stands in the same {APOSE}, the whole figure from the top of the head to "
+        "the soles of the shoes inside the panel, at the same size and on the same ground line.",
+        "Plain white seamless studio background, bright soft even light so the colours, fabrics and seams read "
+        "clearly." if style == "photoreal" else "Plain white background, bright even light.",
+        "Photorealistic, sharp focus, natural hands." if style == "photoreal" else
+        "Stylised character design reference, clean shapes, consistent shading, true colours, natural hands.",
+    ])
+
+
+def sheet_layout(front: Path, back: Path, dest: Path) -> Path:
+    """La mise en page de la planche, faite des squelettes A-pose : face et
+    dos en pied, même échelle et même sol ; la tête et les épaules
+    agrandies dans la troisième case. Une mise en page en squelettes tient
+    mieux la tenue dans le gros plan qu'un mannequin rendu (essai du 25/09)."""
+    w, h = SHEET_SIZE
+    panel = w // 3
+    f, b = Image.open(front).convert("RGB"), Image.open(back).convert("RGB")
+    box = lambda img: img.convert("L").point(lambda v: 255 if v > 20 else 0).getbbox() or (0, 0, *img.size)  # noqa: E731
+    fb, bb = box(f), box(b)
+    top = min(fb[1], bb[1]) - 60      # le sommet du crâne est au-dessus des yeux
+    bottom = max(fb[3], bb[3]) + 30   # les semelles sous les chevilles
+    scale = min(h * 0.92 / (bottom - top), panel * 0.94 / max(fb[2] - fb[0], bb[2] - bb[0]))
+    canvas = Image.new("RGB", SHEET_SIZE, (0, 0, 0))
+    for k, (img, bx) in enumerate(((f, fb), (b, bb))):
+        cx = (bx[0] + bx[2]) / 2
+        crop = img.crop((int(cx - panel / scale / 2), top, int(cx + panel / scale / 2), bottom))
+        crop = crop.resize((panel, int((bottom - top) * scale)))
+        canvas.paste(crop, (k * panel, h - crop.height - int(h * 0.04)))
+    bust_h = (fb[3] - top) * 0.34
+    bust_w = bust_h * panel / h
+    cx = (fb[0] + fb[2]) / 2
+    canvas.paste(f.crop((int(cx - bust_w / 2), top, int(cx + bust_w / 2), int(top + bust_h))).resize((panel, h)),
+                 (2 * panel, 0))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(dest)
+    return dest
+
+
+def head_only(face: Path, dest: Path) -> Path:
+    """Le visage verrouillé coupé au-dessus du col : le portrait est un gros
+    plan coupé au cou, et le haut qu'il montre passait dans le gros plan de
+    la planche (t-shirt noir au lieu du hoodie, essai du 25/09)."""
+    img = Image.open(face).convert("RGB")
+    w, h = img.size
+    img.crop((int(w * 0.22), 0, int(w * 0.78), int(h * 0.66))).save(dest)
+    return dest
+
+
 def text_apose(outfit: str, style: str = "photoreal") -> str:
     return " ".join(filter(None, [
         "Full-body studio photograph of the same person as in <image1>: the same face, hair, skin tone, age and body "

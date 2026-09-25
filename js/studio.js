@@ -40,7 +40,7 @@ const state = {
 };
 
 // Les choix ne prennent jamais l'orange : il y en a un par candidat.
-const PICKS = new Set(['face_lock', 'fullbody_ok', 'apose_ok', 'rig_ok']);
+const PICKS = new Set(['face_lock', 'fullbody_ok', 'apose_ok', 'sheet_ok', 'rig_ok']);
 const ORTHO = ['front', 'left', 'back', 'right'];
 const VIEWS = [...ORTHO, 'threequarter'];
 const VIEW_LABEL = { front: 'face', left: 'profil gauche', back: 'dos', right: 'profil droit', threequarter: '3/4' };
@@ -55,7 +55,8 @@ const METHOD_LABEL = {
 const NEXT_TEXT = {
   face: 'suite : variantes du visage', face_lock: 'suite : verrouiller un visage',
   costume_add: 'suite : un costume', fullbody: 'suite : plein pied', fullbody_ok: 'suite : valider un plein pied',
-  apose: 'suite : A-pose', apose_ok: 'suite : valider une A-pose', views: 'suite : vues orthogonales',
+  apose: 'suite : A-pose', apose_ok: 'suite : valider une A-pose', sheet: 'suite : planche',
+  sheet_ok: 'suite : valider une planche', views: 'suite : vues orthogonales',
   prep: 'suite : préparer les vues', check: "suite : contrôle d'alignement", mesh: 'suite : mesh 3D',
   rig: 'suite : rig', rig_ok: 'suite : regarder le rig',
 };
@@ -254,13 +255,14 @@ const STAGES = [
   { id: 'face', ref: '01', label: 'Visage' },
   { id: 'costume', ref: '02', label: 'Costume' },
   { id: 'pose', ref: '03', label: 'A-pose' },
-  { id: 'views', ref: '04', label: 'Vues' },
-  { id: 'mesh', ref: '05', label: '3D' },
-  { id: 'rig', ref: '06', label: 'Rig' },
+  { id: 'sheet', ref: '04', label: 'Planche' },
+  { id: 'views', ref: '05', label: 'Vues' },
+  { id: 'mesh', ref: '06', label: '3D' },
+  { id: 'rig', ref: '07', label: 'Rig' },
 ];
 const STAGE_OF = {
   face: 'face', face_lock: 'face', costume_add: 'costume', fullbody: 'costume', fullbody_ok: 'costume',
-  apose: 'pose', apose_ok: 'pose', views: 'views', prep: 'views', check: 'views', mesh: 'mesh', rig: 'rig',
+  apose: 'pose', apose_ok: 'pose', sheet: 'sheet', sheet_ok: 'sheet', views: 'views', prep: 'views', check: 'views', mesh: 'mesh', rig: 'rig',
   rig_ok: 'rig',
 };
 const ENGINE_LABEL = {
@@ -290,6 +292,7 @@ function stageStates(c) {
     costume: cos?.fullbody.validated ? 'done' : cos ? 'partial' : 'open',
     pose: !cos?.fullbody.validated ? 'locked' : cos.apose.validated ? 'done'
       : cos.apose.candidates.length ? 'partial' : 'open',
+    sheet: !cos?.apose.validated ? 'locked' : cos.sheet ? 'done' : qwenSheets(cos).length ? 'partial' : 'open',
     views: !cos?.apose.validated ? 'locked' : v.check?.ok ? 'done' : Object.keys(v.raw).length ? 'partial' : 'open',
     mesh: !v || !Object.keys(v.prepared).length ? 'locked' : cos.meshes.length ? 'done' : 'open',
     rig: !cos?.meshes.length ? 'locked' : cos.rigs.some((r) => r.verdict === 'accepted') ? 'done'
@@ -361,7 +364,7 @@ function stageView(stage, d) {
   const key = Object.keys(c.costumes).find((k) => c.costumes[k] === cos);
   const picker = Object.keys(c.costumes).length > 1 ? `<div class="tabs">${Object.entries(c.costumes).map(([k, x]) =>
     `<button class="tb sm ${k === key ? 'on' : 'ghost'}" data-costume-tab="${esc(k)}">${esc(x.name)}</button>`).join('')}</div>` : '';
-  const view = { pose: boxPose, views: boxViews, mesh: boxMesh, rig: boxRig }[stage];
+  const view = { pose: boxPose, sheet: boxSheet, views: boxViews, mesh: boxMesh, rig: boxRig }[stage];
   return picker + view(c, key, cos, d);
 }
 
@@ -533,14 +536,47 @@ function boxPose(c, key, cos) {
       });
     }).reverse().join('')}</div>`;
   }
-  if (ap.validated) body += goNext('Aux vues', 'views');
+  if (ap.validated) body += goNext('À la planche', 'sheet');
   const st = ap.validated ? ['done', 'validée'] : ap.candidates.length ? ['partial', `${ap.candidates.length} proposition(s)`]
     : ['todo', 'à faire'];
   return box({ sec: '03', title: 'A-pose', st: st[0], stLabel: st[1], body, next: isNext('apose', 'apose_ok') });
 }
 
+// Les planches Qwen-Image 2.1 ; les anciennes planches H3 restent dans le manifeste, hors de l'atelier.
+function qwenSheets(cos) {
+  return cos.sheets.filter((s) => s.engine === 'qwen21');
+}
+
+function boxSheet(c, key, cos) {
+  if (!cos.apose.validated) return waitBox('04', 'Planche', 'La planche attend une A-pose validée.');
+  const form = `sheet.${key}`;
+  const sheets = qwenSheets(cos);
+  let body = `<p>La planche de référence : face et dos en pied dans l'A-pose, et un gros plan tête et épaules. Le visage
+    verrouillé donne l'identité, l'A-pose la tenue, une mise en page faite des squelettes la composition. Elle sert au
+    turnaround de présentation ; les vues n'en dépendent pas.</p>
+    <div class="form-row">
+      ${select(`${form}.variants`, 'Propositions', [[1, '1'], [2, '2'], [3, '3']], 2)}
+      ${input(`${form}.seed`, 'Graine', { placeholder: 'au hasard', cls: 'num' })}
+      <span class="sp"></span>${act('sheet', 'Générer ▸', { form, costume: key })}
+    </div>`;
+  if (sheets.length) {
+    body += `<div class="box-sub">Planches · valide celle qui tient</div><div class="cands wide">${sheets.map((s) => {
+      const chosen = s.id === cos.sheet;
+      const [mark, markCls] = chosen ? ['validée', 'ok'] : stubMark(s);
+      return cand({
+        src: fileUrl(c.slug, s.file, s.at), label: s.id, cap: `${s.id} · graine ${s.seed}`, mark, markCls, sel: chosen,
+        button: chosen ? '' : act('sheet_ok', 'Valider', { costume: key, params: { id: s.id } }),
+      });
+    }).reverse().join('')}</div>`;
+  }
+  if (cos.sheet) body += goNext('Aux vues', 'views');
+  const st = cos.sheet ? ['done', `${cos.sheet} validée`] : sheets.length ? ['partial', `${sheets.length} planche(s)`]
+    : ['todo', 'à faire'];
+  return box({ sec: '04', title: 'Planche', st: st[0], stLabel: st[1], body, next: isNext('sheet', 'sheet_ok') });
+}
+
 function boxViews(c, key, cos, d) {
-  if (!cos.apose.validated) return waitBox('04', 'Vues orthogonales', 'Les vues attendent une A-pose validée.');
+  if (!cos.apose.validated) return waitBox('05', 'Vues orthogonales', 'Les vues attendent une A-pose validée.');
   const v = cos.views;
   const form = `views.${key}`;
   const methods = (d.view_methods || Object.keys(METHOD_LABEL)).map((m) => [m, METHOD_LABEL[m] || m]);
@@ -580,7 +616,7 @@ function boxViews(c, key, cos, d) {
   if (v.check) st = v.check.ok ? ['done', 'contrôle passé'] : ['partial', 'contrôle en échec'];
   else if (prepared.length) st = ['partial', 'préparées'];
   else if (raw.length) st = ['partial', `${raw.length} brute(s)`];
-  return box({ sec: '04', title: 'Vues orthogonales', st: st[0], stLabel: st[1], body,
+  return box({ sec: '05', title: 'Vues orthogonales', st: st[0], stLabel: st[1], body,
     next: isNext('views', 'prep', 'check') });
 }
 
@@ -601,7 +637,7 @@ function checkTable(chk) {
 
 function boxMesh(c, key, cos) {
   const v = cos.views;
-  if (!Object.keys(v.prepared).length) return waitBox('05', 'Mesh 3D', 'Le mesh attend les vues préparées.');
+  if (!Object.keys(v.prepared).length) return waitBox('06', 'Mesh 3D', 'Le mesh attend les vues préparées.');
   const form = `mesh.${key}`;
   const multiOk = v.check?.ok;
   let body = `<p>Le mesh PBR, canaux à part. En multi-vues, les quatre vues doivent avoir passé le contrôle ; une vue
@@ -624,11 +660,11 @@ function boxMesh(c, key, cos) {
          encodeURIComponent(fileUrl(c.slug, m.glb, m.at))}">Voir</a></td></tr>`).join('')}</tbody></table></div>`;
   }
   const st = cos.meshes.length ? ['done', `v${cos.meshes.at(-1).version}`] : ['todo', 'à faire'];
-  return box({ sec: '05', title: 'Mesh 3D', st: st[0], stLabel: st[1], body, next: isNext('mesh') });
+  return box({ sec: '06', title: 'Mesh 3D', st: st[0], stLabel: st[1], body, next: isNext('mesh') });
 }
 
 function boxRig(c, key, cos) {
-  if (!cos.meshes.length) return waitBox('06', 'Rig SOMA', 'Le rig attend un mesh.');
+  if (!cos.meshes.length) return waitBox('07', 'Rig SOMA', 'Le rig attend un mesh.');
   const backend = state.detail.backends.unirig;
   let body = `<p>Squelette SOMA 77, bind en A-pose, cinq poses de contrôle à regarder dans le viewer avant
     d'accepter.${backend === 'stub' ? ' UniRig n\'est pas encore branché : le rig est factice.' : ''}</p>
@@ -648,7 +684,7 @@ function boxRig(c, key, cos) {
   const last = cos.rigs.at(-1);
   const st = !last ? ['todo', 'à faire'] : last.verdict === 'accepted' ? ['done', 'accepté']
     : ['partial', last.verdict === 'rejected' ? 'refusé' : 'à regarder'];
-  return box({ sec: '06', title: 'Rig SOMA', st: st[0], stLabel: st[1], body, next: isNext('rig', 'rig_ok') });
+  return box({ sec: '07', title: 'Rig SOMA', st: st[0], stLabel: st[1], body, next: isNext('rig', 'rig_ok') });
 }
 
 /* ── en attendant : ce qu'on peut faire pendant un rendu ── */
