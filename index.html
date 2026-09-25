@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CHARACTER FACTORY</title>
-<meta name="description" content="Chaîne souveraine prompt ou photo → visage → costumes → planche → vues orthogonales → mesh PBR → rig SOMA → animation.">
+<title>CHARACTER FACTORY · ÉTAT DE LA CHAÎNE</title>
+<meta name="description" content="Où en est la chaîne : ce qui tourne sur de vraies images, ce qui est câblé, ce qui attend.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23e0674a'/%3E%3Crect x='12' y='12' width='8' height='8' rx='2' fill='%23170c08'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,282 +12,169 @@
 <link rel="stylesheet" href="./assets/tokens.css">
 <link rel="stylesheet" href="./assets/rack.css">
 <link rel="stylesheet" href="./assets/factory.css">
+<style>
+/* Page d'état : que des jetons, des filets en box-shadow. Le titre est en
+   Venus Rising — Norelli ne sert que le logotype et le titre de la console. */
+.etat { max-width: 1240px; margin: 0 auto; padding: var(--s6) var(--s6) 80px; display: flex; flex-direction: column; gap: 40px; }
+.etat-title {
+  margin: 0; font-family: var(--f-disp); font-weight: 400; font-size: clamp(26px, 3.6vw, 44px);
+  line-height: 1.08; letter-spacing: .02em; text-transform: uppercase; color: var(--ink);
+}
+.stages { display: flex; flex-direction: column; gap: var(--s2); }
+.stages .slab { text-decoration: none; }
+.fig-grid { display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.fig {
+  margin: 0; background: var(--panel); border-radius: var(--r3); padding: var(--s3);
+  box-shadow: inset 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: var(--s3);
+}
+.fig img { display: block; width: 100%; height: auto; border-radius: var(--r2); background: var(--panel2); }
+.fig figcaption { color: var(--ink2); font-size: 12px; line-height: 1.6; }
+.fig figcaption .lbl { display: block; margin-bottom: 3px; }
+.fig.wide { grid-column: 1 / -1; }
+.prose { margin: 0; max-width: 78ch; color: var(--ink2); font-size: 13px; line-height: 1.75; }
+.prose b { color: var(--ink); font-weight: 600; }
+.todo { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--s2); }
+.todo li {
+  background: var(--panel); border-radius: var(--r3); padding: 13px 18px; color: var(--ink2); font-size: 13px;
+  line-height: 1.6; box-shadow: inset 0 0 0 1px var(--line);
+}
+.todo li .lbl { color: var(--or); margin-right: var(--s3); }
+.todo li b { color: var(--ink); font-weight: 600; }
+.foot-note { color: var(--ink3); font-family: var(--f-mono); font-size: 10px; letter-spacing: .08em; line-height: 1.8; }
+.foot-note a { color: var(--cy); }
+@media (max-width: 640px) { .etat { padding: var(--s4) 16px 60px; } }
+</style>
 </head>
 <body>
 
 <header class="hdr">
-  <button class="logo" id="home-btn" title="revenir à la console">
+  <a class="logo" href="./" title="état de la chaîne">
     <span class="sq"><i></i></span>
     <span>
       <b>Character Factory</b>
-      <small>chaîne souveraine · dgx</small>
+      <small>état de la chaîne</small>
     </span>
-  </button>
-
+  </a>
   <span class="sp"></span>
-
-  <span class="pill" id="engine-pill"><i></i><span id="engine-text">démarrage</span></span>
-  <span class="clock" id="clock">--:--:--</span>
-
-  <button class="tb ghost sm" id="console-btn" title="revenir à la console" hidden>◂ Console</button>
-  <button class="tb ghost sm" id="method-btn" title="voir la méthode chargée">Méthode</button>
-  <button class="tb ghost sm" id="reset-btn" title="vider la session">Reset</button>
-  <button class="tb go sm" id="settings-btn" title="URL du DGX, modèle, repli">Moteur</button>
+  <span class="pill on"><i></i><span>état au 25.09.2026</span></span>
+  <a class="tb ghost sm" href="./viewer.html">Viewer 3D</a>
+  <a class="tb ghost sm" href="./theme.html">Thème</a>
+  <a class="tb go sm" href="./console.html">Console ▸</a>
 </header>
 
-<main class="console" id="home">
+<main class="etat">
 
   <div class="console-top">
     <div class="hero">
-      <span class="ref">00_console</span>
-      <h1>Du prompt<br>au personnage</h1>
+      <span class="ref">00_état</span>
+      <h2 class="etat-title">Où en est la chaîne</h2>
       <p>
-        Blocs pleins, filets fins, chiffres larges. Une chaîne en huit étages, du portrait
-        neutre jusqu'au mouvement joué : visage verrouillé, costumes, planche, vues
-        orthogonales, mesh PBR, rig SOMA, animation. Tout calcule sur le DGX, rien ne sort
-        du réseau. Chaque étage s'ouvre depuis cette console.
+        Prompt ou photo, visage verrouillé, costumes, planche, vues orthogonales, mesh PBR, rig SOMA,
+        animation. Les quatre premiers étages tournent sur de vraies images, par H3 dans le ComfyUI de
+        DGX1. La 3D, le rig et l'animation sont installés et câblés sur DGX2, pas encore lancés. Les
+        images ci-dessous sont celles d'un personnage de test, Maren Ostrova, costume « travail ».
       </p>
     </div>
-
     <div class="statcard">
-      <span class="ref">étages ouverts</span>
-      <span class="n" id="stat-n">01</span>
-      <span class="foot" id="stat-foot">sur 8 étages</span>
+      <span class="ref">étages qui tournent</span>
+      <span class="n">04</span>
+      <span class="foot">sur 8 · sur de vraies images</span>
       <span class="dots"></span>
     </div>
   </div>
 
-  <div id="console-sections"></div>
+  <section class="sect">
+    <div class="sect-head"><span class="k">01</span><h2>Les étages</h2><span class="cnt">tourne · câblé · attend</span></div>
+    <div class="stages">
+      <a class="slab t3" href="#visage"><span class="body"><span class="line"><span class="ref">01 · tourne</span><span class="nm">Visage</span></span><span class="sub">H3 Ref2VA · DGX1 · cinq frames, la plus nette gardée · portrait neutre verrouillé une fois</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
+      <a class="slab t3" href="#pleinpied"><span class="body"><span class="line"><span class="ref">02 · tourne</span><span class="nm">Costume · plein pied</span></span><span class="sub">H3 · A-pose, tête aux pieds · le visage verrouillé en référence</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
+      <a class="slab t2" href="#planche"><span class="body"><span class="line"><span class="ref">03 · tourne</span><span class="nm">Planche</span></span><span class="sub">H3 · cinq pleins pieds et trois gros plans · A/B avec et sans disque</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
+      <a class="slab t2" href="#vues"><span class="body"><span class="line"><span class="ref">04 · tourne</span><span class="nm">Vues orthogonales</span></span><span class="sub">orbite H3 · BiRefNet · frames choisies sur la silhouette · contrôle ±5° passé · banc Qwen câblé</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
+      <a class="slab lk" href="#attend"><span class="body"><span class="line"><span class="ref">05 · câblé</span><span class="nm">Mesh PBR</span></span><span class="sub">TRELLIS.2 multi-vues · DGX2 · gabarits validés à blanc, jamais lancé</span></span><span class="dots"></span><span class="go">à lancer</span></a>
+      <a class="slab lk" href="#attend"><span class="body"><span class="line"><span class="ref">06 · câblé</span><span class="nm">Rig SOMA 77</span></span><span class="sub">UniRig · DGX2, sans Blender · reconnu sur la topologie · jamais lancé</span></span><span class="dots"></span><span class="go">à lancer</span></a>
+      <a class="slab lk2" href="#attend"><span class="body"><span class="line"><span class="ref">07 · attend</span><span class="nm">Animation</span></span><span class="sub">Kimodo · DGX2 · attend la licence Llama-3 de Meta · vidéo → SOMA à trancher</span></span><span class="dots"></span><span class="go">bloqué</span></a>
+      <a class="slab lk2" href="#attend"><span class="body"><span class="line"><span class="ref">08 · factice</span><span class="nm">Timeline · cuisson</span></span><span class="sub">mixage par masques, NPZ et GLB animé · vérifié sur les moteurs factices</span></span><span class="dots"></span><span class="go">prêt</span></a>
+    </div>
+  </section>
+
+  <section class="sect" id="visage">
+    <div class="sect-head"><span class="k">02</span><h2>Visage</h2><span class="cnt">H3 · 42 s</span></div>
+    <div class="fig-grid">
+      <figure class="fig">
+        <img src="./etat/01_visage.jpg" alt="portrait neutre de Maren Ostrova, fond gris" width="512" height="512" loading="lazy">
+        <figcaption><span class="lbl">le visage verrouillé</span>Portrait neutre : bouche fermée, regard caméra, lumière égale, fond uni. C'est lui qui fait autorité sur l'identité dans toutes les générations suivantes.</figcaption>
+      </figure>
+      <figure class="fig">
+        <img src="./etat/02_pleinpied.jpg" alt="deux variantes de plein pied en A-pose" width="660" height="362" loading="lazy" id="pleinpied">
+        <figcaption><span class="lbl">plein pied · deux variantes</span>A-pose, de la tête aux pieds, costume décrit sans image de référence. Écart relevé : paumes vers l'avant au lieu de vers les cuisses.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="sect" id="planche">
+    <div class="sect-head"><span class="k">03</span><h2>Planche</h2><span class="cnt">H3 · 65 s</span></div>
+    <div class="fig-grid">
+      <figure class="fig wide">
+        <img src="./etat/03_planche.jpg" alt="planche : cinq pleins pieds et trois gros plans du visage" width="1344" height="768" loading="lazy">
+        <figcaption><span class="lbl">planche validée · s001</span>Face, profil gauche, dos, profil droit, trois quarts, puis les gros plans. La mise en page donne à H3 les bons angles — ce qu'il ne fait pas quand on lui demande une vue seule.</figcaption>
+      </figure>
+      <figure class="fig wide">
+        <img src="./etat/03_planche_ab.jpg" alt="A/B : planche sans et avec disque sur le visage" width="1280" height="666" loading="lazy">
+        <figcaption><span class="lbl">A/B du disque · même graine</span>Sans disque à gauche, avec disque à droite. À trancher sur pièces (§5.5).</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="sect" id="vues">
+    <div class="sect-head"><span class="k">04</span><h2>Vues orthogonales</h2><span class="cnt">orbite · 124 frames · 7 min</span></div>
+    <p class="prose">
+      <b>Une génération par vue ne tient pas les angles</b> : H3 revient vers la pose de face du plein pied,
+      le « profil » demandé à 90° sort vers 55°. <b>L'orbite, elle, fait un vrai tour</b>, identité et costume
+      tenus — mais la caméra ne tourne pas à vitesse constante. Les frames se choisissent donc sur la
+      largeur de la silhouette détourée par BiRefNet : face au départ, profils aux deux creux, dos au sommet
+      entre eux, trois quarts sur l'envergure des bras.
+    </p>
+    <div class="fig-grid">
+      <figure class="fig wide">
+        <img src="./etat/04_par_vue_contre_orbite.jpg" alt="profils gauche et droit : génération par vue contre orbite" width="1554" height="672" loading="lazy">
+        <figcaption><span class="lbl">par vue contre orbite</span>Les deux premiers : « profils » demandés un par un, restés de trois quarts. Les deux derniers : frames de l'orbite choisies sur la silhouette, vrais profils.</figcaption>
+      </figure>
+      <figure class="fig wide">
+        <img src="./etat/04_orbite_frames.jpg" alt="une frame sur huit de l'orbite" width="1536" height="672" loading="lazy">
+        <figcaption><span class="lbl">l'orbite · une frame sur huit</span>Départ lent : profil gauche vers la frame 48, dos vers 78, profil droit vers 97, retour de face à 123.</figcaption>
+      </figure>
+      <figure class="fig wide">
+        <img src="./etat/04_vues_preparees.jpg" alt="cinq vues préparées, même échelle, pieds alignés" width="1660" height="362" loading="lazy">
+        <figcaption><span class="lbl">vues préparées · ce qui part en 3D</span>Détourées, recentrées, même échelle, pieds sur la même ligne. Contrôle ±5° passé sur les angles estimés (précision ±2 à ±6°).</figcaption>
+      </figure>
+    </div>
+    <p class="prose">
+      <b>Au banc, câblé et pas encore lancé</b> : trois LoRA d'angle de caméra qui tournent le plein pied
+      validé — Qwen-Image 2.1 + viewpoint-orbit, Qwen-Image-Edit 2511 + Multiple-Angles (fal),
+      Qwen-Image-Edit 2509 + Multiple-angles (dx8152). Tous trois ont appris sur des objets : c'est au banc
+      de dire lequel tient un corps en pied.
+    </p>
+  </section>
+
+  <section class="sect" id="attend">
+    <div class="sect-head"><span class="k">05</span><h2>Ce qui attend</h2><span class="cnt">décisions de Cal</span></div>
+    <ul class="todo">
+      <li><span class="lbl">feu vert</span><b>Premier calcul de la 3D</b> : TRELLIS.2 sur les vues préparées (DGX2), puis UniRig sur le mesh. Et le banc des trois LoRA Qwen.</li>
+      <li><span class="lbl">licence</span><b>Llama-3-8B-Instruct</b> : Kimodo en a besoin comme encodeur de texte ; dépôt Meta à accès restreint, à accepter sur Hugging Face.</li>
+      <li><span class="lbl">choix</span><b>Hunyuan3D 2.1</b> : son nœud ne se charge pas sur DGX2 (numpy 2.5) ; le réparer touche l'environnement ComfyUI partagé.</li>
+      <li><span class="lbl">choix</span><b>Méthode des vues par défaut</b> : l'orbite plutôt que la génération par vue, ou le LoRA Qwen qui gagnera le banc.</li>
+      <li><span class="lbl">choix</span><b>Disque sur le visage</b> de la planche : voir l'A/B plus haut.</li>
+    </ul>
+  </section>
+
+  <p class="foot-note">
+    Code : branche <a href="https://github.com/calculment0r/Character_Sheet/tree/claude/epic-wright-y2kbrc">claude/epic-wright-y2kbrc</a>
+    · mode d'emploi <a href="https://github.com/calculment0r/Character_Sheet/blob/claude/epic-wright-y2kbrc/docs/LOCAL.md">docs/LOCAL.md</a>
+    · passation <a href="https://github.com/calculment0r/Character_Sheet/blob/claude/epic-wright-y2kbrc/docs/HANDOFF.md">docs/HANDOFF.md</a>.
+    La console et le viewer servent la chaîne locale : en ligne, ils s'ouvrent mais ne parlent ni au
+    modèle de texte ni aux fichiers d'un personnage.
+  </p>
 
 </main>
-
-<main class="bench" id="work" hidden>
-
-  <!-- ── colonne 1 : le rack des étages ──────────────── -->
-  <section class="col">
-    <div class="c-head">
-      <h2>Chaîne</h2>
-      <span class="sec">8 étages</span>
-    </div>
-    <ul class="rack" id="rack"></ul>
-
-    <div class="pan">
-      <div class="meter">
-        <span>Fiche d'identité</span>
-        <span class="bar"><i id="sheet-meter"></i></span>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── colonne 2 : la scène ────────────────────────── -->
-  <section class="col stage">
-    <div class="pan">
-      <div class="c-head">
-        <span class="sec" id="stage-ref">ST-01</span>
-        <h2 id="stage-name">Identité</h2>
-      </div>
-      <p class="stage-blurb" id="stage-blurb"></p>
-    </div>
-
-    <!-- étage actif -->
-    <div id="stage-live" class="stage-body">
-      <div class="chat">
-        <div class="chat-log" id="chat-log"></div>
-        <div class="previews" id="previews"></div>
-        <div class="composer">
-          <textarea class="fld" id="input-text" rows="3"
-                    placeholder="décris ton perso, ou réponds aux questions… (⌘/Ctrl + Entrée pour envoyer)"></textarea>
-          <div class="composer-actions">
-            <label class="tb ghost sm" title="ajouter des références">
-              + Réf.
-              <input type="file" id="pick-image" accept="image/*" multiple hidden>
-            </label>
-            <span class="sp"></span>
-            <button class="tb go sm" id="send">Envoyer ▸</button>
-          </div>
-        </div>
-      </div>
-
-      <label class="drop" id="drop">
-        Dépose une image n'importe où sur la page — vêtement, accessoire, ambiance, visage de référence
-      </label>
-
-      <div class="out" id="output" hidden>
-        <div class="pan-head">
-          <span class="t" id="output-label">sortie</span>
-          <span class="sp"></span>
-          <button class="tb ghost sm" id="copy">Copier</button>
-          <button class="tb ghost sm" id="download">.txt</button>
-        </div>
-        <pre id="output-text"></pre>
-      </div>
-    </div>
-
-    <!-- étage en attente d'un worker -->
-    <div id="stage-pending" class="stage-body" hidden>
-      <div class="pan">
-        <p class="stage-blurb" style="margin-top:0">
-          Cet étage tourne en local, sur la machine, en ligne de commande :
-        </p>
-        <pre class="cmd" id="stage-needs">./usine</pre>
-        <p class="stage-note" style="margin-top:12px">
-          Pas de serveur. Chaque commande écrit dans projects/&lt;perso&gt;/ et range ce qu'elle a fait
-          dans project.json. ./usine etat &lt;perso&gt; dit où en est le personnage et quoi lancer ensuite ;
-          ./usine doctor dit quels moteurs tournent déjà sur la machine.
-        </p>
-      </div>
-
-      <div class="pan" id="plate-plan" hidden>
-        <div class="c-head"><h2>Plan de planche</h2><span class="sec">§5.4 corrigé</span></div>
-        <p class="stage-note" style="margin:10px 0 14px">
-          La maquette d'origine portait trois plein pieds. Il manquait le profil pur : l'étage 3D
-          a besoin des quatre azimuts alignés à ±5°. Layout corrigé —
-        </p>
-        <div class="sheetgrid">
-          <div class="panel-cell"><span class="az">0°</span><span class="cap">Fullbody<br>front</span></div>
-          <div class="panel-cell"><span class="az">90°</span><span class="cap">Fullbody<br>left</span></div>
-          <div class="panel-cell"><span class="az">180°</span><span class="cap">Fullbody<br>back</span></div>
-          <div class="panel-cell"><span class="az">270°</span><span class="cap">Fullbody<br>right</span></div>
-          <div class="panel-cell"><span class="az">45°</span><span class="cap">Fullbody<br>3/4</span></div>
-        </div>
-        <div class="sheetgrid" style="margin-top:6px">
-          <div class="panel-cell close"><span class="cap">Close up<br>face</span></div>
-          <div class="panel-cell close"><span class="cap">Close up<br>profil</span></div>
-          <div class="panel-cell close"><span class="cap">Close up<br>3/4</span></div>
-          <div class="panel-cell close"><span class="cap">Expression<br>une par gén.</span></div>
-          <div class="panel-cell close"><span class="cap">—</span></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── colonne 3 : la fiche ────────────────────────── -->
-  <section class="col">
-    <div class="c-head">
-      <h2>Identité</h2>
-      <span class="sec">autorité</span>
-      <span class="cnt" id="sheet-progress">0/21</span>
-    </div>
-
-    <div class="sheet">
-      <div class="sheet-fields" id="sheet-fields"></div>
-      <div class="sheet-actions">
-        <button class="tb go block" id="generate">▸ Prompt image</button>
-        <button class="tb ghost block" id="ref2va">▸ Prompt Ref2VA (H3)</button>
-        <label class="pill" style="padding:4px 2px;cursor:pointer">
-          <input type="checkbox" id="mask-face">
-          <span>Disque sur le visage des plein pieds</span>
-        </label>
-        <button class="tb ghost block sm" id="export-json">Exporter l'identité .json</button>
-        <p class="stage-note">puis, sur la machine : ./usine nouveau --identite &lt;fichier&gt;</p>
-      </div>
-    </div>
-
-    <div class="pan">
-      <dl class="kv">
-        <dt>pose</dt><dd>A-pose · 45°</dd>
-        <dt>squelette</dt><dd>soma77</dd>
-        <dt>unité</dt><dd>mètres · Y up · +Z devant</dd>
-        <dt>identité</dt><dd>une seule par personnage</dd>
-      </dl>
-      <span class="dots"></span>
-    </div>
-  </section>
-
-</main>
-
-<!-- ── réglages du moteur ────────────────────────────── -->
-<div class="scrim" id="settings" hidden>
-  <div class="modal">
-    <div class="modal-head">
-      <span class="t">// moteur</span>
-      <span class="sp"></span>
-      <button class="tb ghost sm" data-close>×</button>
-    </div>
-    <div class="modal-body">
-      <p>
-        Le DGX est interrogé en dialecte OpenAI sur <code>/v1/chat/completions</code>.
-        Colle la racine publique du tunnel, sans <code>/v1</code> : il est ajouté tout seul.
-      </p>
-
-      <div>
-        <div class="lbl" style="margin-bottom:5px">URL du DGX</div>
-        <input class="fld" id="set-dgx-url" placeholder="https://dgx-01.exemple.net" autocomplete="off" spellcheck="false">
-        <p class="lbl" id="set-implicit" style="margin-top:6px;letter-spacing:.1em;text-transform:none" hidden></p>
-      </div>
-
-      <div>
-        <div class="lbl" style="margin-bottom:5px">Modèle servi</div>
-        <input class="fld" id="set-dgx-model" placeholder="local-model" autocomplete="off" spellcheck="false">
-      </div>
-
-      <div>
-        <div class="lbl" style="margin-bottom:5px">Jeton (Bearer, facultatif)</div>
-        <input class="fld" id="set-dgx-token" type="password" placeholder="laisser vide si le tunnel est déjà authentifié" autocomplete="off">
-      </div>
-
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="tb ghost sm" id="set-probe-btn">Tester le DGX</button>
-        <span class="lbl" id="set-probe" style="letter-spacing:.1em;text-transform:none"></span>
-      </div>
-
-      <hr style="border:none;height:1px;background:var(--line);margin:2px 0">
-
-      <div>
-        <div class="lbl" style="margin-bottom:5px">Clé Anthropic — repli</div>
-        <input class="fld" id="set-key" type="password" placeholder="sk-ant-…" autocomplete="off">
-      </div>
-
-      <div>
-        <div class="lbl" style="margin-bottom:5px">Modèle de repli</div>
-        <select class="fld" id="set-anthropic-model"></select>
-      </div>
-
-      <div>
-        <div class="lbl" style="margin-bottom:5px">Arbitrage</div>
-        <select class="fld" id="set-engine">
-          <option value="auto">auto — DGX d'abord, repli si muet</option>
-          <option value="dgx">DGX seul — souverain, pas de repli</option>
-          <option value="anthropic">Anthropic seul</option>
-        </select>
-      </div>
-
-      <p class="warn">
-        Rien n'est envoyé ailleurs que vers l'URL du DGX ou api.anthropic.com. Clé et jeton restent
-        dans le localStorage de ce navigateur. Ne partage pas cette page avec la clé en cache.
-      </p>
-    </div>
-    <div class="modal-foot">
-      <span class="sp"></span>
-      <button class="tb ghost sm" data-close>Annuler</button>
-      <button class="tb go sm" id="set-save">Enregistrer ▸</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── méthode ───────────────────────────────────────── -->
-<div class="scrim" id="method" hidden>
-  <div class="modal lg">
-    <div class="modal-head">
-      <span class="t">// data/methodology.md</span>
-      <span class="sp"></span>
-      <button class="tb ghost sm" data-close>×</button>
-    </div>
-    <div class="modal-body">
-      <pre class="method-body" id="method-body"></pre>
-    </div>
-    <div class="modal-foot">
-      <span class="lbl" style="text-transform:none;letter-spacing:.08em">
-        édite <code>data/methodology.md</code> dans le dépôt pour changer le comportement du modèle
-      </span>
-      <span class="sp"></span>
-      <button class="tb go sm" data-close>OK</button>
-    </div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-
-<script type="module" src="./js/app.js"></script>
 </body>
 </html>

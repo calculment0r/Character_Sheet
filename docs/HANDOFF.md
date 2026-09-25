@@ -205,7 +205,8 @@ data/soma77.json        squelette SOMA 77, relevé dans Kimodo
 data/hand_poses.json    poses de main figées
 data/methodology.md     la méthode de l'étage Identité
 viewer.html             le viewer 3D, page locale
-index.html              la page : console et étage Identité
+index.html              la page d'état, racine du site publié
+console.html            la console : étage Identité
 theme.html              le catalogue du thème
 tools/chain_check.py    la chaîne de bout en bout, moteurs factices
 tools/mock_comfy.py     un faux ComfyUI

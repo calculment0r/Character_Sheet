@@ -12,6 +12,7 @@
 import { chromium } from 'playwright';
 
 const BASE = process.argv[2] || 'http://127.0.0.1:8000';
+const PAGE = `${BASE.replace(/\/$/, '')}/console.html`;   // la racine du site est la page d'état
 const CHROME = process.env.CHROME_PATH || undefined;
 
 const results = [];
@@ -38,7 +39,7 @@ async function main() {
   console.log(`\nCharacter Factory — vérification sur ${BASE}\n`);
 
   // 1. la page se charge
-  const res = await page.goto(BASE, { waitUntil: 'networkidle' });
+  const res = await page.goto(PAGE, { waitUntil: 'networkidle' });
   check('la page répond', res?.status() === 200, `HTTP ${res?.status()}`);
   await page.waitForTimeout(1200);
 
@@ -91,7 +92,7 @@ async function main() {
 
   // 9. pas de débordement horizontal en vue étroite
   const narrow = await (await browser.newContext({ viewport: { width: 430, height: 950 }, ignoreHTTPSErrors: true })).newPage();
-  await narrow.goto(BASE, { waitUntil: 'networkidle' });
+  await narrow.goto(PAGE, { waitUntil: 'networkidle' });
   await narrow.waitForTimeout(800);
   const overflow = await narrow.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   check('aucun débordement horizontal à 430 px', !overflow);

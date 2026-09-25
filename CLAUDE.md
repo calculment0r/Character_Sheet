@@ -38,7 +38,7 @@ Rend 0 si tout passe. **Le lancer après toute modification de
 `factory/`.** Il rejoue le skinning glTF comme un viewer : une pose qui
 casse se voit dans ses chiffres.
 
-Après une modification de la page (`index.html`, `js/`, `assets/`) :
+Après une modification de la console (`console.html`, `js/`, `assets/`) :
 
 ```sh
 python3 tools/mock_llm.py &
@@ -114,7 +114,24 @@ Ne pas les affaiblir sans une décision explicite de Cal.
 
 ## GitHub Pages
 
-Le site publié sert la branche `claude/interactive-character-generator-5IwJo`,
-pas `main` ni la branche de travail. Tant que le réglage Pages pointe
-là, la refonte n'est pas visible en ligne — ce qui n'a pas d'importance
-tant que tout tourne en local.
+Le site publié, https://calculment0r.github.io/Character_Sheet/, sert la
+branche `claude/interactive-character-generator-5IwJo` (réglage du
+dépôt). Depuis le 25/09/2026, on y fusionne la branche de travail : la
+racine est la **page d'état** (`index.html` : les étages, ce qui tourne,
+les vraies images, ce qui attend Cal), la console Identité est
+`console.html`, le viewer `viewer.html`, le thème `theme.html`.
+
+Mettre le site à jour, après avoir poussé la branche de travail :
+
+```sh
+git fetch origin
+git checkout claude/interactive-character-generator-5IwJo
+git merge --no-edit claude/epic-wright-y2kbrc
+git push origin claude/interactive-character-generator-5IwJo
+git checkout claude/epic-wright-y2kbrc
+```
+
+La page d'état s'écrit à la main : la tenir à jour à chaque avancée
+réelle, avec les images d'un personnage sous `etat/` (JPEG compressés,
+le dépôt est public). En ligne, la console et le viewer s'ouvrent mais
+ne parlent ni au modèle de texte ni aux fichiers d'un personnage.

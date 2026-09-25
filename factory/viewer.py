@@ -74,7 +74,7 @@ def serve(p: Project, *, costume: str | None, a: str | None, b: str | None, port
 def serve_page(*, port: int = 8765, open_browser: bool = True) -> None:
     """La page (étage Identité) servie en local. Le modèle de texte est
     celui de la machine : son URL se pose dans l'écran MOTEUR."""
-    _run("index.html", port, open_browser, "page")
+    _run("console.html", port, open_browser, "page")
 
 
 def _run(path: str, port: int, open_browser: bool, label: str) -> None:

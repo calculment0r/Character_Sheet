@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CHARACTER FACTORY</title>
+<meta name="description" content="Chaîne souveraine prompt ou photo → visage → costumes → planche → vues orthogonales → mesh PBR → rig SOMA → animation.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23e0674a'/%3E%3Crect x='12' y='12' width='8' height='8' rx='2' fill='%23170c08'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Azeret+Mono:wght@300;400;500&family=Saira+Semi+Condensed:wght@400;600&display=swap">
+<link rel="stylesheet" href="./assets/tokens.css">
+<link rel="stylesheet" href="./assets/rack.css">
+<link rel="stylesheet" href="./assets/factory.css">
+</head>
+<body>
+
+<header class="hdr">
+  <button class="logo" id="home-btn" title="revenir à la console">
+    <span class="sq"><i></i></span>
+    <span>
+      <b>Character Factory</b>
+      <small>chaîne souveraine · dgx</small>
+    </span>
+  </button>
+
+  <span class="sp"></span>
+
+  <span class="pill" id="engine-pill"><i></i><span id="engine-text">démarrage</span></span>
+  <span class="clock" id="clock">--:--:--</span>
+
+  <button class="tb ghost sm" id="console-btn" title="revenir à la console" hidden>◂ Console</button>
+  <button class="tb ghost sm" id="method-btn" title="voir la méthode chargée">Méthode</button>
+  <button class="tb ghost sm" id="reset-btn" title="vider la session">Reset</button>
+  <button class="tb go sm" id="settings-btn" title="URL du DGX, modèle, repli">Moteur</button>
+</header>
+
+<main class="console" id="home">
+
+  <div class="console-top">
+    <div class="hero">
+      <span class="ref">00_console</span>
+      <h1>Du prompt<br>au personnage</h1>
+      <p>
+        Blocs pleins, filets fins, chiffres larges. Une chaîne en huit étages, du portrait
+        neutre jusqu'au mouvement joué : visage verrouillé, costumes, planche, vues
+        orthogonales, mesh PBR, rig SOMA, animation. Tout calcule sur le DGX, rien ne sort
+        du réseau. Chaque étage s'ouvre depuis cette console.
+      </p>
+    </div>
+
+    <div class="statcard">
+      <span class="ref">étages ouverts</span>
+      <span class="n" id="stat-n">01</span>
+      <span class="foot" id="stat-foot">sur 8 étages</span>
+      <span class="dots"></span>
+    </div>
+  </div>
+
+  <div id="console-sections"></div>
+
+</main>
+
+<main class="bench" id="work" hidden>
+
+  <!-- ── colonne 1 : le rack des étages ──────────────── -->
+  <section class="col">
+    <div class="c-head">
+      <h2>Chaîne</h2>
+      <span class="sec">8 étages</span>
+    </div>
+    <ul class="rack" id="rack"></ul>
+
+    <div class="pan">
+      <div class="meter">
+        <span>Fiche d'identité</span>
+        <span class="bar"><i id="sheet-meter"></i></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── colonne 2 : la scène ────────────────────────── -->
+  <section class="col stage">
+    <div class="pan">
+      <div class="c-head">
+        <span class="sec" id="stage-ref">ST-01</span>
+        <h2 id="stage-name">Identité</h2>
+      </div>
+      <p class="stage-blurb" id="stage-blurb"></p>
+    </div>
+
+    <!-- étage actif -->
+    <div id="stage-live" class="stage-body">
+      <div class="chat">
+        <div class="chat-log" id="chat-log"></div>
+        <div class="previews" id="previews"></div>
+        <div class="composer">
+          <textarea class="fld" id="input-text" rows="3"
+                    placeholder="décris ton perso, ou réponds aux questions… (⌘/Ctrl + Entrée pour envoyer)"></textarea>
+          <div class="composer-actions">
+            <label class="tb ghost sm" title="ajouter des références">
+              + Réf.
+              <input type="file" id="pick-image" accept="image/*" multiple hidden>
+            </label>
+            <span class="sp"></span>
+            <button class="tb go sm" id="send">Envoyer ▸</button>
+          </div>
+        </div>
+      </div>
+
+      <label class="drop" id="drop">
+        Dépose une image n'importe où sur la page — vêtement, accessoire, ambiance, visage de référence
+      </label>
+
+      <div class="out" id="output" hidden>
+        <div class="pan-head">
+          <span class="t" id="output-label">sortie</span>
+          <span class="sp"></span>
+          <button class="tb ghost sm" id="copy">Copier</button>
+          <button class="tb ghost sm" id="download">.txt</button>
+        </div>
+        <pre id="output-text"></pre>
+      </div>
+    </div>
+
+    <!-- étage en attente d'un worker -->
+    <div id="stage-pending" class="stage-body" hidden>
+      <div class="pan">
+        <p class="stage-blurb" style="margin-top:0">
+          Cet étage tourne en local, sur la machine, en ligne de commande :
+        </p>
+        <pre class="cmd" id="stage-needs">./usine</pre>
+        <p class="stage-note" style="margin-top:12px">
+          Pas de serveur. Chaque commande écrit dans projects/&lt;perso&gt;/ et range ce qu'elle a fait
+          dans project.json. ./usine etat &lt;perso&gt; dit où en est le personnage et quoi lancer ensuite ;
+          ./usine doctor dit quels moteurs tournent déjà sur la machine.
+        </p>
+      </div>
+
+      <div class="pan" id="plate-plan" hidden>
+        <div class="c-head"><h2>Plan de planche</h2><span class="sec">§5.4 corrigé</span></div>
+        <p class="stage-note" style="margin:10px 0 14px">
+          La maquette d'origine portait trois plein pieds. Il manquait le profil pur : l'étage 3D
+          a besoin des quatre azimuts alignés à ±5°. Layout corrigé —
+        </p>
+        <div class="sheetgrid">
+          <div class="panel-cell"><span class="az">0°</span><span class="cap">Fullbody<br>front</span></div>
+          <div class="panel-cell"><span class="az">90°</span><span class="cap">Fullbody<br>left</span></div>
+          <div class="panel-cell"><span class="az">180°</span><span class="cap">Fullbody<br>back</span></div>
+          <div class="panel-cell"><span class="az">270°</span><span class="cap">Fullbody<br>right</span></div>
+          <div class="panel-cell"><span class="az">45°</span><span class="cap">Fullbody<br>3/4</span></div>
+        </div>
+        <div class="sheetgrid" style="margin-top:6px">
+          <div class="panel-cell close"><span class="cap">Close up<br>face</span></div>
+          <div class="panel-cell close"><span class="cap">Close up<br>profil</span></div>
+          <div class="panel-cell close"><span class="cap">Close up<br>3/4</span></div>
+          <div class="panel-cell close"><span class="cap">Expression<br>une par gén.</span></div>
+          <div class="panel-cell close"><span class="cap">—</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── colonne 3 : la fiche ────────────────────────── -->
+  <section class="col">
+    <div class="c-head">
+      <h2>Identité</h2>
+      <span class="sec">autorité</span>
+      <span class="cnt" id="sheet-progress">0/21</span>
+    </div>
+
+    <div class="sheet">
+      <div class="sheet-fields" id="sheet-fields"></div>
+      <div class="sheet-actions">
+        <button class="tb go block" id="generate">▸ Prompt image</button>
+        <button class="tb ghost block" id="ref2va">▸ Prompt Ref2VA (H3)</button>
+        <label class="pill" style="padding:4px 2px;cursor:pointer">
+          <input type="checkbox" id="mask-face">
+          <span>Disque sur le visage des plein pieds</span>
+        </label>
+        <button class="tb ghost block sm" id="export-json">Exporter l'identité .json</button>
+        <p class="stage-note">puis, sur la machine : ./usine nouveau --identite &lt;fichier&gt;</p>
+      </div>
+    </div>
+
+    <div class="pan">
+      <dl class="kv">
+        <dt>pose</dt><dd>A-pose · 45°</dd>
+        <dt>squelette</dt><dd>soma77</dd>
+        <dt>unité</dt><dd>mètres · Y up · +Z devant</dd>
+        <dt>identité</dt><dd>une seule par personnage</dd>
+      </dl>
+      <span class="dots"></span>
+    </div>
+  </section>
+
+</main>
+
+<!-- ── réglages du moteur ────────────────────────────── -->
+<div class="scrim" id="settings" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <span class="t">// moteur</span>
+      <span class="sp"></span>
+      <button class="tb ghost sm" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <p>
+        Le DGX est interrogé en dialecte OpenAI sur <code>/v1/chat/completions</code>.
+        Colle la racine publique du tunnel, sans <code>/v1</code> : il est ajouté tout seul.
+      </p>
+
+      <div>
+        <div class="lbl" style="margin-bottom:5px">URL du DGX</div>
+        <input class="fld" id="set-dgx-url" placeholder="https://dgx-01.exemple.net" autocomplete="off" spellcheck="false">
+        <p class="lbl" id="set-implicit" style="margin-top:6px;letter-spacing:.1em;text-transform:none" hidden></p>
+      </div>
+
+      <div>
+        <div class="lbl" style="margin-bottom:5px">Modèle servi</div>
+        <input class="fld" id="set-dgx-model" placeholder="local-model" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div>
+        <div class="lbl" style="margin-bottom:5px">Jeton (Bearer, facultatif)</div>
+        <input class="fld" id="set-dgx-token" type="password" placeholder="laisser vide si le tunnel est déjà authentifié" autocomplete="off">
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="tb ghost sm" id="set-probe-btn">Tester le DGX</button>
+        <span class="lbl" id="set-probe" style="letter-spacing:.1em;text-transform:none"></span>
+      </div>
+
+      <hr style="border:none;height:1px;background:var(--line);margin:2px 0">
+
+      <div>
+        <div class="lbl" style="margin-bottom:5px">Clé Anthropic — repli</div>
+        <input class="fld" id="set-key" type="password" placeholder="sk-ant-…" autocomplete="off">
+      </div>
+
+      <div>
+        <div class="lbl" style="margin-bottom:5px">Modèle de repli</div>
+        <select class="fld" id="set-anthropic-model"></select>
+      </div>
+
+      <div>
+        <div class="lbl" style="margin-bottom:5px">Arbitrage</div>
+        <select class="fld" id="set-engine">
+          <option value="auto">auto — DGX d'abord, repli si muet</option>
+          <option value="dgx">DGX seul — souverain, pas de repli</option>
+          <option value="anthropic">Anthropic seul</option>
+        </select>
+      </div>
+
+      <p class="warn">
+        Rien n'est envoyé ailleurs que vers l'URL du DGX ou api.anthropic.com. Clé et jeton restent
+        dans le localStorage de ce navigateur. Ne partage pas cette page avec la clé en cache.
+      </p>
+    </div>
+    <div class="modal-foot">
+      <span class="sp"></span>
+      <button class="tb ghost sm" data-close>Annuler</button>
+      <button class="tb go sm" id="set-save">Enregistrer ▸</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── méthode ───────────────────────────────────────── -->
+<div class="scrim" id="method" hidden>
+  <div class="modal lg">
+    <div class="modal-head">
+      <span class="t">// data/methodology.md</span>
+      <span class="sp"></span>
+      <button class="tb ghost sm" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <pre class="method-body" id="method-body"></pre>
+    </div>
+    <div class="modal-foot">
+      <span class="lbl" style="text-transform:none;letter-spacing:.08em">
+        édite <code>data/methodology.md</code> dans le dépôt pour changer le comportement du modèle
+      </span>
+      <span class="sp"></span>
+      <button class="tb go sm" data-close>OK</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

@@ -27,7 +27,7 @@ pour l'instant.
     └── viewer.html                    le viewer 3D, une page locale
 ```
 
-La page (`index.html`) reste l'outil de l'étage Identité : une
+La console (`console.html`) reste l'outil de l'étage Identité : une
 conversation avec le modèle de texte local qui remplit la fiche, puis
 un export JSON que `./usine nouveau --identite` reprend.
 
