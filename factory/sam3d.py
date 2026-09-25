@@ -64,17 +64,28 @@ def root_yaw(bvh: str) -> float:
     return math.degrees(math.atan2(fwd[0], fwd[2]))
 
 
+def yaw(path: Path, *, workdir: Path, name: str = "vue") -> float:
+    """Le cap brut du corps sur une image, en degrés. Premier passage réel
+    le 25/09 : 10 s pour cinq vues, profils à ±5° — le signe est bon."""
+    comfy = Comfy(config.comfyui_url("sam3dbody"))
+    wf = _workflow(comfy.upload(Path(path)))
+    bvh = next(p for p in comfy.run(wf, workdir, prefix=f"sam3d_{name}") if p.suffix.lower() == ".bvh")
+    return root_yaw(bvh.read_text(encoding="utf-8"))
+
+
+def azimuth(view_yaw: float, front_yaw: float) -> float:
+    """L'azimut d'une vue, relatif à la face, dans la convention de la chaîne."""
+    return round((SIGN * (view_yaw - front_yaw)) % 360.0, 1)
+
+
 def measure_azimuths(views: dict[str, Path], *, workdir: Path, report=lambda p, m: None) -> dict[str, dict]:
     """Mesure chaque vue ; rend, par vue, l'azimut relatif à la face et
     le cap brut. Il faut la vue de face : c'est la référence."""
     if "front" not in views:
         raise ValueError("la mesure d'azimut se fait par rapport à la vue de face : elle manque")
-    comfy = Comfy(config.comfyui_url("sam3dbody"))
     yaws = {}
     for k, (name, path) in enumerate(views.items()):
         report(k / len(views), f"SAM 3D Body · {name}")
-        wf = _workflow(comfy.upload(Path(path)))
-        bvh = next(p for p in comfy.run(wf, workdir, prefix=f"sam3d_{name}") if p.suffix.lower() == ".bvh")
-        yaws[name] = root_yaw(bvh.read_text(encoding="utf-8"))
+        yaws[name] = yaw(path, workdir=workdir, name=name)
     ref = yaws["front"]
-    return {n: {"azimuth": round((SIGN * (y - ref)) % 360.0, 1), "yaw_raw": round(y, 1)} for n, y in yaws.items()}
+    return {n: {"azimuth": azimuth(y, ref), "yaw_raw": round(y, 1)} for n, y in yaws.items()}

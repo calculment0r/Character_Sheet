@@ -42,15 +42,17 @@ APOSE = ("a neutral A-pose, standing straight, arms straight and held about fort
          "the body, hands relaxed with the fingers pointing down and slightly apart, legs straight and slightly apart")
 
 VIEWS = {
-    45: "a three-quarter front view: the person is turned forty-five degrees to their right, so we see the front and "
-        "the left side of the body",
+    45: "a three-quarter front view: the whole body, chest, hips, feet and face, is turned halfway toward the left edge "
+        "of the image, forty-five degrees to the person's right, so we see the front and the left side of the body; "
+        "the person looks toward the left of the image",
     90: "an exact left profile: the person is turned ninety degrees to their right and faces the left edge of the "
         "image; we see only the left side of the body, the left arm and left leg nearest to the camera",
     180: "a back view: the camera is directly behind; we see the back, the back of the head and the hair from behind",
     270: "an exact right profile: the person is turned ninety degrees to their left and faces the right edge of the "
          "image; we see only the right side of the body, the right arm and right leg nearest to the camera",
-    315: "a three-quarter front view: the person is turned forty-five degrees to their left, so we see the front and "
-         "the right side of the body",
+    315: "a three-quarter front view: the whole body, chest, hips, feet and face, is turned halfway toward the right "
+         "edge of the image, forty-five degrees to the person's left, so we see the front and the right side of the "
+         "body; the person looks toward the right of the image",
 }
 
 

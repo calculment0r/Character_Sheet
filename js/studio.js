@@ -592,7 +592,9 @@ function boxViews(c, key, cos, d) {
     body += `<div class="box-sub">Vues brutes · ${esc(METHOD_LABEL[v.method] || v.method || '')}</div>
       <div class="cands tall">${raw.map((n) => {
         const e = v.raw[n];
-        const est = e.azimuth_estimated != null ? ` · relevé ${Number(e.azimuth_estimated).toFixed(0)}°` : '';
+        const got = e.azimuth_measured ?? e.azimuth_estimated;
+        const est = got != null && n !== 'front' ? ` · ${e.azimuth_measured != null ? 'mesuré' : 'relevé'} ${
+          Number(got).toFixed(0)}°` : '';
         const [mark, markCls] = stubMark(e);
         return cand({ src: fileUrl(c.slug, e.file, e.at), label: `${VIEW_LABEL[n]} · ${e.azimuth}°${est}`, mark, markCls });
       }).join('')}</div>`;

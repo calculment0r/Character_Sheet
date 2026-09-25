@@ -18,6 +18,7 @@ from .project import ChainError, Project, apose as apose_of, now
 
 ORTHO = ("front", "left", "back", "right")
 TOLERANCE_DEG = 5.0
+VIEW_TRIES = 3   # graines essayées par vue quand l'angle mesuré s'écarte
 
 
 def _report(verbose: bool = True):
@@ -361,25 +362,66 @@ def views(p: Project, costume: str | None, *, method: str = "qwen21-pose", names
 
         turns = {n: int(prompts.AZIMUTHS[n][0]) for n in names if n != "front"}
         skel = pose.skeletons(p.path(body), folder / "skeleton.png", sorted(set(turns.values())), report=report)
+        # Mesurer puis choisir : chaque vue passe par SAM 3D Body dès qu'elle
+        # sort, et se relance sur une autre graine tant qu'elle s'écarte de
+        # l'angle voulu (Qwen tient les profils et le dos, pas toujours les
+        # 3/4 : essais du 25/09, `docs/ETUDES.md`). On garde la plus proche.
+        measure = config.backend("portrait") != "stub"
+        workdir = p.dir(f"costumes/{key}/views/.sam3d")
+        front_yaw = None
+        if measure:
+            from . import sam3d
+
+            report(0.05, "SAM 3D Body · face")
+            front_yaw = sam3d.yaw(p.path(body), workdir=workdir, name="front")
         for n in names:
             dest = folder / f"{n}.png"
             if n == "front":
                 imaging.load(p.path(body)).save(dest)
                 raw[n] = {"file": p.rel(dest), "azimuth": 0.0, "azimuth_source": "A-pose validée", "seed": None,
-                          "backend": "reprise", "at": now()}
+                          "backend": "reprise", "at": now(),
+                          **({"azimuth_measured": 0.0} if measure else {})}
                 continue
             az = turns[n]
+            limit = TOLERANCE_DEG if n in ORTHO else 2 * TOLERANCE_DEG
             text = pose.text_view(az, p.data["style"])
-            print(f"  vue {n} · {az}° · squelette · graine {s}")
-            qwen21.generate(prompt=text, refs=[p.path(body), skel[az]], dest=dest, seed=s, size=pose.SIZE,
-                            resolution=pose.RESOLUTION, report=report,
-                            stub=lambda: sketches.mannequin(pose.SIZE, azimuth=float(az), seed=identity_seed(p)))
+            tries: list[dict] = []
+            for k in range(VIEW_TRIES if measure else 1):
+                seed_k = s + k
+                out = folder / (f"{n}.png" if k == 0 else f".{n}_{k}.png")
+                print(f"  vue {n} · {az}° · squelette · graine {seed_k}")
+                qwen21.generate(prompt=text, refs=[p.path(body), skel[az]], dest=out, seed=seed_k, size=pose.SIZE,
+                                resolution=pose.RESOLUTION, report=report,
+                                stub=lambda: sketches.mannequin(pose.SIZE, azimuth=float(az), seed=identity_seed(p)))
+                got = {"file": out, "seed": seed_k}
+                if measure:
+                    got["yaw"] = sam3d.yaw(out, workdir=workdir, name=f"{n}_{k}")
+                    got["azimuth"] = sam3d.azimuth(got["yaw"], front_yaw)
+                    got["error"] = angular_error(got["azimuth"], az)
+                    print(f"    mesuré {got['azimuth']:.1f}° (écart {got['error']:+.1f}°)")
+                tries.append(got)
+                if not measure or abs(got["error"]) <= limit:
+                    break
+            best = min(tries, key=lambda t: abs(t.get("error", 0.0)))
+            if best["file"] != dest:
+                best["file"].replace(dest)
+            for t in tries:
+                if t["file"] != dest and t["file"].exists():
+                    t["file"].unlink()
             backend = config.backend("portrait")
+            entry = {"file": p.rel(dest), "azimuth": float(az), "azimuth_source": "demandé (squelette)",
+                     "seed": best["seed"], "backend": backend, "prompt": text, "at": now()}
+            if measure:
+                entry["azimuth_measured"] = best["azimuth"]
+                entry["azimuth_measure"] = {"engine": "sam3dbody", "yaw_raw": round(best["yaw"], 1),
+                                            "reference": "front", "tries": [
+                                                {"seed": t["seed"], "azimuth": t["azimuth"]} for t in tries],
+                                            "at": now()}
             dest.with_suffix(".json").write_text(json.dumps(
-                {"kind": "view", "method": method, "azimuth": az, "backend": backend, "seed": s, "prompt": text,
-                 "refs": [body, p.rel(skel[az])]}, ensure_ascii=False, indent=2), encoding="utf-8")
-            raw[n] = {"file": p.rel(dest), "azimuth": float(az), "azimuth_source": "demandé (squelette)", "seed": s,
-                      "backend": backend, "prompt": text, "at": now()}
+                {"kind": "view", "method": method, "azimuth": az, "backend": backend, "seed": best["seed"],
+                 "prompt": text, "refs": [body, p.rel(skel[az])],
+                 "measured": entry.get("azimuth_measure")}, ensure_ascii=False, indent=2), encoding="utf-8")
+            raw[n] = entry
     elif method == "orbit":
         azimuths = {n: prompts.AZIMUTHS[n][0] for n in names}
         sections = prompts.orbit(p.sheet, p.data["notes"], costume_prompt=cos["prompt"], style=p.data["style"])
