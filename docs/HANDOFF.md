@@ -13,6 +13,53 @@ Cadrage complet : [`BRIEF_CHARACTER_FACTORY.md`](./BRIEF_CHARACTER_FACTORY.md)
 
 ## 0. REPRENDRE ICI — le studio tourne sur DGX2 (état au 25/09/2026)
 
+**L'atelier (25/09, après-midi — retours de Cal sur Kévin)**. Cal a
+jugé le premier studio mauvais à l'usage : démarrer par le questionnaire
+de 21 champs est frustrant, les images H3 du visage sont laides, le
+détourage est crénelé. Ce qui a changé :
+
+- **Créer = un nom.** L'accueil n'a qu'un champ. Le nom se corrige d'un
+  clic dans l'en-tête (le dossier garde son slug).
+- **Une étape à la fois** : frise Visage · Costume · Planche · Vues · 3D ·
+  Rig ; l'atelier passe seul à l'étape suivante quand une étape est
+  validée.
+- **On décrit ce qu'on veut voir**, en français. `factory/brief.py` fait
+  lire le brief par le modèle de texte (Ollama `/api/chat`, sortie JSON
+  contrainte) : prompt d'image en anglais limité à ce que l'étage montre,
+  **quatre propositions distinctes** pour le visage (Z-Image varie peu
+  d'une graine à l'autre), et les champs de la fiche. Nouveau champ
+  `face_description`. « Autour » relance autour d'une proposition.
+- **Visage par un modèle d'image** (`factory/portrait.py`) : Z-Image Turbo
+  par défaut (8 s, 20 Go, cohabite avec le modèle de texte), FLUX.2 dev
+  (73 s, 75 Go, le plus fidèle), Qwen-Image 2.1 (40 s), H3 pour normaliser
+  une photo. Banc du 25/09 sur Kévin : tous très au-dessus de H3. Le
+  prompt du visage n'a plus ni rôle, ni archétype, ni notes : chez Kévin,
+  « skateur » + une note « casque porté en arrière » donnaient casque et
+  lunettes de ski.
+- **Le temps de calcul sert** : un travail et les modifications faites
+  pendant ce travail partagent le même `Project` en mémoire (`Studio.live`,
+  verrou dans `Project.save`) ; plus de refus « un travail tourne ». La
+  carte « En attendant » propose la tenue, des traits de caractère,
+  l'assistant (sauf pendant H3, qui prend 100 Go).
+- **Mémoire par famille** (`memory.FAMILY_GB`) : le modèle de texte n'est
+  déchargé que si la famille ne tient pas à côté.
+- **Détourage** : `imaging.with_mask` coupait le masque BiRefNet par des
+  blocs de 5 px (marches d'escalier) et le tranchait à 50 %. Il garde
+  maintenant le bord doux de BiRefNet (étiré : BiRefNet plafonne à 254),
+  et retire le fond des pixels de bord. SAM 3 n'est pas installé et ne
+  ferait pas mieux sur les bords : c'est de la segmentation, pas du
+  matting ; si les cheveux manquent de finesse, essayer BiRefNet HR
+  matting.
+- Essai réel sur DGX2 : « Essai atelier », brief lu en 42 s (chargement
+  compris), quatre visages Z-Image en 44 s, modèle de texte resté chargé.
+
+**Reste à faire** : le costume par brief n'a pas encore tourné pour de
+vrai (plein pied H3 à partir d'un prompt écrit par le modèle) ; l'orbite
+et la suite passent encore par l'ancienne interface de bloc ; `doctor`
+ne valide pas encore les gabarits de portrait ; H3 garde son rendu dur
+pour le plein pied et la planche (piste : upscale/SUPIR, ou FLUX.2 Kontext
+pour le plein pied).
+
 **On ne travaille que sur DGX2** (Cal, 25/09). Le PC sert à écrire le
 code et à ouvrir la page ; tout calcule sur DGX2.
 

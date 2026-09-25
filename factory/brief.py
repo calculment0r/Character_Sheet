@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -109,6 +110,13 @@ def ask(task: str, fields: tuple[str, ...], brief: str, *, sheet: dict, images=(
     except (KeyError, ValueError) as exc:
         raise ChainError(f"réponse illisible du modèle de texte : {str(reply)[:300]}") from exc
     sheet_out = {k: str(v).strip() for k, v in (data.get("sheet") or {}).items() if k in fields and str(v).strip()}
+    # L'âge est un nombre ou rien : le modèle a déjà rendu « use » pour « 20 ans ».
+    if "age" in sheet_out:
+        digits = re.search(r"\d{1,3}", sheet_out["age"])
+        if digits:
+            sheet_out["age"] = digits.group(0)
+        else:
+            del sheet_out["age"]
     alts = [str(v).strip() for v in data.get("variants") or [] if str(v).strip()] if variants else []
     return {"prompt": str(data.get("prompt") or "").strip(), "sheet": sheet_out, "variants": alts[:6]}
 
