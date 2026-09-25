@@ -131,12 +131,24 @@ class Manager:
             self.family[comfy_url] = family
         self.wait_for(self.min_free_gb, say)
 
-    def before_chat(self, say=lambda m: None) -> None:
-        # Le modèle de texte (qwen3-vl 32B, contexte 32k : ~31 Go) peut
-        # cohabiter avec un travail en cours ; on ne vérifie que la marge,
-        # et seulement s'il n'est pas déjà chargé.
-        if not llm_loaded():
-            self.wait_for(float(config.setting("llm_gb", "32")), say, patient=False)
+    def before_chat(self, busy: bool = False, say=lambda m: None) -> None:
+        """Place pour le modèle de texte (qwen3-vl 32B, contexte 32k :
+        ~31 Go). H3 résident en garde ~100 Go (le modèle sur le GPU, son
+        encodeur de texte en RAM) : sans calcul en cours, on vide ComfyUI,
+        il rechargera au prochain travail ; pendant un calcul, on refuse."""
+        if llm_loaded():
+            return
+        need = float(config.setting("llm_gb", "32"))
+        free = available_gb()
+        if free is None or free >= need:
+            return
+        if busy:
+            raise MemoryError(f"mémoire disponible {free:.0f} Go, il en faut {need:.0f} pour le modèle de texte : "
+                              f"un calcul tourne, réessaie quand il aura fini")
+        for url in comfy_instances():
+            if self.family.get(url) != self.NOTHING:
+                self._free(url, "place au modèle de texte", say)
+        self.wait_for(need, say)
 
     def wait_for(self, need_gb: float, say, patient: bool = True) -> None:
         free = available_gb()

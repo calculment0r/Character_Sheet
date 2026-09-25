@@ -656,7 +656,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         body = self._payload()
         body["model"] = llm_model()
         body["stream"] = False
-        self.studio.memory.before_chat()
+        self.studio.memory.before_chat(busy=self.studio.running is not None, say=print)
         req = urllib.request.Request(f"{base}/v1/chat/completions", data=json.dumps(body).encode(), method="POST",
                                      headers={"Content-Type": "application/json"})
         try:
