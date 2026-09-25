@@ -122,7 +122,7 @@ def fullbody(p: Project, costume: str | None, *, variants: int = 2, seed: int | 
              prompt: str = "", engine: str | None = None, report=None) -> list[dict]:
     """Le plein pied habillé, le visage verrouillé comme référence (§4).
 
-    Par un modèle d'image (`figure.py`, FLUX.2 dev par défaut) : H3 le
+    Par Qwen-Image 2.1 turbo en HD (`figure.py`, `qwen21.py`) : H3 le
     rendait à 768 px, mains et matières comprises, trop pauvre pour une
     image qui sert ensuite de référence à la planche et aux vues."""
     from . import figure
@@ -131,7 +131,7 @@ def fullbody(p: Project, costume: str | None, *, variants: int = 2, seed: int | 
     key, cos = p.costume(costume)
     if prompt:
         cos["prompt"] = prompt
-    engine = engine or config.setting("fullbody_engine", "flux2")
+    engine = engine or config.setting("fullbody_engine", "qwen21")
     if engine not in figure.ENGINES:
         raise ChainError(f"moteur de plein pied inconnu : {engine} (possibles : {', '.join(figure.ENGINES)})")
     report = report or _report()
@@ -141,7 +141,7 @@ def fullbody(p: Project, costume: str | None, *, variants: int = 2, seed: int | 
                                     costume_prompt=cos["prompt"], style=p.data["style"])
     else:
         outfit = prompts.describe_outfit(p.sheet, cos["prompt"])
-        text = figure.text(outfit, garments=len(cos["refs"]), style=p.data["style"])
+        text = figure.text(outfit, garments=len(cos["refs"]), style=p.data["style"], tags=engine == "qwen21")
     base = _seed(seed)
     made = []
     for i in range(variants):

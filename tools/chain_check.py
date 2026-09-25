@@ -120,7 +120,7 @@ def comfy_route(tmp: Path, ident: Path) -> None:
                 break
             except OSError:
                 subprocess.run([sys.executable, "-c", "import time; time.sleep(0.1)"])
-        os.environ.update(FACTORY_H3="comfyui", FACTORY_FACE_ENGINE="h3", FACTORY_COMFYUI_URL=f"http://127.0.0.1:{port}",
+        os.environ.update(FACTORY_H3="comfyui", FACTORY_FACE_ENGINE="h3", FACTORY_FULLBODY_ENGINE="h3", FACTORY_COMFYUI_URL=f"http://127.0.0.1:{port}",
                           FACTORY_COMFYUI_URL_H3=f"http://127.0.0.1:{port}",
                           FACTORY_WORKFLOWS=str(tmp / "workflows"), FACTORY_PROJECTS=str(tmp / "comfy"))
         out = usine("gabarit", str(REPO / "tools/fixtures/h3_export_api.json"))

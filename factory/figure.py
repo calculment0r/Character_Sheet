@@ -23,23 +23,25 @@ from . import config
 from .comfy import Comfy, fill
 
 ENGINES = {
+    "qwen21": "Qwen-Image 2.1 turbo · HD",
     "flux2": "FLUX.2 dev",
     "qwen2511": "Qwen-Image-Edit 2511",
     "h3": "H3 · 768 px",
 }
 W, H = 896, 1600
-MAX_REFS = {"flux2": 6, "qwen2511": 3}
+MAX_REFS = {"flux2": 6, "qwen2511": 3, "qwen21": 3}
 
 
-def text(outfit: str, *, garments: int = 0, style: str = "photoreal") -> str:
+def text(outfit: str, *, garments: int = 0, style: str = "photoreal", tags: bool = False) -> str:
+    """`tags` : Qwen-Image 2.1 nomme ses références <image1>, <image2>…"""
     look = ("Photorealistic, true-to-life fabric textures and seams, natural hands with five fingers, sharp focus, "
             "high detail." if style == "photoreal" else
             "Stylised character design reference, clean shapes, consistent shading, true colours, natural hands.")
-    worn = ("The outfit is the one shown in the other reference images, every piece kept as it is. "
-            if garments else "")
+    person = "the person in <image1>" if tags else "the same person as in the first reference image"
+    others = ", ".join(f"<image{k}>" for k in range(2, 2 + garments)) if tags else "the other reference images"
+    worn = (f"The outfit is the one shown in {others}, every piece kept as it is. " if garments else "")
     return " ".join(filter(None, [
-        "Full-body studio photograph of the same person as in the first reference image: keep the face, skin "
-        "tone, hair, age and build exactly.",
+        f"Full-body studio photograph of {person}: keep the face, skin tone, hair, age and build exactly.",
         "The person stands in a relaxed A-pose, arms held about forty-five degrees away from the torso, palms "
         "turned toward the thighs, fingers relaxed and naturally separated, feet at hip width, facing the camera "
         "straight on at eye level.",
@@ -136,6 +138,13 @@ def generate(engine: str, *, prompt: str, refs: list[Path], dest: Path, seed: in
     """Rend un plein pied dans `dest`. `refs` : le visage verrouillé
     d'abord, puis les images de vêtements (tronquées au maximum du modèle)."""
     refs = list(refs)[:MAX_REFS.get(engine, 1)]
+    if engine == "qwen21":
+        from . import qwen21
+        from . import stubs as sketches
+
+        return qwen21.generate(prompt=prompt, refs=refs, dest=dest, seed=seed, size=qwen21.FULLBODY, report=report,
+                               stub=lambda: sketches.mannequin(qwen21.FULLBODY, azimuth=0.0,
+                                                            seed=identity_seed if identity_seed is not None else seed))
     if config.backend("portrait") == "stub":
         from . import stubs
 

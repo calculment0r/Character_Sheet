@@ -362,8 +362,9 @@ def _gpu_views(q: dict, p: Project | None = None):
 
 
 def _gpu_fullbody(q: dict, p: Project | None = None):
-    engine = q.get("engine") or config.setting("fullbody_engine", "flux2")
-    return {"h3": ("h3", "h3"), "flux2": ("flux2", "portrait"), "qwen2511": ("qwenedit", "portrait")}.get(
+    engine = q.get("engine") or config.setting("fullbody_engine", "qwen21")
+    return {"h3": ("h3", "h3"), "flux2": ("flux2", "portrait"), "qwen2511": ("qwenedit", "portrait"),
+            "qwen21": ("qwen21", "portrait")}.get(
         engine, ("h3", "h3"))
 
 

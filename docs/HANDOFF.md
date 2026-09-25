@@ -63,9 +63,10 @@ est, mais la chaîne d'images change selon les décisions ci-dessous.**
 
 ### À faire, dans l'ordre
 
-1. **Plein pied** : `chain.fullbody` passe par `qwen21.generate` par défaut
-   (visage verrouillé `<image1>`, vêtements `<image2>`, `<image3>`, taille
-   `FULLBODY`) ; régler l'A-pose. `factory/figure.py` (FLUX.2 et
+1. **Plein pied** : branché — `chain.fullbody` passe par Qwen 2.1 turbo par
+   défaut (`figure.py` moteur `qwen21` → `qwen21.generate`, visage verrouillé
+   `<image1>`, vêtements `<image2>`, `<image3>`, 1152 × 2048 ; réglage
+   `fullbody_engine`). **Reste : l'A-pose** (bras le long du corps). `factory/figure.py` (FLUX.2 et
    Qwen-Edit 2511, testés ce jour : meilleurs que H3) peut rester en option
    ou disparaître.
 2. **Visage** : moteur `qwen21` de `portrait.py` → `qwen21.generate` en t2i
