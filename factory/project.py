@@ -105,10 +105,13 @@ class Project:
     # ── chemins ────────────────────────────────────────────────────
 
     def path(self, rel: str) -> Path:
-        return self.root / rel
+        # Un manifeste écrit sous Windows avant le passage en POSIX porte
+        # des « \ » : on les lit comme des séparateurs.
+        return self.root / str(rel).replace("\\", "/")
 
     def rel(self, path: Path) -> str:
-        return str(Path(path).resolve().relative_to(self.root))
+        # Toujours des « / » : le dossier d'un personnage passe du PC aux DGX.
+        return Path(path).resolve().relative_to(self.root).as_posix()
 
     def dir(self, rel: str) -> Path:
         d = self.root / rel
