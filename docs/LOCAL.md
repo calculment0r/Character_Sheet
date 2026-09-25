@@ -199,6 +199,25 @@ Le réglage en place sur le PC de Cal :
 
 ### Les vues, en pratique
 
+Quatre façons, comparables au banc (`--banc` range chaque méthode dans
+`views/banc/<méthode>/`, avec sa planche contact, sans toucher au
+manifeste) :
+
+```sh
+./usine vues <perso> --methode qwen21-orbit --banc   # Qwen-Image 2.1 + LoRA viewpoint-orbit (ML-Intern-lab)
+./usine vues <perso> --methode qwen-2511 --banc      # Qwen-Image-Edit 2511 + LoRA Multiple-Angles (fal)
+./usine vues <perso> --methode qwen-2509 --banc      # Qwen-Image-Edit 2509 + LoRA Multiple-angles (dx8152)
+./usine vues <perso> --orbite --banc                 # H3 en orbite, frames choisies sur la silhouette
+```
+
+Les trois LoRA Qwen tournent le plein pied de face validé ; la face est
+ce plein pied lui-même. Ils tournent sur DGX2 (`comfyui_url_views`), qui
+a les modèles de base. Tous trois ont appris sur des objets, pas sur des
+personnages : c'est au banc de dire lequel tient un corps en pied. Le
+sens des rotations est supposé (`views_qwen.TURN`, `ABSOLUTE`) : la vue
+`left` doit montrer la poche de poitrine de maren-ostrova. Un seul gros
+calcul à la fois par machine (un DGX sature sa mémoire unifiée et gèle).
+
 Une génération par vue ne tient pas les angles avec H3 (voir
 `HANDOFF.md`) : passer par l'orbite.
 

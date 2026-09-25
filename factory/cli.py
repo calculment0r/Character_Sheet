@@ -116,9 +116,13 @@ def cmd_planche_ok(args) -> None:
 
 def cmd_vues(args) -> None:
     p = _p(args)
-    raw = chain.views(p, args.costume, method="orbit" if args.orbite else "per_view", names=args.vue,
-                      threequarter=not args.sans_34, seed=args.graine)
+    method = "orbit" if args.orbite else args.methode
+    raw = chain.views(p, args.costume, method=method, names=args.vue, threequarter=not args.sans_34,
+                      seed=args.graine, bench=args.banc)
     key, _ = p.costume(args.costume)
+    if args.banc:
+        print(f"{len(raw)} vue(s) au banc ; contact : {p.path(f'costumes/{key}/views/banc/{method}/contact.png')}")
+        return
     print(f"{len(raw)} vue(s) ; contact : {p.path(f'costumes/{key}/views/contact_raw.png')}")
     print(f"  suite : ./usine prep {p.data['slug']}")
 
@@ -261,7 +265,12 @@ def build() -> argparse.ArgumentParser:
 
     sp = cmd("vues", cmd_vues, "vues orthogonales plein cadre (§6)")
     perso(sp), costume(sp)
-    sp.add_argument("--orbite", action="store_true", help="un plan en orbite redécoupé, au lieu d'une génération par vue")
+    sp.add_argument("--methode", default="per_view", choices=list(chain.VIEW_METHODS),
+                    help="per_view (H3, une génération par vue), orbit (H3, un plan redécoupé), ou un LoRA d'angle "
+                         "Qwen qui tourne le plein pied validé : qwen21-orbit, qwen-2511, qwen-2509")
+    sp.add_argument("--orbite", action="store_true", help="raccourci de --methode orbit")
+    sp.add_argument("--banc", action="store_true",
+                    help="ranger dans views/banc/<méthode>/ sans toucher au manifeste, pour comparer les méthodes")
     sp.add_argument("--sans-34", action="store_true", help="ne pas générer la vue 3/4")
     sp.add_argument("--vue", action="append", choices=["front", "left", "back", "right", "threequarter"],
                     help="ne refaire que cette vue (répétable) ; les autres restent")

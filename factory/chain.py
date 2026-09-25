@@ -13,7 +13,7 @@ import json
 import zlib
 from pathlib import Path
 
-from . import config, h3, imaging, prompts
+from . import config, h3, imaging, prompts, views_qwen
 from .project import ChainError, Project, now
 
 ORTHO = ("front", "left", "back", "right")
@@ -179,11 +179,26 @@ def sheet_ok(p: Project, costume: str | None, sheet_id: str) -> dict:
 
 # ── vues orthogonales ──────────────────────────────────────────────
 
+VIEW_METHODS = ("per_view", "orbit", *views_qwen.METHODS)
+
+
 def views(p: Project, costume: str | None, *, method: str = "per_view", names: list[str] | None = None,
-          threequarter: bool = True, seed: int | None = None, report=None) -> dict:
-    """Une génération plein cadre par vue (§6.1), le visage, le plein
-    pied et la planche validée en références. `orbit` fait l'autre
-    méthode : un seul plan en orbite, redécoupé."""
+          threequarter: bool = True, seed: int | None = None, bench: bool = False, report=None) -> dict:
+    """Les vues orthogonales (§6.1), par l'une des méthodes :
+
+      per_view      une génération H3 par vue, visage, plein pied et planche
+                    en références — H3 y revient vers la face ;
+      orbit         un plan H3 en orbite, frames choisies sur la silhouette ;
+      qwen21-orbit, qwen-2511, qwen-2509
+                    le plein pied de face validé, tourné par un LoRA
+                    d'angle Qwen (`views_qwen.py`) ; la face est le plein
+                    pied lui-même.
+
+    Avec `bench`, les vues vont dans `views/banc/<méthode>/`, avec leur
+    planche contact, et le manifeste n'est pas touché : c'est le banc du
+    §6.1, pour comparer les méthodes sur un même costume."""
+    if method not in VIEW_METHODS:
+        raise ChainError(f"méthode de vues inconnue : {method} (possibles : {', '.join(VIEW_METHODS)})")
     locked = p.require_face()
     key, cos = p.costume(costume)
     body = p.require_fullbody(cos)
@@ -191,10 +206,9 @@ def views(p: Project, costume: str | None, *, method: str = "per_view", names: l
     report = report or _report()
     names = list(names or ORTHO) + (["threequarter"] if threequarter and not names else [])
     refs = [p.path(locked), p.path(body), p.path(plate["file"])]
-    folder = p.dir(f"costumes/{key}/views/raw")
+    folder = p.dir(f"costumes/{key}/views/" + (f"banc/{method}" if bench else "raw"))
     s = _seed(seed)
-    v = cos["views"]
-    v["method"] = method
+    raw: dict[str, dict] = {}
     if method == "orbit":
         azimuths = {n: prompts.AZIMUTHS[n][0] for n in names}
         sections = prompts.orbit(p.sheet, p.data["notes"], costume_prompt=cos["prompt"], style=p.data["style"])
@@ -202,11 +216,32 @@ def views(p: Project, costume: str | None, *, method: str = "per_view", names: l
         stills = h3.orbit(sections=sections, refs=refs, dest_dir=folder, seed=s, azimuths=azimuths,
                           report=report, identity_seed=identity_seed(p))
         for n, st in stills.items():
-            v["raw"][n] = {"file": p.rel(st.path), "azimuth": azimuths[n],
-                           "azimuth_source": f"orbite, {st.meta.get('azimuth_source', 'supposé')}",
-                           "azimuth_estimated": st.meta.get("azimuth_estimated"),
-                           "precision_deg": st.meta.get("precision_deg"), "frame": st.meta.get("frame"),
-                           "seed": s, "backend": st.backend, "at": now()}
+            raw[n] = {"file": p.rel(st.path), "azimuth": azimuths[n],
+                      "azimuth_source": f"orbite, {st.meta.get('azimuth_source', 'supposé')}",
+                      "azimuth_estimated": st.meta.get("azimuth_estimated"),
+                      "precision_deg": st.meta.get("precision_deg"), "frame": st.meta.get("frame"),
+                      "seed": s, "backend": st.backend, "at": now()}
+    elif method in views_qwen.METHODS:
+        source = p.path(body)
+        if method == "qwen21-orbit":
+            # Ce LoRA a appris sur des images détourées, fond transparent.
+            rgba = imaging.matte(imaging.load(source), config.backend("prep"),
+                                 workdir=p.dir(f"costumes/{key}/views/.matte"))
+            source = folder / "_source_rgba.png"
+            rgba.save(source)
+        for n in names:
+            az = prompts.AZIMUTHS[n][0]
+            dest = folder / f"{n}.png"
+            if n == "front":
+                imaging.load(p.path(body)).save(dest)
+                raw[n] = {"file": p.rel(dest), "azimuth": 0.0, "azimuth_source": "plein pied validé", "seed": None,
+                          "backend": "reprise", "at": now()}
+                continue
+            print(f"  vue {n} · {az:g}° · {method} · graine {s}")
+            meta = views_qwen.generate(method, n, source=source, dest=dest, seed=s, report=report)
+            dest.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+            raw[n] = {"file": p.rel(dest), "azimuth": az, "azimuth_source": f"demandé ({method})", "seed": s,
+                      "backend": "comfyui", "prompt": meta["prompt"], "at": now()}
     else:
         for n in names:
             sections = prompts.view(p.sheet, p.data["notes"], name=n, costume_prompt=cos["prompt"],
@@ -215,8 +250,15 @@ def views(p: Project, costume: str | None, *, method: str = "per_view", names: l
             print(f"  vue {n} · {az:g}° · graine {s}")
             st = h3.still("view", sections=sections, refs=refs, dest=folder / f"{n}.png", seed=s, report=report,
                           extra={"identity_seed": identity_seed(p), "azimuth": az})
-            v["raw"][n] = {"file": p.rel(st.path), "azimuth": az, "azimuth_source": "demandé", "seed": s,
-                           "backend": st.backend, "at": now()}
+            raw[n] = {"file": p.rel(st.path), "azimuth": az, "azimuth_source": "demandé", "seed": s,
+                      "backend": st.backend, "at": now()}
+    contact = [(f"{n} · {e['azimuth']:g}°", p.path(e["file"])) for n, e in raw.items()]
+    if bench:
+        _contact(p, f"costumes/{key}/views/banc/{method}/contact.png", contact, cols=5)
+        return raw
+    v = cos["views"]
+    v["method"] = method
+    v["raw"].update(raw)
     # Des vues neuves invalident la préparation et le contrôle.
     v["prepared"], v["check"], v["delighted"] = {}, None, False
     p.save()

@@ -234,6 +234,25 @@ def unirig_to_soma() -> None:
           ok, " | ".join(report))
 
 
+def qwen_views() -> None:
+    """Les trois montages de vues par LoRA d'angle Qwen : chacun se remplit
+    sans lien pendant, et chaque vue reçoit le déclencheur de son LoRA
+    avec un sens de rotation — gauche et droite opposés, dos à 180°."""
+    from factory import comfy, views_qwen
+
+    ok, detail = True, []
+    for m in views_qwen.METHODS:
+        texts = {v: views_qwen.prompt(m, v) for v in ("left", "back", "right", "threequarter")}
+        f = comfy.fill(views_qwen.workflow(m), {"prompt": texts["left"], "seed": 1}, ["source.png"])
+        dangling = [k for x in f.values() for k, v in x["inputs"].items()
+                    if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str) and v[0] not in f]
+        trigger = {"qwen21-orbit": "<orbit>", "qwen-2511": "<sks>", "qwen-2509": "镜头"}[m]
+        ok &= (not dangling and all(trigger in t for t in texts.values()) and texts["left"] != texts["right"]
+               and ("180" in texts["back"] or "back view" in texts["back"]))
+        detail.append(f"{m} {len(f)} nœuds")
+    check("vues Qwen : trois montages complets, un prompt par vue, gauche ≠ droite", ok, ", ".join(detail))
+
+
 def dry_validation() -> None:
     """La validation à blanc de `./usine doctor` : elle doit voir un nœud
     absent et un fichier de poids inconnu, dans les deux formes de liste
@@ -414,6 +433,7 @@ def main() -> int:
     sam3d_yaw()
     dry_validation()
     unirig_to_soma()
+    qwen_views()
 
     failed = [r for r in results if not r[1]]
     print(f"\n{len(results) - len(failed)}/{len(results)} vérifications passées\n")

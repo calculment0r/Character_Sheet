@@ -26,6 +26,7 @@ COMFY_CAPS = {
     "prep": ("<détourage BiRefNet>",),
     "trellis": ("trellis2_mv.json", "trellis2_single.json"),
     "sam3dbody": ("<mesure d'azimut SAM 3D Body>",),
+    "views": ("<vues par LoRA d'angle Qwen>",),
 }
 # Capacité lancée par ssh → le script d'entrée qu'elle exécute.
 REMOTE_CAPS = {"kimodo": "kimodo_entry.py", "unirig": "unirig_entry.py"}
@@ -77,6 +78,10 @@ def _workflows(cap: str) -> dict[str, dict]:
         from . import sam3d
 
         return {"mesure SAM 3D Body": sam3d._workflow("x.png")}
+    if cap == "views":
+        from . import views_qwen
+
+        return {f"vues {m}": views_qwen.workflow(m) for m in views_qwen.METHODS}
     out = {}
     for name in COMFY_CAPS[cap]:
         try:

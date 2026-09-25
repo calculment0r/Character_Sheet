@@ -241,8 +241,18 @@ def validate(workflow: dict, info: dict) -> list[str]:
         if cls not in info:
             problems.append(f"nœud {nid} : {cls} absent de ce ComfyUI")
             continue
-        spec = {**info[cls].get("input", {}).get("required", {}), **info[cls].get("input", {}).get("optional", {})}
-        for key, val in node.get("inputs", {}).items():
+        required = info[cls].get("input", {}).get("required", {})
+        spec = {**required, **info[cls].get("input", {}).get("optional", {})}
+        inputs = node.get("inputs", {})
+        # Les entrées extensibles et dynamiques s'écrivent « groupe.clé » : on ne les juge pas.
+        grown = {k.split(".")[0] for k in inputs if "." in k}
+        for key in required:
+            if key not in inputs and key not in grown:
+                problems.append(f"nœud {nid} ({cls}) : entrée obligatoire « {key} » absente")
+        for key, val in inputs.items():
+            if "." not in key and key not in spec:
+                problems.append(f"nœud {nid} ({cls}) : entrée « {key} » inconnue de ce nœud")
+                continue
             if not isinstance(val, str) or "{{" in val or key == "image":
                 continue
             opts = _options(spec.get(key))
