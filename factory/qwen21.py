@@ -47,7 +47,7 @@ def sigmas(width: int, height: int) -> str:
     return ", ".join(["1"] + [f"{shift / (shift + 1 / x - 1):.10f}" for x in NODES] + ["0"])
 
 
-def workflow(n_refs: int, width: int, height: int) -> dict:
+def workflow(n_refs: int, width: int, height: int, resolution: int = 1024) -> dict:
     wf = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": config.setting("qwen21_unet", UNET),
                                                      "weight_dtype": "default"}},
@@ -66,7 +66,7 @@ def workflow(n_refs: int, width: int, height: int) -> dict:
     wf.update({
         "6": {"class_type": "TextEncodeQwenImage21",
               "inputs": {"clip": ["4", 0], "vae": ["5", 0], "prompt": "{{prompt}}", "negative_prompt": "",
-                         "resolution": 1024, **images}},
+                         "resolution": resolution, **images}},
         "7": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
         "8": {"class_type": "ManualSigmas", "inputs": {"sigmas": sigmas(width, height)}},
         "9": {"class_type": "BasicGuider", "inputs": {"model": ["3", 0], "conditioning": ["6", 0]}},
@@ -83,9 +83,10 @@ def workflow(n_refs: int, width: int, height: int) -> dict:
 
 
 def generate(*, prompt: str, refs: list[Path], dest: Path, seed: int, size: tuple[int, int],
-             report=lambda p, m: None, stub=None) -> Path:
+             report=lambda p, m: None, stub=None, resolution: int = 1024) -> Path:
     """Rend une image dans `dest`. `refs` : <image1>, <image2>… (trois au
-    plus). `stub` : l'image à écrire en factice."""
+    plus). `stub` : l'image à écrire en factice. `resolution` : taille à
+    laquelle l'encodeur lit les références."""
     refs = list(refs)[:MAX_REFS]
     dest.parent.mkdir(parents=True, exist_ok=True)
     if config.backend("portrait") == "stub":
@@ -94,7 +95,7 @@ def generate(*, prompt: str, refs: list[Path], dest: Path, seed: int, size: tupl
         return dest
     comfy = Comfy(config.comfyui_url("portrait"))
     names = [comfy.upload(Path(r)) for r in refs]
-    wf = fill(workflow(len(names), *size), {"prompt": prompt, "seed": seed}, names)
+    wf = fill(workflow(len(names), *size, resolution=resolution),{"prompt": prompt, "seed": seed}, names)
     files = comfy.run(wf, dest.parent / f".{dest.stem}", report=report, prefix="qwen21")
     Path(files[0]).replace(dest)
     return dest
