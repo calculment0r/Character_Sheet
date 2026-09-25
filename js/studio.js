@@ -427,27 +427,35 @@ function stageCostume(d) {
   const tabs = keys.length ? `<div class="tabs">${keys.map((k) => `<button class="tb sm ${k === state.costume ? 'on' : 'ghost'}"
     data-costume-tab="${esc(k)}">${esc(c.costumes[k].name)}</button>`).join('')}
     <button class="tb sm ${state.costume === null ? 'on' : 'ghost'}" data-costume-tab="">+ Tenue</button></div>` : '';
-  const waitFace = locked ? '' : '<p class="hint">Le plein pied attend le visage verrouillé : la tenue peut déjà s\'écrire.</p>';
+  // Sans visage verrouillé, pas de plein pied : on le dit en tête, avec le
+  // chemin, au lieu de laisser chercher un bouton qui n'existe pas.
+  const faceFirst = locked ? '' : `<div class="gate">
+      <p>Le plein pied part du <b>visage verrouillé</b>, et ce personnage n'en a pas encore. La tenue peut déjà
+        s'écrire : elle est gardée dès que tu quittes le champ.</p>
+      <button class="tb go" data-goto="face">Choisir le visage ▸</button></div>`;
+  const renderBtn = (key) => (locked
+    ? act(key ? 'fullbody' : 'costume_go', 'Générer le plein pied ▸',
+      { form: key ? `cos.${key}` : 'costume_new', costume: key || undefined })
+    : '<button class="tb ghost" disabled title="il faut d\'abord un visage verrouillé">Générer le plein pied ▸</button>');
   let body;
   if (state.costume === null) {
-    body = `${tabs}
-      <label class="field"><span class="lbl">Décris sa tenue</span>
+    body = `${faceFirst}${tabs}
+      <label class="field"><span class="lbl">Décris sa tenue · gardée dès que tu quittes le champ</span>
         ${textarea('costume_new.brief', '', 'en français : « hoodie bleu Adidas capuche baissée, baggy blanc usé aux genoux, baskets blanches, casquette noire à l\'envers »', 4)}</label>
       <div class="form-row">
         <div class="field"><span class="lbl">Vêtements · images</span>${refsZone('costume_new', 'vêtement')}</div>
         ${input('costume_new.name', 'Nom de la tenue', { placeholder: `tenue ${keys.length + 1}` })}
         ${select('costume_new.variants', 'Propositions', [[1, '1'], [2, '2'], [3, '3']], 2)}
-        <span class="sp"></span>
-        ${act('costume_go', locked ? 'Générer le plein pied ▸' : 'Garder la tenue', { form: 'costume_new' })}
-      </div>${waitFace}`;
+        <span class="sp"></span>${renderBtn(null)}
+      </div>`;
     return box({ sec: '02', title: 'Costume', st: 'open', stLabel: 'à faire', body });
   }
   const key = state.costume;
   const cos = c.costumes[key];
   const form = `cos.${key}`;
   const fb = cos.fullbody;
-  body = `${tabs}
-    <label class="field"><span class="lbl">Décris sa tenue</span>
+  body = `${faceFirst}${tabs}
+    <label class="field"><span class="lbl">Décris sa tenue · gardée dès que tu quittes le champ</span>
       ${textarea(`${form}.brief`, cos.brief || cos.prompt || '', 'en français, comme ça vient', 4)}</label>
     <div class="form-row">
       <div class="field"><span class="lbl">Vêtements · images</span>
@@ -459,10 +467,8 @@ function stageCostume(d) {
             data-confirm="${esc(`Retirer ${base(r)} des références de la tenue ?`)}">×</button></span>`;
         }).join('')}</div>${refsZone(form, 'vêtement')}</div>
       ${select(`${form}.variants`, 'Propositions', [[1, '1'], [2, '2'], [3, '3']], 2)}
-      <span class="sp"></span>
-      ${locked ? act('fullbody', 'Générer ▸', { form, costume: key })
-        : act('costume_edit', 'Enregistrer', { form, costume: key })}
-    </div>${waitFace}`;
+      <span class="sp"></span>${renderBtn(key)}
+    </div>`;
   if (cos.brief_read && cos.prompt) {
     body += `<details class="read"><summary>ce que le modèle en a tiré</summary><p class="hint">${esc(cos.prompt)}</p></details>`;
   }
@@ -646,7 +652,7 @@ function waitingCard(d) {
   if (!Object.keys(c.costumes).length) {
     body = `<p>Pendant que ça calcule : sa tenue. Elle attendra le visage verrouillé.</p>
       ${textarea('costume_new.brief', '', 'en français : ce qu\'il porte, de la tête aux pieds', 3)}
-      <div class="form-row"><span class="sp"></span>${act('costume_add', 'Garder la tenue', { form: 'costume_new' })}</div>`;
+      <p class="hint">Gardée dès que tu quittes le champ.</p>`;
   } else if (!(c.identity || {}).personality_traits) {
     const picked = new Set(state.drafts['wait.traits'] || []);
     body = `<p>Pendant que ça calcule : trois traits de caractère.</p>
@@ -839,20 +845,15 @@ async function doAction(btn) {
   btn.disabled = true;
   try {
     if (action === 'costume_go') {
-      // Une nouvelle tenue : on la garde, puis, si le visage est verrouillé,
-      // son plein pied part aussitôt dans la file.
-      const add = await api(actionUrl('costume_add'), { method: 'POST', body: params });
-      state.costume = add.result.costume;
-      if (state.detail?.character.face.locked) {
-        const run = await api(actionUrl('fullbody'), {
-          method: 'POST', body: { costume: state.costume, variants: params.variants },
-        });
-        state.jobs.unshift(run.job);
-        toast(`${run.job.label} : en file`);
-      } else {
-        toast('tenue gardée');
-      }
-      forget(btn.dataset.form);
+      // Une nouvelle tenue : elle se garde (une seule fois, même si le champ
+      // vient d'être quitté), puis son plein pied part dans la file.
+      const key = await createCostume();
+      if (!key) { btn.disabled = false; return; }
+      const run = await api(actionUrl('fullbody'), {
+        method: 'POST', body: { costume: key, variants: params.variants },
+      });
+      state.jobs.unshift(run.job);
+      toast(`${run.job.label} : en file`);
       await loadDetail();
       render(true);
       return;
@@ -864,6 +865,8 @@ async function doAction(btn) {
     } else {
       toast('fait');
       if (action === 'costume_add') state.costume = out.result.costume;
+      // Un choix qui clôt une étape : l'atelier reprend la suite de la chaîne.
+      if (PICKS.has(action)) state.stage = null;
     }
     forget(btn.dataset.form);
     await loadDetail();
@@ -871,6 +874,52 @@ async function doAction(btn) {
   } catch (e) {
     toast(e.message, 7000);
     btn.disabled = false;
+  }
+}
+
+/* La tenue se garde toute seule : son texte quand on quitte le champ, ses
+   images dès qu'elles sont déposées. Pas de bouton « Enregistrer », et
+   jamais de tenue vide. */
+let costumeSaving = null;
+
+function createCostume() {
+  if (costumeSaving) return costumeSaving;
+  const brief = String(state.drafts['costume_new.brief'] || '').trim();
+  const refs = (state.refs.costume_new || []).map((r) => r.id);
+  if (!brief && !refs.length) {
+    toast("décris d'abord la tenue, ou dépose une image de vêtement", 5000);
+    return Promise.resolve(null);
+  }
+  costumeSaving = (async () => {
+    try {
+      const out = await api(actionUrl('costume_add'), {
+        method: 'POST', body: { brief, refs, name: state.drafts['costume_new.name'] || '' },
+      });
+      state.costume = out.result.costume;
+      forget('costume_new');
+      delete state.drafts['costume_new.brief'];
+      delete state.drafts['costume_new.name'];
+      toast('tenue gardée');
+      await loadDetail();
+      render();
+      return state.costume;
+    } catch (e) {
+      toast(e.message, 6000);
+      return null;
+    } finally {
+      costumeSaving = null;
+    }
+  })();
+  return costumeSaving;
+}
+
+async function saveCostume(key, fields) {
+  try {
+    await api(actionUrl('costume_edit'), { method: 'POST', body: { costume: key, ...fields } });
+    await loadDetail();
+    render();
+  } catch (e) {
+    toast(e.message, 6000);
   }
 }
 
@@ -886,6 +935,15 @@ async function uploadFiles(form, files) {
     } catch (e) {
       toast(`${f.name} : ${e.message}`, 6000);
     }
+  }
+  const cos = /^cos\.(.+)$/.exec(form);
+  if (cos && (state.refs[form] || []).length) {
+    const ids = state.refs[form].map((r) => r.id);
+    forget(form);
+    await saveCostume(cos[1], { refs: ids });
+    toast('image gardée dans la tenue');
+  } else if (form === 'costume_new') {
+    await createCostume();
   }
   render(true);
 }
@@ -1026,6 +1084,10 @@ function wire() {
   app.addEventListener('input', keep);
   app.addEventListener('change', (e) => {
     keep(e);
+    const draftKey = e.target.dataset?.draft || '';
+    const cosBrief = /^cos\.(.+)\.brief$/.exec(draftKey);
+    if (cosBrief) saveCostume(cosBrief[1], { brief: e.target.value });
+    if (draftKey === 'costume_new.brief' && e.target.value.trim()) createCostume();
     if (e.target.dataset?.refs) { uploadFiles(e.target.dataset.refs, [...e.target.files]); e.target.value = ''; }
     if (e.target.matches('[data-style]')) setStyle(e.target.value);
   });

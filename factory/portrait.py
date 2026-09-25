@@ -13,8 +13,9 @@ le ComfyUI principal (`:8188`), avec leurs nœuds natifs :
 Le prompt ne décrit que l'identité : âge, genre, origine, carrure, et
 les précisions du visage. Ni rôle, ni archétype, ni notes : ce sont des
 notes de costume, et un « skateur » dont la note parle d'un « casque »
-sort casqué, lunettes de ski comprises (Kévin, 25/09). Tête nue,
-t-shirt noir uni, comme une photo de casting.
+sort casqué, lunettes de ski comprises (Kévin, 25/09). Tête nue, et
+en gros plan, coupé au cou : un vêtement sur le portrait passerait dans
+toutes les générations qui le prennent en référence (Cal, 25/09).
 """
 
 from __future__ import annotations
@@ -54,12 +55,15 @@ def text(sheet: dict, extra: str = "", style: str = "photoreal") -> str:
             "Stylised character portrait for a production design reference, clean shapes, consistent shading, "
             "true colours.")
     return " ".join(filter(None, [
-        f"Head-and-shoulders identity portrait of {sheet.get('character_name') or 'the character'}, {who(sheet)}.",
+        f"Tight close-up identity portrait of the face of {sheet.get('character_name') or 'the character'}, "
+        f"{who(sheet)}.",
         extra.strip().rstrip(".") + "." if extra.strip() else "",
+        "The face fills the frame, from just above the top of the hair to just below the chin; the frame is "
+        "cropped at the neck, with no shoulders and no clothing visible.",
         "Facing the camera straight on at eye level, centred, neutral relaxed expression, mouth closed, eyes "
         "looking straight into the lens.",
         "The head is bare and the hair fully visible: no hat, no cap, no hood, no helmet, no headphones, no "
-        "glasses or goggles, no jewellery. The only garment is a plain black crew-neck T-shirt with no print.",
+        "glasses or goggles, no earrings, no jewellery.",
         "Soft, even, neutral studio light from the front, identical on both sides of the face, plain uniform "
         "light grey seamless background, no text, no logo.",
         look,

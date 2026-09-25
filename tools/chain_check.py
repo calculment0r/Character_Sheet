@@ -237,6 +237,7 @@ def studio_route(tmp: Path) -> None:
         code, made = js("/api/characters", {"name": "Kévin Essai"})
         kid = made.get("slug")
         code, queued = js(f"/api/characters/{kid}/actions/face", {"brief": "vingt ans, coupe courte", "variants": 4})
+        empty, _ = js(f"/api/characters/{kid}/actions/costume_add", {"brief": "  "})
         code, added = js(f"/api/characters/{kid}/actions/costume_add", {"brief": "hoodie bleu, baggy blanc"})
         for _ in range(600):
             if js(f"/api/jobs/{queued['job']['id']}")[1]["status"] not in ("queued", "running"):
@@ -244,10 +245,13 @@ def studio_route(tmp: Path) -> None:
             time.sleep(0.05)
         _, k = js(f"/api/characters/{kid}")
         kc = k["character"]
-        check("studio : créé par son nom, le brief remplit la fiche, la tenue écrite pendant le rendu reste",
+        check("studio : créé par son nom, le brief remplit la fiche, portrait en gros plan, tenue écrite pendant le "
+              "rendu gardée, tenue vide refusée",
               kc["identity"].get("face_description") == "vingt ans, coupe courte" and len(kc["face"]["variations"]) == 4
               and len({c["desc"] for c in kc["face"]["candidates"]}) == 4 and "tenue-1" in kc["costumes"]
-              and kc["costumes"]["tenue-1"]["brief"] == "hoodie bleu, baggy blanc" and code == 200,
+              and kc["costumes"]["tenue-1"]["brief"] == "hoodie bleu, baggy blanc" and code == 200 and empty == 409
+              and "Tight close-up" in json.loads((tmp / "studio" / kid / "face" / "cand-001.json").read_text(
+                  encoding="utf-8"))["prompt"],
               f"{len(kc['face']['candidates'])} propositions, tenues {list(kc['costumes'])}")
 
         buf = io.BytesIO()

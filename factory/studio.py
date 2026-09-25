@@ -235,6 +235,8 @@ def a_face_lock(p: Project, q: dict, report):
 def a_costume_add(p: Project, q: dict, report):
     """Un costume se décrit en mots (`brief`), avec ou sans images de
     vêtements ; son nom vient tout seul s'il n'est pas donné."""
+    if not str(q.get("brief") or "").strip() and not q.get("refs") and not str(q.get("prompt") or "").strip():
+        raise ChainError("une tenue vide ne se garde pas : décris-la, ou dépose une image de vêtement")
     name = str(q.get("name") or "").strip() or f"tenue {len(p.data['costumes']) + 1}"
     key = chain.costume_add(p, name, prompt=str(q.get("prompt") or "").strip(), refs=_uploads(q.get("refs")))
     if str(q.get("brief") or "").strip():
@@ -275,6 +277,8 @@ def read_costume_brief(p: Project, q: dict, llm, say) -> None:
         cos["brief_read"] = None
     p.save()
     text = (cos.get("brief") or "").strip()
+    if not text and not cos["refs"] and not cos.get("prompt"):
+        raise ChainError("la tenue n'est pas décrite : écris ce qu'il porte, ou dépose une image de vêtement")
     if not text or (cos.get("brief_read") == text and cos.get("prompt")):
         return
     say("le modèle de texte lit le brief du costume")

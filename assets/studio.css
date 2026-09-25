@@ -277,3 +277,12 @@ a.card:hover { transform: translateY(-2px); filter: brightness(1.08); }
 .perso-side .sheet-val[data-edit]:hover { box-shadow: inset 0 0 0 1px var(--line-cy); }
 .perso-side .sheet-val.empty::before { content: "+"; color: var(--ink3); }
 .sheet-edit .fld { padding: 4px 6px; font-size: 11.5px; }
+
+/* ── une étape qui attend la précédente : on le dit, avec le chemin ── */
+.gate {
+  display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap;
+  padding: var(--s3) var(--s4); border-radius: var(--r2);
+  background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line-or);
+}
+.gate p { margin: 0; flex: 1; min-width: 240px; color: var(--ink2); font-size: 12.5px; line-height: 1.6; }
+.gate b { color: var(--ink); font-weight: 600; }

@@ -196,14 +196,15 @@ def face(sheet: dict, notes: list[str], *, has_source: bool, extra: str = "", st
         summary = ("A single static identity portrait of the character, head and shoulders, facing the camera "
                    "straight on at eye level, on a plain neutral seamless background.")
     shot = " ".join(filter(None, [
-        f"A locked-off head-and-shoulders portrait of {who}, centred, facing the lens straight on at eye level.",
+        f"A locked-off tight close-up portrait of the face of {who}, centred, facing the lens straight on at eye level.",
         "The mouth is closed, the expression is neutral and relaxed, the eyes look straight into the lens.",
         "The hair is arranged as described and does not cover the eyes.",
         extra,
         # Ni rôle ni notes : ce sont des notes de costume. Un « skateur »
         # dont la note parle d'un casque sortait casqué (Kévin, 25/09).
         "The head is bare and the hair fully visible: no hat, no cap, no hood, no helmet, no headphones, no "
-        "glasses or goggles, no jewellery. The only garment is a plain black crew-neck T-shirt with no print.",
+        "glasses or goggles, no jewellery. Tight close-up: the face fills the frame, cropped at the neck, with "
+        "no shoulders and no clothing visible.",
         "Even, soft, neutral studio light from the front, identical on both sides of the face, with no hard shadow "
         "and no coloured rim.",
         STILL, BACKGROUND, NO_TEXT,
