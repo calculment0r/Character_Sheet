@@ -11,6 +11,82 @@ Cadrage complet : [`BRIEF_CHARACTER_FACTORY.md`](./BRIEF_CHARACTER_FACTORY.md)
 
 ---
 
+## 0. REPRENDRE ICI — le studio tourne sur DGX2 (état au 25/09/2026)
+
+**On ne travaille que sur DGX2** (Cal, 25/09). Le PC sert à écrire le
+code et à ouvrir la page ; tout calcule sur DGX2.
+
+**Le studio existe et tourne** : `./usine studio` sur DGX2
+(`~/Character_Factory`, venv `.venv`, lancé par
+`PYTHONUNBUFFERED=1 setsid nohup ./usine studio > studio.log 2>&1 < /dev/null &`),
+ouvert depuis le PC sur **http://192.168.10.247:8765/** (Tailscale :
+`100.108.108.65:8765`). Mode d'emploi : `LOCAL.md`, section « Le studio ».
+
+- `factory/studio.py` : serveur stdlib, une file à un ouvrier, les
+  étages de `chain.py` appelés tels quels ; les choix rapides
+  (verrouiller, valider) sont refusés pendant un travail sur le même
+  personnage. Relais `/v1/…` vers Ollama, le modèle imposé par le studio.
+- `studio.html` + `js/studio.js` + `assets/studio.css` (montrés dans
+  `theme.html`) : cartes, page personnage un bloc par étage, l'étape
+  suivante en orange, file de travaux relevée toutes les 1,5 s.
+- `console.html?new=1` / `?slug=<perso>` : la conversation crée le
+  personnage dès qu'il a un nom, puis enregistre fiche, notes et
+  conversation (sans les images) après chaque tour.
+- `factory/memory.py` branché : avant un travail, déchargement d'Ollama
+  et vidage du ComfyUI inutile (file vide seulement) ; avant une
+  conversation sans calcul en cours, vidage de ComfyUI si la place
+  manque. **H3 résident prend ~100 Go** (50 Go GPU + 53 Go de RAM pour
+  son encodeur de texte) : H3 et le modèle de texte alternent.
+- **Deux instances ComfyUI** : H3 sur `:8189` (H3TEST, qui a Spectrum et
+  Sol-Attn), le reste sur `:8188`. `h3.py` suit maintenant
+  `comfyui_url_h3` (il prenait `comfyui_url`). Le nœud d'aperçu
+  `ModelPreviewOverrideKJ` est court-circuité dans les gabarits H3 (son
+  entrée `tiny_vae` n'existe pas sur DGX2) et par `./usine gabarit`.
+- **Modèle de texte : `qwen3-vl-32b-32k`**, dérivé de
+  `qwen3-vl:32b-instruct` par `ollama create` avec `num_ctx 32768`
+  (sans ce réglage, Ollama réserve 262k de contexte : 48,8 Go). Banc du
+  25/09 sur un même tour de console, deux essais : seul le 32B dense
+  appelle `update_character_sheet` à chaque fois (26–34 s par tour) ; le
+  30B-A3B et mistral-small 3.2 récitent la fiche en texte.
+- `Project.rel` écrit des chemins POSIX ; `Project.path` lit les anciens
+  `\` d'un manifeste Windows (celui de Maren a été converti).
+
+**Vérifié** : `chain_check` 43/43 sur le PC et sur DGX2, dont six
+vérifications du studio par son API (création, file, refus, fichiers,
+relais) ; la page entière dans Edge headless (playwright-core,
+moteurs factices) : un seul orange par écran, pas d'erreur, pas de
+débordement à 390 px ; `./usine doctor` sur DGX2 : tous les gabarits
+valides (H3 sur `:8189`, BiRefNet, TRELLIS, SAM 3D Body, Qwen sur
+`:8188`). **De vrai sur DGX2** : Maren copiée du PC ; Ilse Varga créée
+par l'API, deux visages H3 en 52 s (44 s le premier, chargement
+compris, 6 s le second) ; un tour de conversation après H3 : ComfyUI
+vidé, modèle de texte chargé, fiche remplie par les outils, 44 s.
+
+**À faire ensuite, dans le studio** : mener Ilse (ou un personnage de
+Cal) jusqu'aux vues préparées sur DGX2 — verrouillage, costume, plein
+pied, planche, orbite, prep, contrôle. Puis, sur feu vert de Cal, le
+mesh TRELLIS.2 de Maren (étape suivante de sa carte).
+
+**Limites connues** : la file et les journaux vivent en mémoire (un
+redémarrage du studio les oublie, pas les personnages) ; pas de service
+systemd (le studio se relance à la main) ; pas d'authentification (réseau
+de la maison et Tailscale) ; l'annulation d'un travail en cours
+n'interrompt que les calculs ComfyUI lancés par la chaîne.
+
+**Toujours en attente de Cal** : licence Llama-3 (Kimodo) ; numpy de
+DGX2 pour Hunyuan3D ; feu vert pour le banc des vues Qwen, TRELLIS.2 et
+UniRig ; disque sur le visage.
+
+**Façon de travailler (retours de Cal)** : chercher d'abord un modèle ou
+un outil fait pour le geste (Hugging Face, modèles de workflows ComfyUI)
+avant de bricoler ; télécharger directement sur les DGX sans demander ;
+passer par ssh/curl, jamais par le navigateur intégré (autorisations) ;
+un seul gros calcul par machine ; tenir la page d'état publiée à jour
+(`CLAUDE.md`, section GitHub Pages). Sur DGX2, `pkill -f "factory studio"`
+tue aussi la session ssh qui le lance : écrire `pkill -f "[f]actory studio"`.
+
+---
+
 ## 1. Les décisions de Cal
 
 - **Tout en local, pas d'API pour l'instant.** La chaîne est `./usine`,

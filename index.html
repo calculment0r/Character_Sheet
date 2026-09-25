@@ -59,7 +59,8 @@
   <span class="pill on"><i></i><span>état au 25.09.2026</span></span>
   <a class="tb ghost sm" href="./viewer.html">Viewer 3D</a>
   <a class="tb ghost sm" href="./theme.html">Thème</a>
-  <a class="tb go sm" href="./console.html">Console ▸</a>
+  <a class="tb ghost sm" href="./console.html">Console</a>
+  <a class="tb go sm" href="http://192.168.10.247:8765/" title="sur le réseau de la maison, ou par Tailscale : 100.108.108.65:8765">Studio · DGX2 ▸</a>
 </header>
 
 <main class="etat">
@@ -70,9 +71,10 @@
       <h2 class="etat-title">Où en est la chaîne</h2>
       <p>
         Prompt ou photo, visage verrouillé, costumes, planche, vues orthogonales, mesh PBR, rig SOMA,
-        animation. Les quatre premiers étages tournent sur de vraies images, par H3 dans le ComfyUI de
-        DGX1. La 3D, le rig et l'animation sont installés et câblés sur DGX2, pas encore lancés. Les
-        images ci-dessous sont celles d'un personnage de test, Maren Ostrova, costume « travail ».
+        animation. Tout tourne désormais sur DGX2, et se mène à la main dans le <b>studio</b> : les
+        personnages en cartes, un bloc par étage. Les quatre premiers étages tournent sur de vraies
+        images, par H3 ; la 3D, le rig et l'animation sont câblés, pas encore lancés. Les images plus bas
+        sont celles d'un personnage de test, Maren Ostrova, costume « travail ».
       </p>
     </div>
     <div class="statcard">
@@ -86,7 +88,7 @@
   <section class="sect">
     <div class="sect-head"><span class="k">01</span><h2>Les étages</h2><span class="cnt">tourne · câblé · attend</span></div>
     <div class="stages">
-      <a class="slab t3" href="#visage"><span class="body"><span class="line"><span class="ref">01 · tourne</span><span class="nm">Visage</span></span><span class="sub">H3 Ref2VA · DGX1 · cinq frames, la plus nette gardée · portrait neutre verrouillé une fois</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
+      <a class="slab t3" href="#visage"><span class="body"><span class="line"><span class="ref">01 · tourne</span><span class="nm">Visage</span></span><span class="sub">H3 Ref2VA · DGX2 · cinq frames, la plus nette gardée · portrait neutre verrouillé une fois</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
       <a class="slab t3" href="#pleinpied"><span class="body"><span class="line"><span class="ref">02 · tourne</span><span class="nm">Costume · plein pied</span></span><span class="sub">H3 · A-pose, tête aux pieds · le visage verrouillé en référence</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
       <a class="slab t2" href="#planche"><span class="body"><span class="line"><span class="ref">03 · tourne</span><span class="nm">Planche</span></span><span class="sub">H3 · cinq pleins pieds et trois gros plans · A/B avec et sans disque</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
       <a class="slab t2" href="#vues"><span class="body"><span class="line"><span class="ref">04 · tourne</span><span class="nm">Vues orthogonales</span></span><span class="sub">orbite H3 · BiRefNet · frames choisies sur la silhouette · contrôle ±5° passé · banc Qwen câblé</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
@@ -94,6 +96,28 @@
       <a class="slab lk" href="#attend"><span class="body"><span class="line"><span class="ref">06 · câblé</span><span class="nm">Rig SOMA 77</span></span><span class="sub">UniRig · DGX2, sans Blender · reconnu sur la topologie · jamais lancé</span></span><span class="dots"></span><span class="go">à lancer</span></a>
       <a class="slab lk2" href="#attend"><span class="body"><span class="line"><span class="ref">07 · attend</span><span class="nm">Animation</span></span><span class="sub">Kimodo · DGX2 · attend la licence Llama-3 de Meta · vidéo → SOMA à trancher</span></span><span class="dots"></span><span class="go">bloqué</span></a>
       <a class="slab lk2" href="#attend"><span class="body"><span class="line"><span class="ref">08 · factice</span><span class="nm">Timeline · cuisson</span></span><span class="sub">mixage par masques, NPZ et GLB animé · vérifié sur les moteurs factices</span></span><span class="dots"></span><span class="go">prêt</span></a>
+    </div>
+  </section>
+
+  <section class="sect" id="studio">
+    <div class="sect-head"><span class="k">01b</span><h2>Le studio</h2><span class="cnt">DGX2 · port 8765</span></div>
+    <p class="prose">
+      <b>Une application, plus une suite de commandes.</b> L'accueil montre les personnages en cartes ; un clic
+      ouvre le personnage, un bloc par étage, l'étape suivante en orange. La fiche d'identité se remplit par la
+      conversation, avec qwen3-vl 32B sur DGX2 — au banc, le seul des modèles de la machine qui range la fiche
+      par les outils à chaque tour. Un calcul à la fois : avant chaque travail, le studio décharge le modèle de
+      texte et vide le ComfyUI qui ne sert pas ; avant une conversation, il rend la place à son tour. Premier
+      calcul par le studio : deux visages H3 en 52 s, modèle chargé compris.
+    </p>
+    <div class="fig-grid">
+      <figure class="fig">
+        <img src="./etat/05_studio_accueil.jpg" alt="l'accueil du studio : les personnages en cartes" width="1440" height="900" loading="lazy">
+        <figcaption><span class="lbl">l'accueil</span>Une carte par personnage : le visage verrouillé ou le dernier candidat, huit crans d'avancement, l'étape suivante.</figcaption>
+      </figure>
+      <figure class="fig">
+        <img src="./etat/05_studio_personnage.jpg" alt="la page d'un personnage : l'étage visage et ses candidats" width="1440" height="900" loading="lazy">
+        <figcaption><span class="lbl">un personnage</span>Ilse Varga, créée par le studio : deux portraits H3 rendus sur DGX2, à verrouiller. À droite, la file de travaux et la fiche.</figcaption>
+      </figure>
     </div>
   </section>
 
@@ -171,8 +195,8 @@
     Code : branche <a href="https://github.com/calculment0r/Character_Sheet/tree/claude/epic-wright-y2kbrc">claude/epic-wright-y2kbrc</a>
     · mode d'emploi <a href="https://github.com/calculment0r/Character_Sheet/blob/claude/epic-wright-y2kbrc/docs/LOCAL.md">docs/LOCAL.md</a>
     · passation <a href="https://github.com/calculment0r/Character_Sheet/blob/claude/epic-wright-y2kbrc/docs/HANDOFF.md">docs/HANDOFF.md</a>.
-    La console et le viewer servent la chaîne locale : en ligne, ils s'ouvrent mais ne parlent ni au
-    modèle de texte ni aux fichiers d'un personnage.
+    En ligne, la console et le viewer s'ouvrent mais ne parlent ni au modèle de texte ni aux fichiers
+    d'un personnage : c'est le studio, sur DGX2, qui les sert pour de vrai.
   </p>
 
 </main>

@@ -163,31 +163,13 @@
       "generic_correction_attenuation": "no_attenuation",
       "sa_pece_forecast_policy": "balanced",
       "model": [
-        "202",
+        "200",
         0
       ]
     },
     "class_type": "SpectrumApplyMiniMaxH3",
     "_meta": {
       "title": "Spectrum Apply MiniMax H3"
-    }
-  },
-  "202": {
-    "inputs": {
-      "max_resolution": 768,
-      "jpeg_quality": 80,
-      "suppress_default_preview": true,
-      "preview_frames": 96,
-      "preview_fps": 12,
-      "tiny_vae": "taeh3.safetensors",
-      "model": [
-        "200",
-        0
-      ]
-    },
-    "class_type": "ModelPreviewOverrideKJ",
-    "_meta": {
-      "title": "Model Preview Override"
     }
   },
   "240": {
@@ -435,7 +417,8 @@
       "nœud 132 (PrimitiveFloat) retiré : il ne mène plus à OUT",
       "nœud 138 (PrimitiveStringMultiline) retiré : il ne mène plus à OUT",
       "nœud 199 (ComfyMathExpression) retiré : il ne mène plus à OUT",
-      "nœud 271 (VAEDecodeAudio) retiré : il ne mène plus à OUT"
+      "nœud 271 (VAEDecodeAudio) retiré : il ne mène plus à OUT",
+      "nœud 202 (ModelPreviewOverrideKJ) court-circuité : aperçu seul"
     ]
   }
 }

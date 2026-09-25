@@ -38,6 +38,9 @@
   --line-or: rgba(224, 103, 74, .70);
   --line-gr: rgba(47, 107, 74, .85);
 
+  /* voile posé sur une image, sous une étiquette */
+  --veil:    rgba(10, 13, 11, .82);
+
   /* encres inversées, posées sur un aplat d'accent */
   --on-or:   #170c08;
   --on-cy:   #0a0d0b;

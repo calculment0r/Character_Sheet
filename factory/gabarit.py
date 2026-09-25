@@ -18,7 +18,10 @@ la chaîne :
   - le nœud de sauvegarde devient `OUT`. Une sortie vidéo est remplacée
     par un SaveImage sur les frames décodées : pas de recompression, et
     le son n'est plus décodé ;
-  - ce qui ne mène plus à `OUT` est retiré.
+  - ce qui ne mène plus à `OUT` est retiré, et les nœuds qui ne servent
+    qu'à l'aperçu en direct dans l'interface sont court-circuités : en
+    lot, personne ne les regarde, et d'une version de leur paquet à
+    l'autre leurs entrées changent.
 
 Tout ce qui est changé est affiché, pour relecture ; rien n'est deviné
 en silence. Un champ mal reconnu se corrige à la main dans le JSON.
@@ -41,6 +44,8 @@ SAVE_STILL = {"SaveImage", "Image Save"}
 SAVE_ANIM = {"SaveAnimatedWEBP", "SaveAnimatedPNG", "SaveWEBM", "SaveVideo", "VHS_VideoCombine"}
 MAX_REFS = 9          # ref_images du nœud MiniMaxH3ReferenceToVideo : 0 à 9
 AUTOGROW = re.compile(r"^(\w+\.\w+?_)(\d+)$")              # ref_images.ref_image_0
+# Nœud d'aperçu seul → l'entrée qu'il laisse passer telle quelle.
+PREVIEW_ONLY = {"ModelPreviewOverrideKJ": "model"}
 
 
 def _is_link(v) -> bool:
@@ -111,6 +116,26 @@ def _prune(wf: dict, outs: list[str], changes: list[str]) -> None:
         del wf[nid]
 
 
+def bypass_previews(wf: dict, changes: list[str]) -> None:
+    """Court-circuite les nœuds d'aperçu : leurs consommateurs reçoivent
+    directement ce que le nœud recevait."""
+    for nid in sorted(wf, key=_order):
+        node = wf.get(nid)
+        if not isinstance(node, dict) or node.get("class_type") not in PREVIEW_ONLY:
+            continue
+        source = node.get("inputs", {}).get(PREVIEW_ONLY[node["class_type"]])
+        if not _is_link(source):
+            continue
+        for other in wf.values():
+            if not isinstance(other, dict):
+                continue
+            for key, val in other.get("inputs", {}).items():
+                if _is_link(val) and val[0] == nid:
+                    other["inputs"][key] = list(source)
+        changes.append(f"nœud {nid} ({node['class_type']}) court-circuité : aperçu seul")
+        del wf[nid]
+
+
 def adopt(workflow: dict) -> tuple[dict, list[str], list[str]]:
     """Rend le gabarit, la liste des changements et les avertissements."""
     wf = json.loads(json.dumps(workflow))
@@ -118,6 +143,7 @@ def adopt(workflow: dict) -> tuple[dict, list[str], list[str]]:
     warnings: list[str] = []
     if "nodes" in wf and "links" in wf:
         raise ValueError("c'est l'export « Save » (format éditeur) : réexporte avec Workflow → Export (API)")
+    bypass_previews(wf, changes)
 
     # Les références, dans l'ordre des nœuds ; une entrée extensible
     # reçoit des chargeurs en plus.

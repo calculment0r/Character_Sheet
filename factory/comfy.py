@@ -43,7 +43,8 @@ class Comfy:
     def __init__(self, url: str | None = None, timeout: float = 30.0) -> None:
         self.url = (url or config.comfyui_url()).rstrip("/")
         self.timeout = timeout
-        self.client_id = uuid.uuid4().hex
+        # Préfixé : le studio n'interrompt que les calculs de la chaîne.
+        self.client_id = f"usine-{uuid.uuid4().hex}"
 
     # ── transport ──────────────────────────────────────────────────
 

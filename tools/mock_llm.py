@@ -1,5 +1,6 @@
 """Faux DGX en dialecte OpenAI — sert à vérifier la traduction de llm.js."""
 import json
+import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 TURNS = [
@@ -66,4 +67,4 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-HTTPServer(("127.0.0.1", 8812), H).serve_forever()
+HTTPServer(("127.0.0.1", int(sys.argv[1]) if len(sys.argv) > 1 else 8812), H).serve_forever()
