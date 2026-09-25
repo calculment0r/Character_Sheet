@@ -1,0 +1,224 @@
+/* ============================================================
+   CHARACTER FACTORY — le studio
+   L'accueil en cartes, la page d'un personnage (un bloc par
+   étage, les candidats en grille), la file de travaux.
+   Que des jetons ; des filets en box-shadow, jamais de bordure.
+   ============================================================ */
+
+.studio {
+  max-width: 1480px; margin: 0 auto;
+  padding: var(--s6) var(--s6) 72px;
+  display: flex; flex-direction: column; gap: var(--s6);
+}
+@media (max-width: 640px) { .studio { padding: var(--s4) 16px 60px; } }
+
+.studio-title {
+  margin: 0; font-family: var(--f-disp); font-weight: 400;
+  font-size: clamp(26px, 3.6vw, 44px); line-height: 1.08;
+  letter-spacing: .02em; text-transform: uppercase; color: var(--ink);
+}
+.prose { margin: 0; max-width: 78ch; color: var(--ink2); font-size: 13px; line-height: 1.75; }
+
+/* ── cartes de personnage ───────────────────────────────── */
+.cards { display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.card {
+  position: relative; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--panel); border-radius: var(--r4); color: inherit; text-decoration: none;
+  box-shadow: inset 0 0 0 1px var(--line); transition: transform .14s, filter .14s;
+}
+a.card:hover { transform: translateY(-2px); filter: brightness(1.08); }
+.card-img { position: relative; aspect-ratio: 1 / 1; background: var(--panel2); }
+.card-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.card-img .ph {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--f-disp); font-size: 46px; color: var(--panel3);
+}
+.card-img .badge {
+  position: absolute; top: 10px; left: 10px; padding: 4px 7px; border-radius: var(--r1);
+  background: var(--veil); font-family: var(--f-mono); font-size: 8px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--ink2);
+}
+.card-img .badge.lock { color: var(--grn2); }
+.card-body { padding: var(--s4) var(--s4) var(--s5); display: flex; flex-direction: column; gap: 7px; }
+.card .ref { font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink3); }
+.card .nm {
+  font-family: var(--f-disp); font-size: 17px; line-height: 1.15;
+  letter-spacing: .03em; text-transform: uppercase; overflow-wrap: break-word;
+}
+.card .role { color: var(--ink2); font-size: 12px; line-height: 1.5; min-height: 18px; }
+.card .sub { font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink3); }
+.card.new { box-shadow: inset 0 0 0 1px var(--line-or); padding: var(--s5); gap: var(--s4); justify-content: space-between; }
+.card.new .who { display: flex; flex-direction: column; gap: 7px; }
+.card.new form { display: flex; gap: 6px; }
+.card.new form .fld { flex: 1; min-width: 0; }
+
+/* ── avancement : huit crans, un par étage ──────────────── */
+.ticks { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
+.ticks i { display: block; height: 4px; border-radius: 2px; background: var(--panel3); }
+.ticks i.partial { background: var(--line-cy); }
+.ticks i.done { background: var(--grn2); }
+
+/* ── la page d'un personnage ────────────────────────────── */
+.perso-head {
+  display: grid; grid-template-columns: 132px minmax(0, 1fr) auto; gap: var(--s5); align-items: center;
+  background: var(--panel); border-radius: var(--r4); padding: var(--s4);
+}
+@media (max-width: 720px) { .perso-head { grid-template-columns: 88px minmax(0, 1fr); } .perso-head .acts { grid-column: 1 / -1; } }
+.perso-head .face {
+  width: 100%; aspect-ratio: 1 / 1; border-radius: var(--r3); object-fit: cover;
+  background: var(--panel2); display: block;
+}
+.perso-head .who { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.perso-head .ref { font-family: var(--f-mono); font-size: 9px; letter-spacing: .2em; text-transform: uppercase; color: var(--or); }
+.perso-head h1 {
+  margin: 0; font-family: var(--f-disp); font-weight: 400; font-size: clamp(22px, 3vw, 34px);
+  line-height: 1.08; letter-spacing: .02em; text-transform: uppercase; overflow-wrap: break-word;
+}
+.perso-head .role { color: var(--ink2); font-size: 13px; line-height: 1.5; }
+.perso-head .ticks { max-width: 420px; }
+.perso-head .acts { display: flex; gap: 6px; flex-wrap: wrap; align-self: start; }
+
+.perso-grid { display: grid; grid-template-columns: minmax(0, 1fr) var(--sheet-w); gap: var(--s4); align-items: start; }
+@media (max-width: 1100px) { .perso-grid { grid-template-columns: 1fr; } }
+.perso-main, .perso-side { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
+.perso-side { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow-y: auto; }
+@media (max-width: 1100px) { .perso-side { position: static; max-height: none; } }
+
+/* ── un étage ───────────────────────────────────────────── */
+.box { background: var(--panel); border-radius: var(--r3); display: flex; flex-direction: column; min-width: 0; }
+.box.next { box-shadow: inset 0 0 0 1px var(--line-or); }
+.box-head {
+  display: flex; align-items: baseline; gap: var(--s4); flex-wrap: wrap;
+  padding: var(--s4) var(--s5); box-shadow: inset 0 -1px 0 var(--line);
+}
+.box-head .sec { font-family: var(--f-mono); font-size: 9px; letter-spacing: .2em; color: var(--or); }
+.box-head h2 {
+  margin: 0; font-family: var(--f-disp); font-size: 14px; font-weight: 400;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--ink);
+}
+.box-head .state {
+  margin-left: auto; font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--ink3);
+}
+.box-head .state.done { color: var(--grn2); }
+.box-head .state.partial { color: var(--cy); }
+.box-body { padding: var(--s4) var(--s5) var(--s5); display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
+.box-body > p { margin: 0; color: var(--ink2); font-size: 12.5px; line-height: 1.65; }
+.box.wait .box-body > p { color: var(--ink3); }
+.box-sub {
+  display: flex; align-items: baseline; gap: var(--s3);
+  font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--ink3);
+}
+.box-sub::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* ── formulaires d'étage ────────────────────────────────── */
+.form-row { display: flex; gap: var(--s3); flex-wrap: wrap; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field.grow { flex: 1; min-width: 220px; }
+.field .fld.num { width: 118px; }
+.field select.fld { min-width: 150px; }
+.check { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; color: var(--ink2); cursor: pointer; height: 30px; }
+.check input { accent-color: var(--grn2); }
+.hint { margin: 0; color: var(--ink3); font-size: 11.5px; line-height: 1.6; }
+.hint.warn-text { color: var(--or); }
+
+/* ── costumes : onglets ─────────────────────────────────── */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs .tb.on { background: var(--grn); color: var(--on-grn); }
+
+/* ── références déposées ────────────────────────────────── */
+.refs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.refs .thumb {
+  position: relative; width: 64px; height: 64px; border-radius: var(--r1);
+  background: var(--panel2) center / cover no-repeat; box-shadow: inset 0 0 0 1px var(--line);
+}
+.refs .thumb button {
+  position: absolute; top: -5px; right: -5px; width: 17px; height: 17px; border-radius: 50%;
+  background: var(--or); color: var(--on-or); font-size: 11px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.refs .add {
+  width: 64px; height: 64px; border-radius: var(--r1); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  box-shadow: inset 0 0 0 1px var(--line-gr); color: var(--ink3);
+  font-family: var(--f-mono); font-size: 8px; letter-spacing: .14em; text-transform: uppercase; line-height: 1.5;
+  transition: box-shadow .12s, color .12s;
+}
+.refs .add:hover, .refs .add.over { box-shadow: inset 0 0 0 1px var(--or); color: var(--or); }
+.refs .add input { display: none; }
+
+/* ── candidats ──────────────────────────────────────────── */
+.cands { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
+.cands.tall { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.cands.wide { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+.cand {
+  position: relative; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--panel2); border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--line);
+}
+.cand.sel { box-shadow: inset 0 0 0 2px var(--grn2); }
+.cand.off { opacity: .5; }
+.cand img {
+  display: block; width: 100%; aspect-ratio: var(--ar, 1 / 1); object-fit: cover;
+  background: var(--panel3); cursor: zoom-in;
+}
+.cands.tall .cand img { --ar: 4 / 7; }
+.cands.wide .cand img { --ar: 7 / 4; }
+.cand .cap { display: flex; align-items: center; gap: var(--s2); padding: 7px var(--s3) 9px; min-height: 40px; }
+.cand .cap .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cand .mark {
+  position: absolute; top: 8px; left: 8px; padding: 3px 6px; border-radius: var(--r1);
+  background: var(--veil); font-family: var(--f-mono); font-size: 8px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ink2);
+}
+.cand .mark.ok { color: var(--grn2); }
+.cand .mark.stub { color: var(--or); }
+
+/* ── grandes images (visage verrouillé) ─────────────────── */
+.hero-img { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: var(--s5); align-items: start; }
+@media (max-width: 640px) { .hero-img { grid-template-columns: 1fr; } }
+.hero-img img { width: 100%; border-radius: var(--r3); display: block; cursor: zoom-in; background: var(--panel2); }
+
+/* ── tableau (contrôle d'alignement, versions) ──────────── */
+.table { width: 100%; border-collapse: collapse; font-family: var(--f-mono); font-size: 10px; letter-spacing: .04em; }
+.table th {
+  text-align: left; font-weight: 400; color: var(--ink3); text-transform: uppercase;
+  letter-spacing: .16em; font-size: 8.5px; padding: 6px 8px; box-shadow: inset 0 -1px 0 var(--line);
+}
+.table td { padding: 7px 8px; color: var(--ink2); box-shadow: inset 0 -1px 0 var(--line); vertical-align: middle; }
+.table td.ok { color: var(--grn2); }
+.table td.no { color: var(--or); }
+.table td .tb { margin-left: 4px; }
+.table-wrap { overflow-x: auto; }
+
+/* ── file de travaux ────────────────────────────────────── */
+.jobs { display: flex; flex-direction: column; gap: 5px; }
+.job { background: var(--panel); border-radius: var(--r3); padding: 10px var(--s4); display: flex; flex-direction: column; gap: 7px; }
+.job.error { box-shadow: inset 0 0 0 1px var(--line-or); }
+.job.running { box-shadow: inset 0 0 0 1px var(--line-cy); }
+.job .top { display: flex; gap: var(--s3); align-items: baseline; }
+.job .nm { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.job .st { font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink3); }
+.job .st.running { color: var(--cy); }
+.job .st.done { color: var(--grn2); }
+.job .st.error { color: var(--or); }
+.job .msg { color: var(--ink2); font-size: 11.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.job.error .msg { color: var(--or); }
+.job .bar { height: 4px; border-radius: 2px; background: var(--panel3); overflow: hidden; }
+.job .bar i { display: block; height: 100%; width: 0; background: var(--grn2); transition: width .3s; }
+.job.running .bar i { background: var(--cy); }
+.job details summary {
+  cursor: pointer; font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--ink3); list-style: none;
+}
+.job details summary::-webkit-details-marker { display: none; }
+.job pre {
+  margin: 6px 0 0; max-height: 240px; overflow: auto; padding: var(--s2) var(--s3);
+  background: var(--panel2); border-radius: var(--r1);
+  font-family: var(--f-mono); font-size: 9.5px; line-height: 1.6; color: var(--ink2);
+  white-space: pre-wrap; word-break: break-word;
+}
+.jobs-empty { color: var(--ink3); font-size: 12px; padding: var(--s3) 2px; }
+
+/* ── visionneuse ────────────────────────────────────────── */
+.lightbox img { display: block; max-width: 94vw; max-height: 88vh; border-radius: var(--r3); background: var(--panel2); }
+.lightbox .cap { margin-top: var(--s3); text-align: center; font-family: var(--f-mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink2); }

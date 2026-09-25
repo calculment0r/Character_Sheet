@@ -181,6 +181,12 @@ def cmd_page(args) -> None:
     serve_page(port=args.port, open_browser=not args.sans_navigateur)
 
 
+def cmd_studio(args) -> None:
+    from .studio import serve
+
+    serve(host=args.hote, port=args.port)
+
+
 def cmd_gabarit(args) -> None:
     from .gabarit import run
 
@@ -305,6 +311,10 @@ def build() -> argparse.ArgumentParser:
     sp = cmd("page", cmd_page, "servir la page en local (étage Identité, conversation avec le modèle)")
     sp.add_argument("--port", type=int, default=8765)
     sp.add_argument("--sans-navigateur", action="store_true")
+
+    sp = cmd("studio", cmd_studio, "le studio : les personnages en cartes, toute la chaîne dans une page")
+    sp.add_argument("--port", type=int, default=8765)
+    sp.add_argument("--hote", default="0.0.0.0", help="adresse d'écoute (défaut : tout le réseau local)")
 
     sp = cmd("gabarit", cmd_gabarit, "adopter un workflow ComfyUI exporté au format API comme gabarit H3")
     sp.add_argument("fichier", help="le workflow exporté (Workflow → Export (API))")

@@ -10,6 +10,10 @@ par le studio avant chaque travail :
     (`keep_alive: 0`) ; il se recharge seul à la conversation suivante ;
   - quand on passe d'une famille de modèles à une autre (H3, Qwen,
     TRELLIS…), on vide ComfyUI (`/free`) avant de charger la suivante ;
+    et comme H3 et le reste vivent dans deux instances de ComfyUI sur
+    DGX2 (`:8189` a les nœuds accélérateurs de H3, `:8188` tout le
+    reste), on vide aussi l'instance qui ne sert pas au travail — si
+    sa file est vide : on ne décharge jamais sous le travail d'un autre ;
   - enfin, on ne lance rien si la mémoire disponible est trop basse :
     on attend un peu, puis on refuse, en le disant.
 
@@ -76,22 +80,53 @@ def free_comfy(url: str) -> bool:
     return _post(f"{url.rstrip('/')}/free", {"unload_models": True, "free_memory": True}) is not None
 
 
+# Les capacités servies par ComfyUI : leurs URL font la liste des instances.
+COMFY_CAPABILITIES = ("h3", "prep", "trellis", "views", "sam3dbody")
+
+
+def comfy_instances() -> list[str]:
+    return sorted({config.comfyui_url(c) for c in COMFY_CAPABILITIES})
+
+
+def comfy_busy(url: str) -> bool | None:
+    """Vrai si la file de cette instance n'est pas vide ; None si elle ne
+    répond pas."""
+    try:
+        with urllib.request.urlopen(f"{url.rstrip('/')}/queue", timeout=5) as res:
+            q = json.loads(res.read())
+        return bool(q.get("queue_running") or q.get("queue_pending"))
+    except (OSError, ValueError):
+        return None
+
+
 class Manager:
     """Tient la famille de modèles chargée dans chaque ComfyUI, et prépare
-    la machine avant chaque travail."""
+    la machine avant chaque travail. Une instance jamais vue est supposée
+    pleine : au démarrage du studio, on ne sait pas ce qu'elle garde."""
+
+    NOTHING = ""      # instance vidée par nos soins
 
     def __init__(self, min_free_gb: float = 30.0, wait_s: float = 120.0) -> None:
         self.min_free_gb = float(config.setting("min_free_gb", str(min_free_gb)))
         self.wait_s = wait_s
         self.family: dict[str, str] = {}
 
+    def _free(self, url: str, why: str, say) -> None:
+        if comfy_busy(url) is False and free_comfy(url):
+            self.family[url] = self.NOTHING
+            say(f"ComfyUI {url} vidé ({why})")
+
     def before_gpu(self, family: str, comfy_url: str | None, say=lambda m: None) -> None:
         gone = unload_llm()
         if gone:
             say(f"modèle de texte déchargé : {', '.join(gone)}")
-        if comfy_url and self.family.get(comfy_url) not in (None, family):
-            if free_comfy(comfy_url):
-                say(f"ComfyUI vidé ({self.family[comfy_url]} → {family})")
+        for url in comfy_instances():
+            held = self.family.get(url)
+            if url == comfy_url:
+                if held not in (family, self.NOTHING):
+                    self._free(url, f"{held or 'contenu inconnu'} → {family}", say)
+            elif held != self.NOTHING:
+                self._free(url, f"{held or 'contenu inconnu'}, inutile pour {family}", say)
         if comfy_url:
             self.family[comfy_url] = family
         self.wait_for(self.min_free_gb, say)

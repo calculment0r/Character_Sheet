@@ -45,6 +45,9 @@ button, input, select, textarea {
   background: none;
 }
 button { cursor: pointer; }
+/* Un lien habillé en bouton, en logo ou en dalle garde son habit. */
+a { color: inherit; }
+a.tb, a.logo, a.slab, a.card { text-decoration: none; }
 button:focus-visible, input:focus-visible,
 select:focus-visible, textarea:focus-visible,
 [tabindex]:focus-visible {

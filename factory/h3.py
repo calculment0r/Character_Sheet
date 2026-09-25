@@ -158,7 +158,7 @@ def _frames(kind: str, text: str, refs: list[Path], size: tuple[int, int], seed:
 def _frames_comfyui(kind, text, refs, size, seed, frames, workdir, report, masks: bool = False):
     from .comfy import Comfy, fill, load_template
 
-    comfy = Comfy()
+    comfy = Comfy(config.comfyui_url("h3"))
     template = load_template("h3_orbit.json" if kind == "orbit" else "h3_ref2va.json")
     names = [comfy.upload(Path(r)) for r in refs]
     wf = fill(template, {"prompt": text, "seed": seed, "width": size[0], "height": size[1], "frames": frames},

@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="./assets/tokens.css">
 <link rel="stylesheet" href="./assets/rack.css">
 <link rel="stylesheet" href="./assets/factory.css">
+<link rel="stylesheet" href="./assets/studio.css">
 
 <style>
 /* Mise en page propre au catalogue, rien qui touche au thème. */
@@ -140,7 +141,7 @@
     <div class="row">
       <span class="lbl">--line</span><span class="lbl">--line-cy</span><span class="lbl">--line-or</span><span class="lbl">--line-gr</span>
       <span class="sp" style="flex:1"></span>
-      <span class="lbl">--on-or</span><span class="lbl">--on-cy</span><span class="lbl">--on-grn</span><span class="lbl">--on-light</span>
+      <span class="lbl">--on-or</span><span class="lbl">--on-cy</span><span class="lbl">--on-grn</span><span class="lbl">--on-light</span><span class="lbl">--veil</span>
     </div>
     <p style="margin-top:10px">
       Les séparations se font par un <b style="color:var(--ink)">filet</b> ou par un décalage de fond, jamais par une bordure épaisse.
@@ -434,6 +435,60 @@
         <div class="panel-cell"><span class="az">180°</span><span class="cap">Fullbody<br>back</span></div>
         <div class="panel-cell"><span class="az">270°</span><span class="cap">Fullbody<br>right</span></div>
         <div class="panel-cell"><span class="az">45°</span><span class="cap">Fullbody<br>3/4</span></div>
+      </div>
+    </div>
+
+    <h3>Studio — carte de personnage · .card, .ticks</h3>
+    <div class="demo">
+      <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(220px,260px))">
+        <a class="card" href="./studio.html">
+          <div class="card-img"><img src="./etat/01_visage.jpg" alt=""><span class="badge lock">visage verrouillé</span></div>
+          <div class="card-body">
+            <span class="ref">maren-ostrova · photoreal</span>
+            <span class="nm">Maren Ostrova</span>
+            <span class="role">mécanicienne de bord</span>
+            <div class="ticks"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="partial"></i><i></i><i></i></div>
+            <span class="sub">suite : préparer les vues</span>
+          </div>
+        </a>
+        <div class="card"><div class="card-img"><span class="ph">VS</span></div>
+          <div class="card-body"><span class="ref">vera-solen · stylized</span><span class="nm">Vera Solen</span>
+            <span class="role">pilote de fret orbital</span>
+            <div class="ticks"><i class="partial"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <span class="sub">suite : variantes du visage</span></div></div>
+      </div>
+      <p class="lbl">huit crans, un par étage : vert fait, acier commencé, sourd à faire</p>
+    </div>
+
+    <h3>Studio — un étage · .box, .cands, .cand</h3>
+    <div class="demo">
+      <section class="box next">
+        <div class="box-head"><span class="sec">ST-04</span><h2>Plein pied · travail</h2><span class="state partial">2 candidat(s)</span></div>
+        <div class="box-body">
+          <p>Le personnage en pied, habillé du costume, de face. Valide celui qui tient.</p>
+          <div class="form-row">
+            <label class="field"><span class="lbl">Variantes</span><select class="fld"><option>2</option></select></label>
+            <label class="field"><span class="lbl">Graine</span><input class="fld num" placeholder="au hasard"></label>
+            <span class="sp"></span><button class="tb go">Générer ▸</button>
+          </div>
+          <div class="box-sub">Candidats</div>
+          <div class="cands tall" style="grid-template-columns:repeat(auto-fill,minmax(140px,160px))">
+            <div class="cand sel"><img src="./etat/02_pleinpied.jpg" alt=""><span class="mark ok">validé</span><div class="cap"><span class="lbl">n° 2</span></div></div>
+            <div class="cand"><img src="./etat/02_pleinpied.jpg" alt=""><span class="mark stub">factice</span><div class="cap"><span class="lbl">n° 1</span><button class="tb ghost sm">Valider</button></div></div>
+          </div>
+        </div>
+      </section>
+      <p class="lbl">le filet orange marque l'étage suivant ; les choix (verrouiller, valider) restent fantômes, un par candidat</p>
+    </div>
+
+    <h3>Studio — file de travaux · .job</h3>
+    <div class="demo" style="max-width:360px">
+      <div class="jobs">
+        <div class="job running"><div class="top"><span class="nm">vues orthogonales · travail</span><span class="st running">en cours</span></div>
+          <div class="bar"><i style="width:46%"></i></div><div class="msg">ComfyUI calcule</div></div>
+        <div class="job done"><div class="top"><span class="nm">planche · travail</span><span class="st done">fini</span></div><div class="msg">fini</div></div>
+        <div class="job error"><div class="top"><span class="nm">mesh 3D · travail</span><span class="st error">échec</span></div>
+          <div class="msg">refusé : les vues n'ont pas passé le contrôle d'alignement</div></div>
       </div>
     </div>
 

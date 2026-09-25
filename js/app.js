@@ -115,6 +115,7 @@ async function runAgent() {
     ui.setStatus('erreur', 'err');
   } finally {
     state.busy = false;
+    studioSave({ auto: true });
   }
 }
 
@@ -288,6 +289,108 @@ function handleExportJson() {
   ui.toast('identité exportée');
 }
 
+/* ── le studio ──────────────────────────────────────────── */
+
+/* Servie par le studio (`./usine studio`), la console crée le
+   personnage (`?new=1`) ou reprend le sien (`?slug=…`) : la fiche,
+   les notes et la conversation s'enregistrent au studio après chaque
+   tour, au lieu d'un export JSON à rapporter sur la machine. */
+
+const studio = { on: false, slug: null, saving: false };
+
+async function studioBoot() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has('slug') && !q.has('new')) return false;
+  try {
+    const res = await fetch('/api/system');
+    if (!res.ok) throw new Error(String(res.status));
+  } catch (_) {
+    ui.toast('studio injoignable : la console tourne seule');
+    return false;
+  }
+  studio.on = true;
+  studio.slug = q.get('slug');
+  // Un seul orange : « Envoyer ». L'enregistrement se fait seul après
+  // chaque tour ; le bouton ne sert qu'à forcer.
+  $('#generate').className = 'tb ghost block';
+  $('#settings-btn').className = 'tb ghost sm';
+  $('#export-note').textContent = studio.slug
+    ? 'la fiche et la conversation s\'enregistrent au studio, sur DGX2, après chaque tour'
+    : 'le personnage se crée au studio dès que la fiche a un nom';
+  $('#studio-btn').hidden = false;
+  studioLabels();
+  if (studio.slug) await studioLoad();
+  return true;
+}
+
+function studioLabels() {
+  $('#export-json').textContent = studio.slug ? 'Enregistrer au studio ▸' : 'Créer le personnage ▸';
+  $('#studio-btn').href = studio.slug ? `./studio.html#/p/${encodeURIComponent(studio.slug)}` : './studio.html';
+}
+
+async function studioLoad() {
+  let json = null;
+  try {
+    const res = await fetch(`/api/characters/${encodeURIComponent(studio.slug)}`);
+    json = await res.json();
+    if (!res.ok) throw new Error(json?.error?.message || String(res.status));
+  } catch (e) {
+    ui.toast(`studio : ${e.message}`, 5000);
+    return;
+  }
+  const c = json.character;
+  for (const k of SCALAR_KEYS) state.sheet[k] = typeof c.identity?.[k] === 'string' ? c.identity[k] : '';
+  state.notes = [...(c.notes || [])];
+  state.conversation = Array.isArray(c.identity_chat) ? c.identity_chat : [];
+  ui.renderSheet(state.sheet, state.notes);
+  replayConversation();
+}
+
+function replayConversation() {
+  ui.clearChat();
+  for (const msg of state.conversation) {
+    const blocks = typeof msg.content === 'string' ? [{ type: 'text', text: msg.content }] : (msg.content || []);
+    const text = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+    if (msg.role === 'user') {
+      if (text) ui.appendMessage('user', text, 'toi');
+      continue;
+    }
+    if (text) ui.appendMessage('assistant', text, 'modèle');
+    for (const b of blocks.filter((x) => x.type === 'tool_use')) ui.appendMessage('tool', `▸ ${b.name}`, null);
+  }
+}
+
+async function studioSave({ auto = false } = {}) {
+  if (!studio.on || studio.saving) return;
+  // Un nouveau personnage naît au studio dès que la conversation l'a nommé.
+  if (auto && !studio.slug && !String(state.sheet.character_name || '').trim()) return;
+  studio.saving = true;
+  const body = { sheet: state.sheet, notes: state.notes, conversation: state.conversation };
+  try {
+    const url = studio.slug ? `/api/characters/${encodeURIComponent(studio.slug)}/identity` : '/api/characters';
+    const res = await fetch(url, {
+      method: studio.slug ? 'PUT' : 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.error?.message || String(res.status));
+    if (!studio.slug) {
+      studio.slug = json.slug;
+      history.replaceState(null, '', `?slug=${encodeURIComponent(studio.slug)}`);
+      studioLabels();
+      $('#export-note').textContent = 'la fiche et la conversation s\'enregistrent au studio, sur DGX2, après chaque tour';
+      ui.toast(`personnage créé : ${json.summary.name}`);
+    } else if (!auto) {
+      ui.toast('fiche enregistrée au studio');
+    }
+  } catch (e) {
+    ui.toast(`studio : ${e.message}`, 5000);
+  } finally {
+    studio.saving = false;
+  }
+}
+
 /* ── étages ─────────────────────────────────────────────── */
 
 function showHome() {
@@ -439,6 +542,16 @@ function closeMethod() { $('#method').hidden = true; }
 /* ── remise à zéro ──────────────────────────────────────── */
 
 function handleReset() {
+  if (studio.on) {
+    // Au studio, la fiche appartient au personnage : on ne vide que la conversation.
+    if (!confirm('Repartir d\'une conversation vide ? La fiche du personnage est conservée.')) return;
+    state.conversation = [];
+    ui.clearChat();
+    bootMessage();
+    studioSave({ auto: true });
+    ui.toast('conversation vidée');
+    return;
+  }
   if (!confirm('Vider la fiche et la conversation ? Les réglages du moteur sont conservés.')) return;
   state.conversation = [];
   state.sheet = Object.fromEntries(SCALAR_KEYS.map((k) => [k, '']));
@@ -515,7 +628,7 @@ function wire() {
 
   $('#generate').onclick = handleGenerate;
   $('#ref2va').onclick = handleRef2VA;
-  $('#export-json').onclick = handleExportJson;
+  $('#export-json').onclick = () => (studio.on ? studioSave() : handleExportJson());
   $('#copy').onclick = handleCopy;
   $('#download').onclick = handleDownload;
 
@@ -544,8 +657,8 @@ async function init() {
   wire();
   ui.renderSheet(state.sheet, state.notes);
   pickStage('identity');   // prépare le banc sans l'afficher
-  showHome();
-  bootMessage();
+  if (!(await studioBoot())) showHome();
+  if (!state.conversation.length) bootMessage();
   tickClock();
   setInterval(tickClock, 1000);
 

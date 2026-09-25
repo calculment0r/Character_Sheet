@@ -121,6 +121,7 @@ def comfy_route(tmp: Path, ident: Path) -> None:
             except OSError:
                 subprocess.run([sys.executable, "-c", "import time; time.sleep(0.1)"])
         os.environ.update(FACTORY_H3="comfyui", FACTORY_COMFYUI_URL=f"http://127.0.0.1:{port}",
+                          FACTORY_COMFYUI_URL_H3=f"http://127.0.0.1:{port}",
                           FACTORY_WORKFLOWS=str(tmp / "workflows"), FACTORY_PROJECTS=str(tmp / "comfy"))
         out = usine("gabarit", str(REPO / "tools/fixtures/h3_export_api.json"))
         check("gabarit : références, prompt, graine, taille, frames et sortie marqués",
@@ -146,6 +147,133 @@ def comfy_route(tmp: Path, ident: Path) -> None:
         check("768 px de petit côté partout", all(min(s) == 768 for s in sizes), str(sorted(sizes)))
     finally:
         server.terminate()
+
+
+def studio_route(tmp: Path) -> None:
+    """Le studio, par son API, comme la page s'en sert : création depuis
+    la conversation, puis chaque étage mis en file jusqu'au rig accepté,
+    les refus du brief, les fichiers servis, et le relais du modèle de
+    texte contre tools/mock_llm.py."""
+    import io
+    import socket
+    import time
+    import urllib.error
+    import urllib.request
+
+    from PIL import Image
+
+    def free_port() -> int:
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+    port, llm_port = free_port(), free_port()
+    env = {**os.environ, "FACTORY_PROJECTS": str(tmp / "studio"), "FACTORY_LLM_URL": f"http://127.0.0.1:{llm_port}",
+           "FACTORY_LLM_MODEL": "modele-du-studio", "PYTHONIOENCODING": "utf-8"}
+    procs = [subprocess.Popen([sys.executable, str(REPO / "tools/mock_llm.py"), str(llm_port)],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
+             subprocess.Popen([sys.executable, "-m", "factory", "studio", "--hote", "127.0.0.1", "--port", str(port)],
+                              cwd=REPO, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)]
+    base = f"http://127.0.0.1:{port}"
+
+    def call(path: str, body=None, method: str | None = None, raw: bytes | None = None):
+        data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
+        req = urllib.request.Request(base + path, data=data, method=method or ("POST" if data is not None else "GET"),
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as res:
+                return res.status, res.headers.get("Content-Type", ""), res.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.headers.get("Content-Type", ""), exc.read()
+
+    def js(path: str, body=None, method: str | None = None):
+        code, _, raw = call(path, body, method)
+        return code, json.loads(raw or b"null")
+
+    def run(slug: str, action: str, **params) -> dict:
+        code, out = js(f"/api/characters/{slug}/actions/{action}", params)
+        if code != 200:
+            return {"status": "http", "error": out}
+        if "job" not in out:
+            return {"status": "done", **out}
+        for _ in range(600):
+            _, job = js(f"/api/jobs/{out['job']['id']}")
+            if job["status"] not in ("queued", "running"):
+                return job
+            time.sleep(0.05)
+        return {"status": "timeout"}
+
+    try:
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(base + "/api/system", timeout=1)
+                break
+            except OSError:
+                time.sleep(0.1)
+        conversation = [{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "A" * 5000}},
+            {"type": "text", "text": "une contrebandière"}]}]
+        code, out = js("/api/characters", {"sheet": {"character_name": "Ilse Varga", "role": "contrebandière"},
+                                           "notes": ["cicatrice"], "conversation": conversation})
+        slug = out.get("slug")
+        manifest = json.loads((tmp / "studio" / "ilse-varga" / "project.json").read_text(encoding="utf-8"))
+        chat = json.dumps(manifest.get("identity_chat"), ensure_ascii=False)
+        check("studio : personnage créé depuis la conversation, images retirées de l'historique",
+              code == 201 and slug == "ilse-varga" and manifest["identity"]["role"] == "contrebandière"
+              and "AAAA" not in chat and "[image de référence]" in chat)
+
+        early = run(slug, "fullbody", costume="x")
+        check("studio : pas de plein pied sans costume ni visage — refusé dans le travail",
+              early["status"] == "error" and "refusé" in (early.get("error") or ""), str(early.get("error")))
+        faces = run(slug, "face", variants=2, seed=11)
+        locked = run(slug, "face_lock", candidate="2")
+        again = run(slug, "face_lock", candidate="1")
+        check("studio : deux variantes en un travail, visage verrouillé une seule fois",
+              faces["status"] == "done" and len(faces["result"]["made"]) == 2 and locked["status"] == "done"
+              and again["status"] == "http" and "déjà verrouillé" in again["error"]["error"]["message"])
+
+        buf = io.BytesIO()
+        Image.new("RGB", (64, 96), (120, 90, 60)).save(buf, "PNG")
+        code, _, raw = call("/api/uploads", raw=buf.getvalue())
+        upload = json.loads(raw)["id"]
+        bad, _, _ = call("/api/uploads", raw=b"pas une image")
+        steps = [run(slug, "costume_add", name="Voyage", prompt="long manteau de cuir", refs=[upload]),
+                 run(slug, "fullbody", costume="voyage", variants=2),
+                 run(slug, "fullbody_ok", costume="voyage", candidate="1"),
+                 run(slug, "sheet", costume="voyage", ab=True),
+                 run(slug, "sheet_ok", costume="voyage", id="s002"),
+                 run(slug, "views", costume="voyage", method="orbit"),
+                 run(slug, "prep", costume="voyage"),
+                 run(slug, "check", costume="voyage"),
+                 run(slug, "mesh", costume="voyage"),
+                 run(slug, "rig", costume="voyage"),
+                 run(slug, "rig_ok", costume="voyage", verdict="accepte")]
+        _, detail = js(f"/api/characters/{slug}")
+        stages = {s["id"]: s["state"] for s in detail["summary"]["stages"]}
+        cos = detail["character"]["costumes"]["voyage"]
+        failed = [(i, s.get("error")) for i, s in enumerate(steps) if s["status"] != "done"]
+        check("studio : du costume au rig accepté, un travail par étage, la file vide ensuite",
+              not failed and bad == 409 and len(cos["refs"]) == 1 and cos["sheet"] == "s002"
+              and all(stages[k] == "done" for k in ("face", "costumes", "fullbody", "sheet", "views", "mesh", "rig"))
+              and detail["summary"]["next"] is None, str(failed or stages))
+
+        code, ctype, img = call(f"/files/{slug}/{detail['character']['face']['locked']}")
+        outside = [call(p)[0] for p in (f"/files/{slug}/../../identite.json", "/factory.local.json",
+                                        "/files/.uploads/" + upload, "/factory/studio.py")]
+        page, _, html = call("/")
+        check("studio : fichiers du personnage servis, rien hors du personnage ni du site",
+              code == 200 and ctype == "image/png" and img[:4] == b"\x89PNG" and outside == [404] * 4
+              and page == 200 and b"studio.js" in html, str(outside))
+
+        _, models = js("/v1/models")
+        _, reply = js("/v1/chat/completions", {"model": "local-model", "messages": [{"role": "user", "content": "x"}]})
+        seen = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{llm_port}/__seen").read())
+        check("studio : relais du modèle de texte, le modèle imposé par le studio",
+              [m["id"] for m in models["data"]] == ["modele-du-studio"] and seen[-1]["model"] == "modele-du-studio"
+              and reply["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "update_character_sheet")
+    finally:
+        for proc in procs:
+            proc.terminate()
 
 
 def orbit_selection() -> None:
@@ -427,6 +555,7 @@ def main() -> int:
     check("GLB animé : un seul clip, celui de la timeline",
           [a["name"] for a in gb.doc["animations"]] == ["timeline/main"])
 
+    studio_route(tmp)
     comfy_route(tmp, ident)
     native_template()
     orbit_selection()
