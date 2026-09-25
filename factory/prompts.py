@@ -100,6 +100,11 @@ def describe_subject(sheet: dict) -> str:
 
 
 def describe_outfit(sheet: dict, extra: str = "") -> str:
+    """La tenue. Le prompt propre au costume (écrit par le modèle de texte
+    depuis son brief, ou tapé) fait autorité : les champs vêtements de la
+    fiche décrivent la tenue par défaut, pas forcément celle-ci."""
+    if extra.strip():
+        return extra.strip()
     parts = []
     if sheet.get("default_outfit_description"):
         parts.append(sheet["default_outfit_description"].rstrip(".") + ".")
@@ -173,8 +178,11 @@ def _sections(defs: list[str], summary: str, keep: list[str], style: str, shot: 
 def face(sheet: dict, notes: list[str], *, has_source: bool, extra: str = "", style: str = "photoreal") -> dict:
     """Le portrait neutre du §3 : lumière égale, bouche fermée, regard
     caméra, fond uni. Avec une photo, c'est une passe de normalisation."""
+    from .portrait import who as identity
+
+    person = f"{sheet.get('character_name') or 'the character'}, {identity(sheet)}"
     if has_source:
-        defs = [f"<Subject 1> is the person in <Picture 1>, {describe_subject(sheet)}."]
+        defs = [f"<Subject 1> is the person in <Picture 1>, {person}."]
         keep = ["<Subject 1> (appears in [Shot 1]): fully_preserved - the face, bone structure, eyes, nose, mouth, "
                 "skin tone, hair and age of the person are retained exactly; only framing, lighting and expression "
                 "are normalised."]
@@ -184,15 +192,18 @@ def face(sheet: dict, notes: list[str], *, has_source: bool, extra: str = "", st
                    "framing, lighting and expression normalised.")
     else:
         defs, keep = [], []
-        who = describe_subject(sheet)
+        who = person
         summary = ("A single static identity portrait of the character, head and shoulders, facing the camera "
                    "straight on at eye level, on a plain neutral seamless background.")
     shot = " ".join(filter(None, [
         f"A locked-off head-and-shoulders portrait of {who}, centred, facing the lens straight on at eye level.",
         "The mouth is closed, the expression is neutral and relaxed, the eyes look straight into the lens.",
         "The hair is arranged as described and does not cover the eyes.",
-        f"Design notes to respect: {'; '.join(notes)}." if notes else "",
         extra,
+        # Ni rôle ni notes : ce sont des notes de costume. Un « skateur »
+        # dont la note parle d'un casque sortait casqué (Kévin, 25/09).
+        "The head is bare and the hair fully visible: no hat, no cap, no hood, no helmet, no headphones, no "
+        "glasses or goggles, no jewellery. The only garment is a plain black crew-neck T-shirt with no print.",
         "Even, soft, neutral studio light from the front, identical on both sides of the face, with no hard shadow "
         "and no coloured rim.",
         STILL, BACKGROUND, NO_TEXT,

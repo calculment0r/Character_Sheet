@@ -55,7 +55,7 @@ STATIC_DIRS = ("js", "assets", "data", "docs/img", "etat")
 STATIC_PAGES = ("studio.html", "console.html", "viewer.html", "theme.html", "index.html")
 UPLOAD_NAME = re.compile(r"^[0-9a-f]{32}\.(png|jpg|webp)$")
 MAX_UPLOAD = 40 * 1024 * 1024
-SHEET_FIELDS = 21
+SHEET_FIELDS = 22
 LOG_LINES = 400
 
 mimetypes.add_type("text/javascript", ".js")
@@ -164,15 +164,66 @@ def _variants(fn, n: int, base: int, report) -> list[dict]:
     return made
 
 
+def face_engine(p: Project | None, q: dict) -> str:
+    """Le moteur du visage : celui demandé, sinon H3 s'il y a une photo
+    à normaliser, sinon le modèle d'image par défaut (Z-Image Turbo)."""
+    from . import portrait
+
+    engine = q.get("engine") or ""
+    if engine in portrait.ENGINES:
+        return engine
+    has_photo = bool(q.get("refs")) or bool(p and p.face["refs"])
+    return "h3" if has_photo else config.setting("face_engine", "zimage")
+
+
+def read_face_brief(p: Project, q: dict, llm, say) -> None:
+    """Avant le rendu : le modèle de texte lit le brief du visage — le
+    prompt d'image en sort, et ce qu'il dit de la personne va à la fiche.
+    Rien à relire si le brief n'a pas bougé."""
+    from . import brief
+
+    if "brief" not in q:
+        return
+    # Relu à chaque tour, même inchangé : le modèle propose d'autres
+    # visages, c'est ce qu'on attend d'un nouveau « Générer ».
+    text = str(q["brief"] or "").strip()
+    new_refs = _uploads(q.get("refs"))
+    say("le modèle de texte lit le brief du visage")
+    if config.backend("brief") != "stub":
+        llm()
+    got = brief.read_face(text, sheet=p.sheet, images=[*new_refs, *(p.path(r) for r in p.face["refs"])])
+    p.face["brief"], p.face["prompt_en"], p.face["variations"] = text, got["prompt"], got.get("variants") or []
+    p.data["identity"] = {**p.sheet, **got["sheet"], "character_name": p.data["name"]}
+    p.save()
+    say(f"visage : {got['prompt']}")
+
+
 def a_face(p: Project, q: dict, report):
     if "prompt" in q:
         p.face["prompt"] = str(q["prompt"]).strip()
     refs = _uploads(q.get("refs"))
+    engine = face_engine(p, q)
+    if str(q.get("around") or "").isdigit():
+        # « Autour de celui-ci » : la description d'un candidat, de nouvelles graines.
+        cands = p.face["candidates"]
+        i = int(q["around"])
+        if not 1 <= i <= len(cands):
+            raise ChainError(f"candidat n° {i} inexistant")
+        base_cand = cands[i - 1]
+        descs = [base_cand.get("desc") or p.face.get("prompt_en") or p.face["prompt"]]
+        engine = q.get("engine") or base_cand.get("engine") or engine
+    elif "brief" in q:
+        descs = p.face.get("variations") or [p.face.get("prompt_en") or ""]
+    else:
+        descs = None
     first = [True]
+    count = [0]
 
     def one(seed, report):
         r, first[0] = (refs if first[0] else []), False
-        return chain.face(p, refs=r, variants=1, seed=seed, report=report)
+        d = [descs[count[0] % len(descs)]] if descs else None
+        count[0] += 1
+        return chain.face(p, refs=r, variants=1, seed=seed, engine=engine, descriptions=d, report=report)
 
     return {"made": _variants(one, _int(q.get("variants"), 4, 1, 8), _seed(q), report)}
 
@@ -182,11 +233,14 @@ def a_face_lock(p: Project, q: dict, report):
 
 
 def a_costume_add(p: Project, q: dict, report):
-    name = str(q.get("name") or "").strip()
-    if not name:
-        raise ChainError("donne un nom au costume")
-    return {"costume": chain.costume_add(p, name, prompt=str(q.get("prompt") or "").strip(),
-                                         refs=_uploads(q.get("refs")))}
+    """Un costume se décrit en mots (`brief`), avec ou sans images de
+    vêtements ; son nom vient tout seul s'il n'est pas donné."""
+    name = str(q.get("name") or "").strip() or f"tenue {len(p.data['costumes']) + 1}"
+    key = chain.costume_add(p, name, prompt=str(q.get("prompt") or "").strip(), refs=_uploads(q.get("refs")))
+    if str(q.get("brief") or "").strip():
+        p.data["costumes"][key]["brief"] = str(q["brief"]).strip()
+        p.save()
+    return {"costume": key}
 
 
 def a_costume_edit(p: Project, q: dict, report):
@@ -194,12 +248,42 @@ def a_costume_edit(p: Project, q: dict, report):
     cos = p.data["costumes"][key]
     if "prompt" in q:
         cos["prompt"] = str(q["prompt"]).strip()
+    if "brief" in q:
+        cos["brief"] = str(q["brief"] or "").strip()
+    if str(q.get("name") or "").strip():
+        cos["name"] = str(q["name"]).strip()
     for path in _uploads(q.get("refs")):
         cos["refs"].append(p.import_file(path, f"costumes/{key}/refs"))
     drop = set(q.get("drop_refs") or [])
     cos["refs"] = [r for r in dict.fromkeys(cos["refs"]) if r not in drop]
     p.save()
     return {"costume": key}
+
+
+def read_costume_brief(p: Project, q: dict, llm, say) -> None:
+    """Avant le plein pied : le brief du costume, lu par le modèle de
+    texte, devient le prompt de la tenue (en anglais) et sa fiche."""
+    from . import brief
+
+    key = _costume(p, q)
+    cos = p.data["costumes"][key]
+    if "brief" in q:
+        cos["brief"] = str(q["brief"] or "").strip()
+    added = [p.import_file(path, f"costumes/{key}/refs") for path in _uploads(q.get("refs"))]
+    if added:
+        cos["refs"] = list(dict.fromkeys(cos["refs"] + added))
+        cos["brief_read"] = None
+    p.save()
+    text = (cos.get("brief") or "").strip()
+    if not text or (cos.get("brief_read") == text and cos.get("prompt")):
+        return
+    say("le modèle de texte lit le brief du costume")
+    if config.backend("brief") != "stub":
+        llm()
+    got = brief.read_costume(text, sheet=p.sheet, images=[p.path(r) for r in cos["refs"]])
+    cos["prompt"], cos["outfit"], cos["brief_read"] = got["prompt"], got["sheet"], text
+    p.save()
+    say(f"costume : {got['prompt']}")
 
 
 def a_fullbody(p: Project, q: dict, report):
@@ -267,39 +351,46 @@ def a_rig_ok(p: Project, q: dict, report):
     return {}
 
 
-def _gpu_views(q: dict):
+def _gpu_views(q: dict, p: Project | None = None):
     method = q.get("method") or "per_view"
     return ("h3", "h3") if method in ("per_view", "orbit") else ("qwen", "views")
 
 
-# action → (fonction, libellé, où elle calcule). « Où » vaut None pour
-# une action rapide, qui se joue tout de suite ; sinon (famille de
-# modèles, capacité) — ou une fonction des paramètres qui le rend.
+def _gpu_face(q: dict, p: Project | None = None):
+    engine = face_engine(p, q)
+    return ("h3", "h3") if engine == "h3" else (engine, "portrait")
+
+
+# action → (fonction, libellé, où elle calcule[, lecture préalable]).
+# « Où » vaut None pour une action rapide, qui se joue tout de suite ;
+# sinon (famille de modèles, capacité) — ou une fonction qui le rend. La
+# lecture préalable passe par le modèle de texte avant le rendu.
 ACTIONS = {
-    "face":         (a_face, "variantes du visage", ("h3", "h3")),
+    "face":         (a_face, "variantes du visage", _gpu_face, read_face_brief),
     "face_lock":    (a_face_lock, "verrouillage du visage", None),
     "costume_add":  (a_costume_add, "nouveau costume", None),
     "costume_edit": (a_costume_edit, "costume modifié", None),
-    "fullbody":     (a_fullbody, "plein pied", ("h3", "h3")),
+    "fullbody":     (a_fullbody, "plein pied", ("h3", "h3"), read_costume_brief),
     "fullbody_ok":  (a_fullbody_ok, "plein pied validé", None),
     "sheet":        (a_sheet, "planche", ("h3", "h3")),
     "sheet_ok":     (a_sheet_ok, "planche validée", None),
     "views":        (a_views, "vues orthogonales", _gpu_views),
     "prep":         (a_prep, "préparation des vues", ("birefnet", "prep")),
     "check":        (a_check, "contrôle d'alignement",
-                     lambda q: ("sam3d", "sam3dbody") if q.get("measure") else None),
+                     lambda q, p=None: ("sam3d", "sam3dbody") if q.get("measure") else None),
     "mesh":         (a_mesh, "mesh 3D", ("trellis", "trellis")),
     "rig":          (a_rig, "rig SOMA", ("unirig", None)),
     "rig_ok":       (a_rig_ok, "verdict du rig", None),
 }
 
 # Le moteur de chaque capacité, pour savoir si un travail touche au GPU.
-_ENGINE = {"h3": "h3", "views": "h3", "prep": "prep", "trellis": "trellis", "sam3dbody": "sam3dbody"}
+_ENGINE = {"h3": "h3", "views": "h3", "prep": "prep", "trellis": "trellis", "sam3dbody": "sam3dbody",
+           "portrait": "portrait"}
 
 
-def where(action: str, q: dict):
+def where(action: str, q: dict, p: Project | None = None):
     spec = ACTIONS[action][2]
-    return spec(q) if callable(spec) else spec
+    return spec(q, p) if callable(spec) else spec
 
 
 def _on_gpu(family: str, cap: str | None) -> bool:
@@ -398,6 +489,10 @@ class Studio:
         self.jobs: list[Job] = []
         self.queue: queue.Queue[Job] = queue.Queue()
         self.running: Job | None = None
+        # Le personnage d'un calcul en cours : les choix faits pendant ce
+        # calcul (verrouiller, écrire le costume, corriger la fiche) passent
+        # par ce même objet, sinon le calcul écraserait le manifeste.
+        self.live: dict[str, Project] = {}
         self.memory = memory.Manager()
         self.lock = threading.Lock()
         threading.Thread(target=self._worker, name="ouvrier", daemon=True).start()
@@ -414,6 +509,9 @@ class Studio:
 
     def busy(self, slug: str) -> bool:
         return self.running is not None and self.running.slug == slug
+
+    def project(self, slug: str) -> Project:
+        return self.live.get(slug) or Project.open(slug)
 
     def find(self, job_id: str) -> Job | None:
         return next((j for j in self.jobs if j.id == job_id), None)
@@ -456,15 +554,18 @@ class Studio:
                 if job.error:
                     job.message = job.error
                 _local.job = None
+                self.live.pop(job.slug, None)
                 self.running = None
 
     def _run(self, job: Job) -> None:
-        fn, _, _ = ACTIONS[job.action]
-        spot = where(job.action, job.params)
+        fn, _, _, *pre = ACTIONS[job.action]
+        p = self.live[job.slug] = Project.open(job.slug)
+        if pre:
+            pre[0](p, job.params, lambda: self.memory.before_llm(say=job.say), job.say)
+        spot = where(job.action, job.params, p)
         if spot and _on_gpu(*spot):
             family, cap = spot
             self.memory.before_gpu(family, config.comfyui_url(cap) if cap else None, say=job.say)
-        p = Project.open(job.slug)
 
         def report(progress: float, message: str) -> None:
             if job.cancel:
@@ -484,13 +585,12 @@ class Studio:
         Project.open(slug)
         if where(action, params) is not None:
             return {"job": self.submit(slug, action, params).public()}
-        if self.busy(slug):
-            raise ChainError("un travail tourne sur ce personnage : attends qu'il finisse")
-        p = Project.open(slug)
+        p = self.project(slug)
         out = io.StringIO()
         _local.job = SimpleNamespace(write=out.write)
         try:
-            result = ACTIONS[action][0](p, params, lambda pr, m: None)
+            with p.lock:
+                result = ACTIONS[action][0](p, params, lambda pr, m: None)
         finally:
             _local.job = None
         return {"result": result, "log": out.getvalue().strip()}
@@ -698,8 +798,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._json(self._create(), 201)
             slug = parts[1] if len(parts) > 1 else ""
             if len(parts) == 2 and method == "GET":
-                p = Project.open(slug)
+                from .portrait import ENGINES
+
+                p = s.project(slug)
                 return self._json({"character": p.data, "summary": summary(p), "busy": s.busy(slug),
+                                   "face_engines": ENGINES,
                                    "backends": backends(), "view_methods": list(chain.VIEW_METHODS)})
             if len(parts) == 3 and parts[2] == "identity" and method == "PUT":
                 return self._json(self._identity(slug))
@@ -734,23 +837,34 @@ class Handler(http.server.BaseHTTPRequestHandler):
             raise ChainError("donne un nom au personnage (le champ name de la fiche)")
         style = body.get("style") if body.get("style") in ("photoreal", "stylized") else "photoreal"
         notes = [str(n) for n in body.get("notes") or [] if str(n).strip()]
-        p = Project.create(name, style=style, identity=sheet, notes=notes)
+        p = Project.create(name, style=style, identity={**sheet, "character_name": sheet.get("character_name") or name},
+                           notes=notes)
         if body.get("conversation"):
             p.data["identity_chat"] = _text_only(body["conversation"])
             p.save()
         return {"slug": p.data["slug"], "summary": summary(p)}
 
     def _identity(self, slug: str) -> dict:
-        if self.studio.busy(slug):
-            raise ChainError("un travail tourne sur ce personnage : attends qu'il finisse pour changer sa fiche")
         body = self._payload()
-        p = Project.open(slug)
+        p = self.studio.project(slug)
+        with p.lock:
+            return self._apply_identity(p, body)
+
+    def _apply_identity(self, p: Project, body: dict) -> dict:
         if "sheet" in body:
             p.set_identity({"schema": IDENTITY_SCHEMA, "sheet": body.get("sheet") or {},
                             "notes": body.get("notes", p.data["notes"])})
             name = str(p.sheet.get("character_name") or "").strip()
             if name:
                 p.data["name"] = name
+        if str(body.get("name") or "").strip():
+            # Le nom s'édite ; le dossier (slug) garde celui de la création.
+            p.data["name"] = str(body["name"]).strip()
+            p.data["identity"] = {**p.sheet, "character_name": p.data["name"]}
+        if isinstance(body.get("fields"), dict):
+            # Une correction à la main, champ par champ, depuis le panneau de la fiche.
+            p.data["identity"] = {**p.sheet, **{k: str(v).strip() for k, v in body["fields"].items()
+                                                if isinstance(v, (str, int, float))}}
         if body.get("style") in ("photoreal", "stylized"):
             p.data["style"] = body["style"]
         if "conversation" in body:

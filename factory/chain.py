@@ -42,10 +42,20 @@ def _seed(seed: int | None) -> int:
 # ── visage ─────────────────────────────────────────────────────────
 
 def face(p: Project, *, prompt: str = "", refs: list[str] = (), variants: int = 4,
-         seed: int | None = None, report=None) -> list[dict]:
+         seed: int | None = None, engine: str | None = None, descriptions: list[str] | None = None,
+         report=None) -> list[dict]:
     """Une grille de variantes du portrait neutre. Avec --graine, les
     variantes partent de cette graine : c'est le verrouillage de graine
-    du §3, pour relancer en ne changeant que le prompt."""
+    du §3, pour relancer en ne changeant que le prompt.
+
+    Le moteur : H3 avec une photo source (il la normalise en gardant la
+    personne), sinon un modèle d'image (`portrait.py`, Z-Image Turbo par
+    défaut) — le §3 laisse le choix, et H3 rend mal un portrait fixe.
+    La description du visage vient du brief lu par le modèle de texte
+    (`face.prompt_en`), sinon des précisions tapées (`face.prompt`) ;
+    `descriptions` en donne une par variante, pour explorer."""
+    from . import portrait
+
     if p.face.get("locked"):
         raise ChainError("le visage est déjà verrouillé : plus de nouvelles variantes pour ce personnage")
     report = report or _report()
@@ -53,22 +63,37 @@ def face(p: Project, *, prompt: str = "", refs: list[str] = (), variants: int = 
     p.face["refs"] = list(dict.fromkeys(p.face["refs"] + imported))
     if prompt:
         p.face["prompt"] = prompt
-    sections = prompts.face(p.sheet, p.data["notes"], has_source=bool(p.face["refs"]), extra=p.face["prompt"],
-                            style=p.data["style"])
+    engine = engine or ("h3" if p.face["refs"] else config.setting("face_engine", "zimage"))
+    if engine not in portrait.ENGINES:
+        raise ChainError(f"moteur de visage inconnu : {engine} (possibles : {', '.join(portrait.ENGINES)})")
+    p.face["engine"] = engine
+    extras = [d for d in descriptions or [] if d] or [p.face.get("prompt_en") or p.face["prompt"]]
     base = _seed(seed)
     made = []
     for i in range(variants):
         s = base + i
         n = len(p.face["candidates"]) + 1
         dest = p.dir("face") / f"cand-{n:03d}.png"
-        print(f"  variante {i + 1}/{variants} · graine {s}")
+        print(f"  variante {i + 1}/{variants} · {portrait.ENGINES[engine]} · graine {s}")
         # Sans source, le factice varie avec la graine : ce sont bien des
         # candidats différents. Avec une source, l'identité est fixée.
         ident = identity_seed(p) + (0 if p.face["refs"] else n)
-        out = h3.still("face", sections=sections, refs=[p.path(r) for r in p.face["refs"][:1]], dest=dest,
-                       seed=s, report=report, extra={"identity_seed": ident})
-        entry = {"file": p.rel(dest), "seed": s, "backend": out.backend, "at": now()}
-        if out.backend == "stub":
+        extra = extras[i % len(extras)]
+        if engine == "h3":
+            sections = prompts.face(p.sheet, p.data["notes"], has_source=bool(p.face["refs"]), extra=extra,
+                                    style=p.data["style"])
+            out = h3.still("face", sections=sections, refs=[p.path(r) for r in p.face["refs"][:1]], dest=dest,
+                           seed=s, report=report, extra={"identity_seed": ident})
+            backend = out.backend
+        else:
+            text = portrait.text(p.sheet, extra, style=p.data["style"])
+            portrait.generate(engine, prompt=text, dest=dest, seed=s, report=report, identity_seed=ident)
+            backend = config.backend("portrait")
+            dest.with_suffix(".json").write_text(json.dumps(
+                {"kind": "face", "engine": engine, "backend": backend, "seed": s, "prompt": text},
+                ensure_ascii=False, indent=2), encoding="utf-8")
+        entry = {"file": p.rel(dest), "seed": s, "backend": backend, "engine": engine, "desc": extra, "at": now()}
+        if backend == "stub":
             entry["stub_identity"] = ident
         p.face["candidates"].append(entry)
         made.append(entry)

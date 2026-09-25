@@ -46,7 +46,7 @@ def cmd_nouveau(args) -> None:
     p = Project.create(name, style=args.style, identity=identity, notes=notes)
     filled = sum(1 for v in identity.values() if v)
     print(f"personnage créé : {p.root}")
-    print(f"  fiche : {filled}/21 champs{' — remplis-la dans la page, étage Identité, puis ./usine identite' if filled < 21 else ''}")
+    print(f"  fiche : {filled}/22 champs{' — remplis-la dans la page, étage Identité, puis ./usine identite' if filled < 22 else ''}")
     print(f"  suite : ./usine visage {p.data['slug']}")
 
 
@@ -62,7 +62,7 @@ def cmd_identite(args) -> None:
     p = _p(args)
     p.set_identity(json.loads(Path(args.fichier).read_text(encoding="utf-8")))
     p.save()
-    print(f"fiche d'identité remplacée : {sum(1 for v in p.sheet.values() if v)}/21 champs")
+    print(f"fiche d'identité remplacée : {sum(1 for v in p.sheet.values() if v)}/22 champs")
 
 
 def cmd_visage(args) -> None:

@@ -19,7 +19,7 @@ def render(p: Project) -> str:
         lines.append(f"  {ref}  {name:18s} {text}")
 
     filled = sum(1 for v in p.sheet.values() if v)
-    row("ST-01", "Identité", f"{filled}/21 champs, {len(d['notes'])} note(s)")
+    row("ST-01", "Identité", f"{filled}/22 champs, {len(d['notes'])} note(s)")
 
     face = d["face"]
     if face.get("locked"):

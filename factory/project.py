@@ -22,6 +22,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,6 +52,7 @@ class Project:
     def __init__(self, root: Path, data: dict) -> None:
         self.root = root
         self.data = data
+        self.lock = threading.RLock()
 
     # ── ouverture ──────────────────────────────────────────────────
 
@@ -95,12 +97,22 @@ class Project:
                          f"`./usine liste` pour voir ceux qui existent")
 
     def save(self) -> None:
-        # Écriture atomique : un manifeste à moitié écrit perdrait tout.
-        fd, tmp = tempfile.mkstemp(dir=self.root, prefix=".project.", suffix=".json")
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(self.data, fh, ensure_ascii=False, indent=2)
-            fh.write("\n")
-        os.replace(tmp, self.root / "project.json")
+        # Écriture atomique : un manifeste à moitié écrit perdrait tout. Le
+        # studio partage un même Project entre un calcul et les choix faits
+        # pendant ce calcul : on sérialise sous verrou, et on recommence si
+        # l'autre fil a changé une table au même instant.
+        with self.lock:
+            for attempt in range(5):
+                try:
+                    text = json.dumps(self.data, ensure_ascii=False, indent=2)
+                    break
+                except RuntimeError:
+                    if attempt == 4:
+                        raise
+            fd, tmp = tempfile.mkstemp(dir=self.root, prefix=".project.", suffix=".json")
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(text + "\n")
+            os.replace(tmp, self.root / "project.json")
 
     # ── chemins ────────────────────────────────────────────────────
 

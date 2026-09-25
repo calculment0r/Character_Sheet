@@ -1,6 +1,6 @@
 'use strict';
 
-import { SHEET_FIELDS, SECTIONS } from './schema.js';
+import { SHEET_FIELDS } from './schema.js';
 
 /* ============================================================
    Le studio.
@@ -32,6 +32,9 @@ const state = {
   openLogs: new Set(),
   fullLogs: {},
   pending: false,        // un rendu attend que le champ actif perde le focus
+  stage: null,           // étape affichée ; null = celle où en est le personnage
+  renaming: false,
+  editField: null,       // champ de la fiche en cours de correction
   sig: '',
   system: null,
 };
@@ -157,9 +160,14 @@ function activeJob(action, costume) {
 
 /* Le bouton d'une action. Il prend l'orange s'il porte l'étape
    suivante de la chaîne — un seul par écran. */
-function act(action, label, { costume, form, params, confirm: ask, disabled = false, block = false } = {}) {
+// Un bouton qui porte l'étape suivante sous un autre nom.
+const GO_AS = { costume_go: ['costume_add', 'fullbody'] };
+
+function act(action, label, { costume, form, params, confirm: ask, disabled = false, block = false, small = false } = {}) {
   const next = state.detail?.summary.next;
-  const go = next && next.action === action && !PICKS.has(action) && (!next.costume || next.costume === costume);
+  const goes = GO_AS[action] || [action];
+  const go = !small && next && goes.includes(next.action) && !PICKS.has(action)
+    && (!next.costume || next.costume === costume || action === 'costume_go');
   const running = activeJob(action, costume);
   const attrs = [
     `data-act="${action}"`,
@@ -167,10 +175,11 @@ function act(action, label, { costume, form, params, confirm: ask, disabled = fa
     form ? `data-form="${esc(form)}"` : '',
     params ? `data-params="${esc(JSON.stringify(params))}"` : '',
     ask ? `data-confirm="${esc(ask)}"` : '',
-    disabled || running || state.detail?.busy && PICKS.has(action) ? 'disabled' : '',
+    disabled || (running && !small) ? 'disabled' : '',
   ].filter(Boolean).join(' ');
-  const cls = `tb ${go ? 'go' : 'ghost'}${block ? ' block' : ''}${PICKS.has(action) ? ' sm' : ''}`;
-  return `<button class="${cls}" ${attrs}>${esc(running ? `${running.status === 'queued' ? 'en file' : 'en cours'}…` : label)}</button>`;
+  const cls = `tb ${go ? 'go' : 'ghost'}${block ? ' block' : ''}${PICKS.has(action) || small ? ' sm' : ''}`;
+  const busy = running && !small ? `${running.status === 'queued' ? 'en file' : 'en cours'}…` : label;
+  return `<button class="${cls}" ${attrs}>${esc(busy)}</button>`;
 }
 
 function box({ sec, title, st, stLabel, body, next = false, wait = false }) {
@@ -198,44 +207,30 @@ const stubMark = (e) => (e && e.backend === 'stub' ? ['factice', 'stub'] : ['', 
 
 function renderHome() {
   const list = state.list?.characters || [];
-  const locked = list.filter((c) => c.locked).length;
   return `
   <div class="console-top">
     <div class="hero">
       <span class="ref">00_studio</span>
       <h2 class="studio-title">Les personnages</h2>
-      <p>Un personnage par carte. Un clic l'ouvre : la fiche d'identité par la conversation, puis le visage,
-        les costumes, le plein pied, la planche, les vues, la 3D et le rig — chaque étage à la main, dans
-        l'ordre. Tout calcule sur DGX2, un travail à la fois.</p>
+      <p>Un nom suffit pour commencer. Ensuite, on décrit ce qu'on veut voir — le visage, puis la tenue — et
+        la fiche se remplit toute seule à partir de là. Tout calcule sur DGX2, un rendu à la fois ; pendant ce
+        temps, on continue de travailler.</p>
+      <form data-form="create" class="create">
+        <input class="fld" name="name" placeholder="Nom du personnage" autocomplete="off" spellcheck="false">
+        <button class="tb go" type="submit">Créer ▸</button>
+      </form>
     </div>
     <div class="statcard">
       <span class="ref">personnages</span>
       <span class="n">${pad(list.length)}</span>
-      <span class="foot">${locked} visage${locked > 1 ? 's' : ''} verrouillé${locked > 1 ? 's' : ''}</span>
+      <span class="foot">${list.filter((c) => c.locked).length} visage(s) verrouillé(s)</span>
       <span class="dots"></span>
     </div>
   </div>
-  <section class="sect">
-    <div class="sect-head"><h2>Personnages</h2><span class="k">ST-00</span>
-      <span class="cnt">${list.length} au studio</span></div>
-    <div class="cards">${newCard()}${list.map(card).join('')}</div>
-  </section>`;
-}
-
-function newCard() {
-  return `<div class="card new">
-    <div class="who">
-      <span class="ref">nouveau</span>
-      <span class="nm">Un personnage</span>
-      <p class="hint">La conversation remplit la fiche d'identité avec le modèle de texte de DGX2, puis crée
-        le personnage.</p>
-    </div>
-    <a class="tb go block" href="./console.html?new=1">Nouveau personnage ▸</a>
-    <form data-form="quick">
-      <input class="fld" name="name" placeholder="ou juste un nom" autocomplete="off">
-      <button class="tb ghost" type="submit">Créer</button>
-    </form>
-  </div>`;
+  ${list.length ? `<section class="sect">
+    <div class="sect-head"><h2>Personnages</h2><span class="cnt">${list.length} au studio</span></div>
+    <div class="cards">${list.map(card).join('')}</div>
+  </section>` : ''}`;
 }
 
 function card(c) {
@@ -252,156 +247,227 @@ function card(c) {
     </div></a>`;
 }
 
-/* ── un personnage ──────────────────────────────────────── */
+/* ── un personnage : l'atelier ──────────────────────────── */
+
+const STAGES = [
+  { id: 'face', ref: '01', label: 'Visage' },
+  { id: 'costume', ref: '02', label: 'Costume' },
+  { id: 'sheet', ref: '03', label: 'Planche' },
+  { id: 'views', ref: '04', label: 'Vues' },
+  { id: 'mesh', ref: '05', label: '3D' },
+  { id: 'rig', ref: '06', label: 'Rig' },
+];
+const STAGE_OF = {
+  face: 'face', face_lock: 'face', costume_add: 'costume', fullbody: 'costume', fullbody_ok: 'costume',
+  sheet: 'sheet', sheet_ok: 'sheet', views: 'views', prep: 'views', check: 'views', mesh: 'mesh', rig: 'rig',
+  rig_ok: 'rig',
+};
+const ENGINE_LABEL = {
+  zimage: 'Z-Image Turbo · rapide, 8 s',
+  flux2: 'FLUX.2 dev · qualité, 75 s',
+  qwen21: 'Qwen-Image 2.1 · 40 s',
+  h3: 'H3 · pour normaliser une photo',
+};
+const TRAITS = ['audacieux', 'discret', 'loyal', 'impulsif', 'méfiant', 'chaleureux', 'ironique', 'calme', 'têtu',
+  'curieux', 'protecteur', 'rêveur', 'rancunier', 'drôle', 'solitaire', 'généreux'];
+// Les actions qui calculent avec H3 : pendant elles, la mémoire manque au modèle de texte.
+const HEAVY = new Set(['fullbody', 'sheet', 'views']);
+
+function costumeOf(c) {
+  return (state.costume && c.costumes[state.costume]) || Object.values(c.costumes)[0] || null;
+}
+
+function stageStates(c) {
+  const cos = costumeOf(c);
+  const v = cos?.views;
+  return {
+    face: c.face.locked ? 'done' : c.face.candidates.length ? 'partial' : 'open',
+    costume: cos?.fullbody.validated ? 'done' : cos ? 'partial' : 'open',
+    sheet: !cos?.fullbody.validated ? 'locked' : cos.sheet ? 'done' : cos.sheets.length ? 'partial' : 'open',
+    views: !cos?.sheet ? 'locked' : v.check?.ok ? 'done' : Object.keys(v.raw).length ? 'partial' : 'open',
+    mesh: !v || !Object.keys(v.prepared).length ? 'locked' : cos.meshes.length ? 'done' : 'open',
+    rig: !cos?.meshes.length ? 'locked' : cos.rigs.some((r) => r.verdict === 'accepted') ? 'done'
+      : cos.rigs.length ? 'partial' : 'open',
+  };
+}
+
+function currentStage(d, st) {
+  if (state.stage && st[state.stage] !== 'locked') return state.stage;
+  const next = d.summary.next;
+  return next ? STAGE_OF[next.action] || 'face' : 'rig';
+}
+
+function frise(st, cur) {
+  const label = { done: 'fait', partial: 'en cours', open: 'à faire', locked: 'attend' };
+  return `<nav class="frise">${STAGES.map((s) => `<button class="step ${st[s.id]}${s.id === cur ? ' cur' : ''}"
+    data-stage="${s.id}"${st[s.id] === 'locked' ? ' disabled' : ''}>
+    <span class="n">${s.ref}</span><span class="nm">${s.label}</span><span class="st">${label[st[s.id]]}</span></button>`)
+    .join('')}</nav>`;
+}
 
 function renderPerso() {
   const d = state.detail;
   if (!d) return '<p class="prose">chargement…</p>';
   const c = d.character;
   const s = d.summary;
-  const fake = Object.entries(d.backends).filter(([k, v]) => v === 'stub' && ['h3', 'trellis'].includes(k))
-    .map(([k]) => k);
+  const st = stageStates(c);
+  const cur = currentStage(d, st);
   const img = s.thumb ? `<img class="face" src="${esc(s.thumb)}" alt="" data-zoom="${esc(s.thumb)}" data-cap="${
-    esc(c.name)}">` : '<div class="face"></div>';
+    esc(c.name)}">` : `<div class="face ph">${esc(initials(c.name))}</div>`;
+  const name = state.renaming
+    ? `<form data-form="rename" class="rename"><input class="fld" name="name" value="${esc(c.name)}"
+        autocomplete="off" spellcheck="false"><button class="tb ghost sm" type="submit">OK</button></form>`
+    : `<h1 class="name" data-rename title="renommer">${esc(c.name)}</h1>`;
   return `
   <div class="perso-head">
     ${img}
     <div class="who">
-      <span class="ref">${esc(c.slug)} · ${esc(c.style)}${fake.length ? ` · ${esc(fake.join(', '))} factice` : ''}</span>
-      <h1>${esc(c.name)}</h1>
+      <span class="ref">${esc(c.slug)}</span>
+      ${name}
       <span class="role">${esc([s.role, s.archetype].filter(Boolean).join(' · '))}</span>
-      ${ticks(s.stages)}
     </div>
     <div class="acts">
+      <span class="seg">
+        <button class="tb sm${c.style === 'photoreal' ? ' on' : ''}" data-style-set="photoreal">Photo</button>
+        <button class="tb sm${c.style === 'stylized' ? ' on' : ''}" data-style-set="stylized">Stylisé</button>
+      </span>
       <a class="tb ghost sm" href="#/">◂ Studio</a>
-      <a class="tb ghost sm" href="./console.html?slug=${encodeURIComponent(c.slug)}">Conversation</a>
     </div>
   </div>
+  ${frise(st, cur)}
   <div class="perso-grid">
-    <div class="perso-main">
-      ${boxFace(d)}
-      ${boxCostumes(d)}
-      ${state.costume ? costumeBoxes(d, state.costume) : ''}
-    </div>
+    <div class="perso-main">${stageView(cur, d)}</div>
     <aside class="perso-side">
-      <div class="c-head"><h2>Travaux</h2><span class="sec">file</span><span class="cnt" id="jobs-count"></span></div>
+      <div id="waiting">${waitingCard(d)}</div>
+      <div class="c-head"><h2>Rendus</h2><span class="cnt" id="jobs-count"></span></div>
       <div class="jobs" id="jobs">${renderJobs()}</div>
-      ${boxIdentity(d)}
+      ${fiche(d)}
     </aside>
   </div>`;
 }
 
-function boxFace(d) {
+function stageView(stage, d) {
   const c = d.character;
-  const f = c.face;
-  const st = f.locked ? ['done', 'verrouillé'] : f.candidates.length ? ['partial', `${f.candidates.length} candidat(s)`]
-    : ['todo', 'à faire'];
-  let body;
-  if (f.locked) {
-    const src = fileUrl(c.slug, f.locked, f.locked_at);
-    body = `<div class="hero-img">
-      <img src="${esc(src)}" alt="" data-zoom="${esc(src)}" data-cap="visage verrouillé">
-      <div class="stage-body">
-        <dl class="kv">
-          <dt>candidat</dt><dd>${esc(base(f.locked_from))}</dd>
-          <dt>graine</dt><dd>${esc(f.locked_seed ?? '—')}</dd>
-          <dt>moteur</dt><dd>${esc(f.locked_backend || '—')}</dd>
-          <dt>verrouillé</dt><dd>${esc(when(f.locked_at))}</dd>
-        </dl>
-        <p class="hint">Le visage fait autorité sur toute la suite et ne change plus. Pour un autre visage, un
-          autre personnage.</p>
-      </div></div>`;
-  } else {
-    body = `<p>Le portrait neutre, de face. Génère des variantes, puis verrouille celle qui fait le personnage —
-      une seule fois.</p>
-      <label class="field"><span class="lbl">Précisions pour le visage</span>
-        ${textarea('face.prompt', f.prompt, 'ce que la fiche ne dit pas : traits, peau, cheveux… (facultatif)')}</label>
-      <div class="field"><span class="lbl">Photo source · facultatif</span>${refsZone('face', 'photo')}
-        ${f.refs.length ? `<p class="hint">déjà en référence : ${esc(f.refs.map(base).join(', '))}</p>` : ''}</div>
-      <div class="form-row">
-        ${select('face.variants', 'Variantes', [1, 2, 3, 4, 6, 8].map((n) => [n, String(n)]), 4)}
-        ${input('face.seed', 'Graine', { placeholder: 'au hasard', cls: 'num' })}
-        <span class="sp"></span>
-        ${act('face', 'Générer ▸', { form: 'face' })}
-      </div>`;
-    if (f.candidates.length) {
-      body += `<div class="box-sub">Candidats</div><div class="cands">${f.candidates.map((x, i) => {
-        const [mark, markCls] = stubMark(x);
-        return cand({
-          src: fileUrl(c.slug, x.file, x.at), label: `n° ${i + 1}`, cap: `n° ${i + 1} · graine ${x.seed}`, mark, markCls,
-          button: act('face_lock', 'Verrouiller', {
-            params: { candidate: String(i + 1) },
-            confirm: `Verrouiller le visage n° ${i + 1} ? Il fera autorité sur toute la suite ; on ne pourra plus le changer.`,
-          }),
-        });
-      }).reverse().join('')}</div>`;
-    }
-  }
-  return box({ sec: 'ST-02', title: 'Visage', st: st[0], stLabel: st[1], body, next: isNext('face', 'face_lock') });
+  if (stage === 'face') return stageFace(d);
+  if (stage === 'costume') return stageCostume(d);
+  const cos = costumeOf(c);
+  if (!cos) return stageCostume(d);
+  const key = Object.keys(c.costumes).find((k) => c.costumes[k] === cos);
+  const picker = Object.keys(c.costumes).length > 1 ? `<div class="tabs">${Object.entries(c.costumes).map(([k, x]) =>
+    `<button class="tb sm ${k === key ? 'on' : 'ghost'}" data-costume-tab="${esc(k)}">${esc(x.name)}</button>`).join('')}</div>` : '';
+  const view = { sheet: boxSheet, views: boxViews, mesh: boxMesh, rig: boxRig }[stage];
+  return picker + view(c, key, cos, d);
 }
 
-function boxCostumes(d) {
+function goNext(label, stage) {
+  return `<div class="form-row next-row"><span class="sp"></span>
+    <button class="tb go" data-goto="${stage}">${esc(label)} ▸</button></div>`;
+}
+
+function stageFace(d) {
+  const c = d.character;
+  const f = c.face;
+  if (f.locked) {
+    const src = fileUrl(c.slug, f.locked, f.locked_at);
+    const from = f.candidates.find((x) => x.file === f.locked_from);
+    const hasCostume = Object.keys(c.costumes).length > 0;
+    return box({
+      sec: '01', title: 'Visage', st: 'done', stLabel: 'verrouillé', body: `<div class="hero-img">
+        <img src="${esc(src)}" alt="" data-zoom="${esc(src)}" data-cap="visage verrouillé">
+        <div class="stage-body">
+          <p>Le visage fait autorité sur toute la suite et ne change plus. Pour un autre visage, un autre
+            personnage.</p>
+          ${from?.desc ? `<p class="hint">${esc(from.desc)}</p>` : ''}
+          <dl class="kv"><dt>modèle</dt><dd>${esc(ENGINE_LABEL[from?.engine || 'h3'] || from?.engine || '—')}</dd>
+            <dt>graine</dt><dd>${esc(f.locked_seed ?? '—')}</dd><dt>verrouillé</dt><dd>${esc(when(f.locked_at))}</dd></dl>
+        </div></div>${goNext(hasCostume ? 'Au costume' : 'Habiller le personnage', 'costume')}`,
+    });
+  }
+  const engines = Object.keys(d.face_engines || ENGINE_LABEL).map((k) => [k, ENGINE_LABEL[k] || k]);
+  const photo = (state.refs.face || []).length || f.refs.length;
+  let body = `
+    <label class="field"><span class="lbl">Décris son visage</span>
+      ${textarea('face.brief', f.brief || '', 'en français, comme ça vient : « 20 ans, peau noire, coupe courte dégradée, fine moustache, regard doux ». Le studio en tire quatre propositions différentes, et remplit la fiche.', 4)}</label>
+    <div class="form-row">
+      <div class="field"><span class="lbl">Photo · facultatif</span>${refsZone('face', 'photo')}</div>
+      ${select('face.engine', 'Modèle', engines, f.engine && !photo ? f.engine : photo ? 'h3' : 'zimage')}
+      ${select('face.variants', 'Propositions', [[2, '2'], [4, '4'], [6, '6']], 4)}
+      <span class="sp"></span>
+      ${act('face', 'Générer ▸', { form: 'face' })}
+    </div>`;
+  if (f.prompt_en) {
+    body += `<details class="read"><summary>ce que le modèle en a tiré</summary><p class="hint">${esc(f.prompt_en)}</p></details>`;
+  }
+  if (f.candidates.length) {
+    body += `<div class="box-sub">Propositions · verrouille celle qui fait le personnage</div>
+      <div class="cands big">${f.candidates.map((x, i) => {
+        const [mark, markCls] = x.backend === 'stub' ? ['factice', 'stub'] : [ENGINE_LABEL[x.engine]?.split(' · ')[0] || '', ''];
+        return cand({
+          src: fileUrl(c.slug, x.file, x.at), label: `n° ${i + 1}`, mark, markCls,
+          cap: `n° ${i + 1} · ${x.desc || ''}`,
+          button: act('face', 'Autour', { params: { around: i + 1, variants: 3 }, small: true }) +
+            act('face_lock', 'Verrouiller', {
+              params: { candidate: String(i + 1) },
+              confirm: `Verrouiller le visage n° ${i + 1} ? Il fera autorité sur toute la suite ; on ne pourra plus le changer.`,
+            }),
+        });
+      }).reverse().join('')}</div>`;
+  }
+  const st = f.candidates.length ? ['partial', `${f.candidates.length} proposition(s)`] : ['open', 'à faire'];
+  return box({ sec: '01', title: 'Visage', st: st[0], stLabel: st[1], body });
+}
+
+function stageCostume(d) {
   const c = d.character;
   const keys = Object.keys(c.costumes);
-  const tabs = keys.map((k) => `<button class="tb sm ${k === state.costume ? 'on' : 'ghost'}" data-costume-tab="${
-    esc(k)}">${esc(c.costumes[k].name)}</button>`).join('') +
-    `<button class="tb sm ${state.costume === null ? 'on' : 'ghost'}" data-costume-tab="">+ Costume</button>`;
-  let body = `<div class="tabs">${tabs}</div>`;
+  const locked = !!c.face.locked;
+  if (state.costume === undefined || (state.costume !== null && !keys.includes(state.costume))) {
+    state.costume = keys[0] || null;
+  }
+  const tabs = keys.length ? `<div class="tabs">${keys.map((k) => `<button class="tb sm ${k === state.costume ? 'on' : 'ghost'}"
+    data-costume-tab="${esc(k)}">${esc(c.costumes[k].name)}</button>`).join('')}
+    <button class="tb sm ${state.costume === null ? 'on' : 'ghost'}" data-costume-tab="">+ Tenue</button></div>` : '';
+  const waitFace = locked ? '' : '<p class="hint">Le plein pied attend le visage verrouillé : la tenue peut déjà s\'écrire.</p>';
+  let body;
   if (state.costume === null) {
-    body += `<p>Un costume : sa description, et des images de vêtements s'il y en a. Le plein pied part du visage
-      verrouillé et de ces références.</p>
-      <div class="form-row">${input('costume_new.name', 'Nom du costume', { placeholder: 'travail, gala…', grow: true })}</div>
-      <label class="field"><span class="lbl">Description</span>
-        ${textarea('costume_new.prompt', '', 'coupe, matières, couleurs, usure, accessoires portés…')}</label>
-      <div class="field"><span class="lbl">Vêtements · images</span>${refsZone('costume_new', 'vêtement')}</div>
-      <div class="form-row"><span class="sp"></span>${act('costume_add', 'Créer le costume ▸', { form: 'costume_new' })}</div>`;
-  } else {
-    const key = state.costume;
-    const cos = c.costumes[key];
-    const form = `cos.${key}`;
-    body += `<label class="field"><span class="lbl">Description</span>
-        ${textarea(`${form}.prompt`, cos.prompt, 'coupe, matières, couleurs, usure, accessoires portés…')}</label>
+    body = `${tabs}
+      <label class="field"><span class="lbl">Décris sa tenue</span>
+        ${textarea('costume_new.brief', '', 'en français : « hoodie bleu Adidas capuche baissée, baggy blanc usé aux genoux, baskets blanches, casquette noire à l\'envers »', 4)}</label>
+      <div class="form-row">
+        <div class="field"><span class="lbl">Vêtements · images</span>${refsZone('costume_new', 'vêtement')}</div>
+        ${input('costume_new.name', 'Nom de la tenue', { placeholder: `tenue ${keys.length + 1}` })}
+        ${select('costume_new.variants', 'Propositions', [[1, '1'], [2, '2'], [3, '3']], 2)}
+        <span class="sp"></span>
+        ${act('costume_go', locked ? 'Générer le plein pied ▸' : 'Garder la tenue', { form: 'costume_new' })}
+      </div>${waitFace}`;
+    return box({ sec: '02', title: 'Costume', st: 'open', stLabel: 'à faire', body });
+  }
+  const key = state.costume;
+  const cos = c.costumes[key];
+  const form = `cos.${key}`;
+  const fb = cos.fullbody;
+  body = `${tabs}
+    <label class="field"><span class="lbl">Décris sa tenue</span>
+      ${textarea(`${form}.brief`, cos.brief || cos.prompt || '', 'en français, comme ça vient', 4)}</label>
+    <div class="form-row">
       <div class="field"><span class="lbl">Vêtements · images</span>
         <div class="refs">${cos.refs.map((r) => {
           const src = fileUrl(c.slug, r);
           return `<span class="thumb" style="background-image:url('${esc(src)}')" title="${esc(base(r))}" data-zoom="${
             esc(src)}" data-cap="${esc(base(r))}"><button data-act="costume_edit" data-costume="${esc(key)}"
             data-params="${esc(JSON.stringify({ drop_refs: [r] }))}" title="retirer"
-            data-confirm="${esc(`Retirer ${base(r)} des références du costume ?`)}">×</button></span>`;
-        }).join('')}</div>
-        ${refsZone(form, 'vêtement')}</div>
-      <div class="form-row"><span class="hint">Un plein pied déjà validé ne change pas : régénère-le après une
-        modification.</span><span class="sp"></span>${act('costume_edit', 'Enregistrer', { form, costume: key })}</div>`;
+            data-confirm="${esc(`Retirer ${base(r)} des références de la tenue ?`)}">×</button></span>`;
+        }).join('')}</div>${refsZone(form, 'vêtement')}</div>
+      ${select(`${form}.variants`, 'Propositions', [[1, '1'], [2, '2'], [3, '3']], 2)}
+      <span class="sp"></span>
+      ${locked ? act('fullbody', 'Générer ▸', { form, costume: key })
+        : act('costume_edit', 'Enregistrer', { form, costume: key })}
+    </div>${waitFace}`;
+  if (cos.brief_read && cos.prompt) {
+    body += `<details class="read"><summary>ce que le modèle en a tiré</summary><p class="hint">${esc(cos.prompt)}</p></details>`;
   }
-  const st = keys.length ? ['done', `${keys.length} costume(s)`] : ['todo', 'à faire'];
-  return box({ sec: 'ST-03', title: 'Costumes', st: st[0], stLabel: st[1], body, next: isNext('costume_add') });
-}
-
-function costumeBoxes(d, key) {
-  const c = d.character;
-  const cos = c.costumes[key];
-  if (!cos) return '';
-  return [boxFullbody(c, key, cos), boxSheet(c, key, cos), boxViews(c, key, cos, d), boxMesh(c, key, cos),
-    boxRig(c, key, cos)].join('');
-}
-
-function waitBox(sec, title, text) {
-  return box({ sec, title, st: 'todo', stLabel: 'en attente', body: `<p>${esc(text)}</p>`, wait: true });
-}
-
-function boxFullbody(c, key, cos) {
-  const fb = cos.fullbody;
-  if (!c.face.locked) return waitBox('ST-04', 'Plein pied', 'Le plein pied attend le visage verrouillé.');
-  const form = `fb.${key}`;
-  let body = `<p>Le personnage en pied, habillé du costume, de face : le visage verrouillé et les vêtements en
-    références. Valide celui qui tient — la planche partira de lui.</p>
-    <div class="form-row">
-      ${select(`${form}.variants`, 'Variantes', [1, 2, 3, 4, 6].map((n) => [n, String(n)]), 2)}
-      ${input(`${form}.seed`, 'Graine', { placeholder: 'au hasard', cls: 'num' })}
-      <span class="sp"></span>${act('fullbody', 'Générer ▸', { form, costume: key })}
-    </div>`;
   if (fb.candidates.length) {
-    body += `<div class="box-sub">Candidats</div><div class="cands tall">${fb.candidates.map((x, i) => {
+    body += `<div class="box-sub">Pleins pieds · valide celui qui tient</div><div class="cands tall">${fb.candidates.map((x, i) => {
       const chosen = x.file === fb.validated_from;
       const [mark, markCls] = chosen ? ['validé', 'ok'] : stubMark(x);
       return cand({
@@ -414,14 +480,18 @@ function boxFullbody(c, key, cos) {
       });
     }).reverse().join('')}</div>`;
   }
-  const st = fb.validated ? ['done', 'validé'] : fb.candidates.length ? ['partial', `${fb.candidates.length} candidat(s)`]
-    : ['todo', 'à faire'];
-  return box({ sec: 'ST-04', title: `Plein pied · ${cos.name}`, st: st[0], stLabel: st[1], body,
-    next: isNext('fullbody', 'fullbody_ok') });
+  if (fb.validated) body += goNext('À la planche', 'sheet');
+  const st = fb.validated ? ['done', 'plein pied validé'] : fb.candidates.length ? ['partial', `${fb.candidates.length} plein(s) pied(s)`]
+    : ['partial', 'tenue écrite'];
+  return box({ sec: '02', title: `Costume · ${cos.name}`, st: st[0], stLabel: st[1], body });
+}
+
+function waitBox(sec, title, text) {
+  return box({ sec, title, st: 'todo', stLabel: 'en attente', body: `<p>${esc(text)}</p>`, wait: true });
 }
 
 function boxSheet(c, key, cos) {
-  if (!cos.fullbody.validated) return waitBox('ST-05', 'Planche', 'La planche attend un plein pied validé.');
+  if (!cos.fullbody.validated) return waitBox('03', 'Planche', 'La planche attend un plein pied validé.');
   const form = `sheet.${key}`;
   let body = `<p>La planche de personnage en une génération : plein pied de face, de profil, de dos, 3/4, gros plans.
     Elle valide le design avant les vues. Le disque sur le visage des plein pieds se juge sur pièces : A/B en rend
@@ -450,11 +520,11 @@ function boxSheet(c, key, cos) {
   }
   const st = cos.sheet ? ['done', `${cos.sheet} validée`] : cos.sheets.length ? ['partial', `${cos.sheets.length} planche(s)`]
     : ['todo', 'à faire'];
-  return box({ sec: 'ST-05', title: 'Planche', st: st[0], stLabel: st[1], body, next: isNext('sheet', 'sheet_ok') });
+  return box({ sec: '03', title: 'Planche', st: st[0], stLabel: st[1], body, next: isNext('sheet', 'sheet_ok') });
 }
 
 function boxViews(c, key, cos, d) {
-  if (!cos.sheet) return waitBox('ST-06', 'Vues orthogonales', 'Les vues attendent une planche validée.');
+  if (!cos.sheet) return waitBox('04', 'Vues orthogonales', 'Les vues attendent une planche validée.');
   const v = cos.views;
   const form = `views.${key}`;
   const methods = (d.view_methods || Object.keys(METHOD_LABEL)).map((m) => [m, METHOD_LABEL[m] || m]);
@@ -494,7 +564,7 @@ function boxViews(c, key, cos, d) {
   if (v.check) st = v.check.ok ? ['done', 'contrôle passé'] : ['partial', 'contrôle en échec'];
   else if (prepared.length) st = ['partial', 'préparées'];
   else if (raw.length) st = ['partial', `${raw.length} brute(s)`];
-  return box({ sec: 'ST-06', title: 'Vues orthogonales', st: st[0], stLabel: st[1], body,
+  return box({ sec: '04', title: 'Vues orthogonales', st: st[0], stLabel: st[1], body,
     next: isNext('views', 'prep', 'check') });
 }
 
@@ -515,7 +585,7 @@ function checkTable(chk) {
 
 function boxMesh(c, key, cos) {
   const v = cos.views;
-  if (!Object.keys(v.prepared).length) return waitBox('ST-07', 'Mesh 3D', 'Le mesh attend les vues préparées.');
+  if (!Object.keys(v.prepared).length) return waitBox('05', 'Mesh 3D', 'Le mesh attend les vues préparées.');
   const form = `mesh.${key}`;
   const multiOk = v.check?.ok;
   let body = `<p>Le mesh PBR, canaux à part. En multi-vues, les quatre vues doivent avoir passé le contrôle ; une vue
@@ -538,11 +608,11 @@ function boxMesh(c, key, cos) {
          encodeURIComponent(fileUrl(c.slug, m.glb, m.at))}">Voir</a></td></tr>`).join('')}</tbody></table></div>`;
   }
   const st = cos.meshes.length ? ['done', `v${cos.meshes.at(-1).version}`] : ['todo', 'à faire'];
-  return box({ sec: 'ST-07', title: 'Mesh 3D', st: st[0], stLabel: st[1], body, next: isNext('mesh') });
+  return box({ sec: '05', title: 'Mesh 3D', st: st[0], stLabel: st[1], body, next: isNext('mesh') });
 }
 
 function boxRig(c, key, cos) {
-  if (!cos.meshes.length) return waitBox('ST-08', 'Rig SOMA', 'Le rig attend un mesh.');
+  if (!cos.meshes.length) return waitBox('06', 'Rig SOMA', 'Le rig attend un mesh.');
   const backend = state.detail.backends.unirig;
   let body = `<p>Squelette SOMA 77, bind en A-pose, cinq poses de contrôle à regarder dans le viewer avant
     d'accepter.${backend === 'stub' ? ' UniRig n\'est pas encore branché : le rig est factice.' : ''}</p>
@@ -562,29 +632,58 @@ function boxRig(c, key, cos) {
   const last = cos.rigs.at(-1);
   const st = !last ? ['todo', 'à faire'] : last.verdict === 'accepted' ? ['done', 'accepté']
     : ['partial', last.verdict === 'rejected' ? 'refusé' : 'à regarder'];
-  return box({ sec: 'ST-08', title: 'Rig SOMA', st: st[0], stLabel: st[1], body, next: isNext('rig', 'rig_ok') });
+  return box({ sec: '06', title: 'Rig SOMA', st: st[0], stLabel: st[1], body, next: isNext('rig', 'rig_ok') });
 }
 
-function boxIdentity(d) {
+/* ── en attendant : ce qu'on peut faire pendant un rendu ── */
+
+function waitingCard(d) {
+  const run = state.jobs.find((j) => j.status === 'running') || state.jobs.find((j) => j.status === 'queued');
+  if (!run || !d) return '';
+  const c = d.character;
+  const heavy = HEAVY.has(run.action) || (run.action === 'face' && run.params?.engine === 'h3');
+  let body;
+  if (!Object.keys(c.costumes).length) {
+    body = `<p>Pendant que ça calcule : sa tenue. Elle attendra le visage verrouillé.</p>
+      ${textarea('costume_new.brief', '', 'en français : ce qu\'il porte, de la tête aux pieds', 3)}
+      <div class="form-row"><span class="sp"></span>${act('costume_add', 'Garder la tenue', { form: 'costume_new' })}</div>`;
+  } else if (!(c.identity || {}).personality_traits) {
+    const picked = new Set(state.drafts['wait.traits'] || []);
+    body = `<p>Pendant que ça calcule : trois traits de caractère.</p>
+      <div class="chips-row">${TRAITS.map((t) => `<button class="chip${picked.has(t) ? ' chip-selected' : ''}"
+        data-trait="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+      <div class="form-row"><span class="sp"></span><button class="tb ghost sm" data-save-traits${picked.size ? '' : ' disabled'}>
+        Garder</button></div>`;
+  } else {
+    body = `<p>Pendant que ça calcule : relis sa fiche, corrige d'un clic ce qui ne va pas.</p>`;
+  }
+  body += heavy
+    ? '<p class="hint">H3 occupe la mémoire : l\'assistant revient après ce rendu.</p>'
+    : `<a class="tb ghost block" href="./console.html?slug=${encodeURIComponent(c.slug)}">Parler avec l'assistant ▸</a>`;
+  return box({ sec: '', title: 'En attendant', st: 'partial', stLabel: run.label, body });
+}
+
+/* ── la fiche : ce que le studio sait de lui ────────────── */
+
+function fiche(d) {
   const c = d.character;
   const sheet = c.identity || {};
+  const rows = SHEET_FIELDS.filter((f) => f.section === 'CORE' || f.section === 'PSYCHE')
+    .filter((f) => f.key !== 'character_name').map((f) => {
+      const v = sheet[f.key] || '';
+      const cell = state.editField === f.key
+        ? `<form data-form="field" data-key="${f.key}" class="sheet-edit"><input class="fld" name="v" value="${esc(v)}"
+            autocomplete="off"></form>`
+        : `<div class="sheet-val ${v ? 'filled' : 'empty'}" data-edit="${f.key}" title="modifier">${esc(v)}</div>`;
+      return `<div class="sheet-row"><div class="sheet-key">${esc(f.label)}</div>${cell}</div>`;
+    }).join('');
+  const notes = (c.notes || []).length ? `<div class="sheet-section"><div class="sheet-section-title">notes</div>${
+    c.notes.map((n, i) => `<div class="sheet-row"><div class="sheet-key">#${i + 1}</div><div class="sheet-val filled">${
+      esc(n)}</div></div>`).join('')}</div>` : '';
   const filled = d.summary.identity.filled;
-  const sections = SECTIONS.map((name) => {
-    const rows = SHEET_FIELDS.filter((f) => f.section === name && sheet[f.key]).map((f) =>
-      `<div class="sheet-row"><div class="sheet-key">${esc(f.label)}</div><div class="sheet-val filled">${
-        esc(sheet[f.key])}</div></div>`).join('');
-    return rows ? `<div class="sheet-section"><div class="sheet-section-title">${name}</div>${rows}</div>` : '';
-  }).join('');
-  const notes = (c.notes || []).length ? `<div class="sheet-section"><div class="sheet-section-title">notes (${
-    c.notes.length})</div>${c.notes.map((n, i) => `<div class="sheet-row"><div class="sheet-key">#${i + 1}</div>
-    <div class="sheet-val filled">${esc(n)}</div></div>`).join('')}</div>` : '';
-  const body = `${sections || notes ? sections + notes : '<p>Fiche vide : la conversation la remplit.</p>'}
-    <label class="field"><span class="lbl">Style</span><select class="fld" data-style>
-      <option value="photoreal"${c.style === 'photoreal' ? ' selected' : ''}>photoréaliste</option>
-      <option value="stylized"${c.style === 'stylized' ? ' selected' : ''}>stylisé</option></select></label>
-    <a class="tb ghost block" href="./console.html?slug=${encodeURIComponent(c.slug)}">Continuer la conversation ▸</a>`;
-  const st = filled >= d.summary.identity.total ? 'done' : filled ? 'partial' : 'todo';
-  return box({ sec: 'ST-01', title: 'Identité', st, stLabel: `${filled}/${d.summary.identity.total}`, body });
+  const body = `<div class="sheet-section">${rows}</div>${notes}
+    <a class="tb ghost block" href="./console.html?slug=${encodeURIComponent(c.slug)}">Approfondir avec l'assistant ▸</a>`;
+  return box({ sec: '', title: 'La fiche', st: filled ? 'partial' : 'todo', stLabel: `${filled}/${d.summary.identity.total}`, body });
 }
 
 /* ── la file ────────────────────────────────────────────── */
@@ -613,6 +712,8 @@ function paintJobs() {
   const node = $('#jobs');
   if (!node) return;
   node.innerHTML = renderJobs();
+  const wait = $('#waiting');
+  if (wait && !wait.contains(document.activeElement)) wait.innerHTML = waitingCard(state.detail);
   const live = state.jobs.filter((j) => j.status === 'running' || j.status === 'queued').length;
   $('#jobs-count').textContent = live ? `${live} actif${live > 1 ? 's' : ''}` : '';
 }
@@ -680,6 +781,9 @@ async function onRoute() {
     state.detail = null;
     state.jobs = [];
     state.costume = undefined;
+    state.stage = null;
+    state.renaming = false;
+    state.editField = null;
     state.sig = '';
     state.seen.clear();
     window.scrollTo(0, 0);
@@ -734,6 +838,25 @@ async function doAction(btn) {
   const params = collect(btn);
   btn.disabled = true;
   try {
+    if (action === 'costume_go') {
+      // Une nouvelle tenue : on la garde, puis, si le visage est verrouillé,
+      // son plein pied part aussitôt dans la file.
+      const add = await api(actionUrl('costume_add'), { method: 'POST', body: params });
+      state.costume = add.result.costume;
+      if (state.detail?.character.face.locked) {
+        const run = await api(actionUrl('fullbody'), {
+          method: 'POST', body: { costume: state.costume, variants: params.variants },
+        });
+        state.jobs.unshift(run.job);
+        toast(`${run.job.label} : en file`);
+      } else {
+        toast('tenue gardée');
+      }
+      forget(btn.dataset.form);
+      await loadDetail();
+      render(true);
+      return;
+    }
     const out = await api(actionUrl(action), { method: 'POST', body: params });
     if (out.job) {
       toast(`${out.job.label} : en file`);
@@ -767,15 +890,40 @@ async function uploadFiles(form, files) {
   render(true);
 }
 
-async function quickCreate(form) {
+async function createCharacter(form) {
   const name = form.elements.name.value.trim();
-  if (!name) return;
+  if (!name) { form.elements.name.focus(); return; }
   try {
     const out = await api('/api/characters', { method: 'POST', body: { name } });
     location.hash = `#/p/${encodeURIComponent(out.slug)}`;
   } catch (e) {
     toast(e.message, 6000);
   }
+}
+
+async function saveIdentity(body, message) {
+  try {
+    await api(`/api/characters/${encodeURIComponent(slug())}/identity`, { method: 'PUT', body });
+    await loadDetail();
+    if (message) toast(message);
+  } catch (e) {
+    toast(e.message, 6000);
+  }
+}
+
+async function rename(form) {
+  const name = form.elements.name.value.trim();
+  state.renaming = false;
+  if (name && name !== state.detail.character.name) await saveIdentity({ name }, 'renommé');
+  render(true);
+}
+
+async function saveField(form) {
+  const key = form.dataset.key;
+  const value = form.elements.v.value.trim();
+  state.editField = null;
+  if (value !== ((state.detail.character.identity || {})[key] || '')) await saveIdentity({ fields: { [key]: value } });
+  render(true);
 }
 
 async function setStyle(value) {
@@ -815,6 +963,47 @@ function wire() {
     if (actBtn) { e.preventDefault(); e.stopPropagation(); doAction(actBtn); return; }
     const tab = t.closest('[data-costume-tab]');
     if (tab) { state.costume = tab.dataset.costumeTab || null; render(true); return; }
+    const step = t.closest('[data-stage]');
+    if (step && !step.disabled) { state.stage = step.dataset.stage; render(true); window.scrollTo(0, 0); return; }
+    const goto = t.closest('[data-goto]');
+    if (goto) {
+      state.stage = goto.dataset.goto;
+      if (goto.dataset.goto === 'costume' && !Object.keys(state.detail.character.costumes).length) state.costume = null;
+      render(true);
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (t.closest('[data-rename]')) {
+      state.renaming = true;
+      render(true);
+      const inp = $('form[data-form="rename"] input');
+      if (inp) { inp.focus(); inp.select(); }
+      return;
+    }
+    const styleSet = t.closest('[data-style-set]');
+    if (styleSet) { setStyle(styleSet.dataset.styleSet); return; }
+    const edit = t.closest('[data-edit]');
+    if (edit) {
+      state.editField = edit.dataset.edit;
+      render(true);
+      const inp = $('form[data-form="field"] input');
+      if (inp) inp.focus();
+      return;
+    }
+    const trait = t.closest('[data-trait]');
+    if (trait) {
+      const picked = new Set(state.drafts['wait.traits'] || []);
+      picked.has(trait.dataset.trait) ? picked.delete(trait.dataset.trait) : picked.add(trait.dataset.trait);
+      state.drafts['wait.traits'] = [...picked];
+      $('#waiting').innerHTML = waitingCard(state.detail);
+      return;
+    }
+    if (t.closest('[data-save-traits]')) {
+      const traits = (state.drafts['wait.traits'] || []).join(', ');
+      delete state.drafts['wait.traits'];
+      saveIdentity({ fields: { personality_traits: traits } }, 'traits gardés').then(() => render(true));
+      return;
+    }
     const drop = t.closest('[data-drop-ref]');
     if (drop) {
       e.preventDefault();
@@ -841,7 +1030,16 @@ function wire() {
     if (e.target.matches('[data-style]')) setStyle(e.target.value);
   });
   app.addEventListener('submit', (e) => {
-    if (e.target.dataset.form === 'quick') { e.preventDefault(); quickCreate(e.target); }
+    const form = e.target.dataset.form;
+    if (!form) return;
+    e.preventDefault();
+    if (form === 'create') createCharacter(e.target);
+    if (form === 'rename') rename(e.target);
+    if (form === 'field') saveField(e.target);
+  });
+  app.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (state.renaming || state.editField) { state.renaming = false; state.editField = null; render(true); }
   });
   app.addEventListener('toggle', (e) => {
     const id = e.target.dataset?.job;
@@ -854,7 +1052,10 @@ function wire() {
       });
     } else state.openLogs.delete(id);
   }, true);
-  app.addEventListener('focusout', () => {
+  app.addEventListener('focusout', (e) => {
+    // Un champ de la fiche se garde en quittant le champ, comme avec Entrée.
+    const field = e.target.closest?.('form[data-form="field"]');
+    if (field && state.editField) setTimeout(() => { if (state.editField) saveField(field); }, 120);
     setTimeout(() => { if (state.pending && !typing()) render(); }, 180);
   });
 

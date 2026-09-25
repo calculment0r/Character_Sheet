@@ -120,7 +120,7 @@ def comfy_route(tmp: Path, ident: Path) -> None:
                 break
             except OSError:
                 subprocess.run([sys.executable, "-c", "import time; time.sleep(0.1)"])
-        os.environ.update(FACTORY_H3="comfyui", FACTORY_COMFYUI_URL=f"http://127.0.0.1:{port}",
+        os.environ.update(FACTORY_H3="comfyui", FACTORY_FACE_ENGINE="h3", FACTORY_COMFYUI_URL=f"http://127.0.0.1:{port}",
                           FACTORY_COMFYUI_URL_H3=f"http://127.0.0.1:{port}",
                           FACTORY_WORKFLOWS=str(tmp / "workflows"), FACTORY_PROJECTS=str(tmp / "comfy"))
         out = usine("gabarit", str(REPO / "tools/fixtures/h3_export_api.json"))
@@ -169,7 +169,7 @@ def studio_route(tmp: Path) -> None:
 
     port, llm_port = free_port(), free_port()
     env = {**os.environ, "FACTORY_PROJECTS": str(tmp / "studio"), "FACTORY_LLM_URL": f"http://127.0.0.1:{llm_port}",
-           "FACTORY_LLM_MODEL": "modele-du-studio", "PYTHONIOENCODING": "utf-8"}
+           "FACTORY_LLM_MODEL": "modele-du-studio", "PYTHONIOENCODING": "utf-8", "FACTORY_STUB_DELAY": "0.5"}
     procs = [subprocess.Popen([sys.executable, str(REPO / "tools/mock_llm.py"), str(llm_port)],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
              subprocess.Popen([sys.executable, "-m", "factory", "studio", "--hote", "127.0.0.1", "--port", str(port)],
@@ -231,6 +231,24 @@ def studio_route(tmp: Path) -> None:
         check("studio : deux variantes en un travail, visage verrouillé une seule fois",
               faces["status"] == "done" and len(faces["result"]["made"]) == 2 and locked["status"] == "done"
               and again["status"] == "http" and "déjà verrouillé" in again["error"]["error"]["message"])
+
+        # Nom d'abord, puis un brief : la fiche se remplit du visuel, et une
+        # tenue écrite pendant le rendu n'est pas écrasée par le calcul.
+        code, made = js("/api/characters", {"name": "Kévin Essai"})
+        kid = made.get("slug")
+        code, queued = js(f"/api/characters/{kid}/actions/face", {"brief": "vingt ans, coupe courte", "variants": 4})
+        code, added = js(f"/api/characters/{kid}/actions/costume_add", {"brief": "hoodie bleu, baggy blanc"})
+        for _ in range(600):
+            if js(f"/api/jobs/{queued['job']['id']}")[1]["status"] not in ("queued", "running"):
+                break
+            time.sleep(0.05)
+        _, k = js(f"/api/characters/{kid}")
+        kc = k["character"]
+        check("studio : créé par son nom, le brief remplit la fiche, la tenue écrite pendant le rendu reste",
+              kc["identity"].get("face_description") == "vingt ans, coupe courte" and len(kc["face"]["variations"]) == 4
+              and len({c["desc"] for c in kc["face"]["candidates"]}) == 4 and "tenue-1" in kc["costumes"]
+              and kc["costumes"]["tenue-1"]["brief"] == "hoodie bleu, baggy blanc" and code == 200,
+              f"{len(kc['face']['candidates'])} propositions, tenues {list(kc['costumes'])}")
 
         buf = io.BytesIO()
         Image.new("RGB", (64, 96), (120, 90, 60)).save(buf, "PNG")
@@ -445,7 +463,7 @@ def native_template() -> None:
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="usine-check-"))
     os.environ["FACTORY_PROJECTS"] = str(tmp)
-    for cap in ("H3", "TRELLIS", "HUNYUAN3D", "UNIRIG", "KIMODO", "SAM3DBODY"):
+    for cap in ("H3", "PORTRAIT", "BRIEF", "TRELLIS", "HUNYUAN3D", "UNIRIG", "KIMODO", "SAM3DBODY"):
         os.environ[f"FACTORY_{cap}"] = "stub"
     os.environ["FACTORY_PREP"] = "builtin"
     os.environ["FACTORY_DELIGHT"] = "off"
