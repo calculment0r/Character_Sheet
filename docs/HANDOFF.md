@@ -61,24 +61,31 @@ est, mais la chaîne d'images change selon les décisions ci-dessous.**
   6 pas ; édition entraînée à 1024² et 1536² d'aire → en 9:16, 768 × 1376
   ou 1152 × 2048).
 
+### Fait le 25/09 au soir (session suivante) — lire `docs/ETUDES.md`
+
+- **Plein pied en pose naturelle** (`figure.py`), validé tel quel.
+- **Étage A-pose** (`pose.py`, `chain.apose`, `./usine pose` / `pose-ok`,
+  studio) : DWPose relève le plein pied validé, squelette A-pose, Qwen 2.1
+  turbo le rend avec le plein pied en `<image1>`. Essai réel : 4/4.
+- **Vues `qwen21-pose`** (défaut) : une édition par vue, le squelette
+  tourné à l'azimut. Essai réel : profils, dos, échelle et ligne de sol
+  justes ; les 3/4 tournent trop peu.
+- **La planche H3 ne conditionne plus rien** ; frise du studio :
+  Visage · Costume · A-pose · Vues · 3D · Rig. `chain_check` 45/45,
+  parcours de page vérifié dans Edge headless.
+
 ### À faire, dans l'ordre
 
-1. **Plein pied** : branché — `chain.fullbody` passe par Qwen 2.1 turbo par
-   défaut (`figure.py` moteur `qwen21` → `qwen21.generate`, visage verrouillé
-   `<image1>`, vêtements `<image2>`, `<image3>`, 1152 × 2048 ; réglage
-   `fullbody_engine`). **Reste : l'A-pose** (bras le long du corps). `factory/figure.py` (FLUX.2 et
-   Qwen-Edit 2511, testés ce jour : meilleurs que H3) peut rester en option
-   ou disparaître.
-2. **Visage** : moteur `qwen21` de `portrait.py` → `qwen21.generate` en t2i
-   (`FACE`), à comparer à Z-Image ; le défaut se tranche avec Cal sur pièces.
-3. **Vues** depuis le plein pied validé, par Qwen 2.1 en édition (« même
-   personne, même tenue, vue de dos, profil gauche… ») ou le LoRA orbite
-   (`views_qwen.qwen21-orbit`, à passer en turbo), en HD.
-4. **Retirer la planche H3 des étages de validation** et ajouter en fin de
-   chaîne un **turnaround H3** de présentation. Frise du studio :
-   Visage · Costume · Vues · 3D · Rig · Turnaround.
-5. `./usine doctor` : valider les gabarits `qwen21` à blanc.
-6. Relancer `tools/chain_check.py` (44/44 au 25/09) et le parcours de page.
+1. **Faire tourner l'A-pose et les vues sur `essai-atelier` dans le
+   studio** (le moteur réel n'a tourné que par les scripts d'essai).
+2. **Les 3/4** : donner du relief au squelette (épaules, hanches, pieds).
+3. **Mesurer l'azimut** des vues (SAM 3D Body) pour le contrôle ±5°.
+4. **Planche de référence** : le workflow Civitai « Qwen Image 2.1 Character
+   Reference Sheet Generator » (nikhilprasanth, 24/09) — face, dos, gros
+   plan, pose et cadrage imposés par une image de mannequin — à reprendre
+   pour la planche et pour nourrir le **turnaround H3** de fin de chaîne.
+5. **Visage** par Qwen 2.1 turbo, à comparer à Z-Image devant Cal.
+6. `./usine doctor` : valider les gabarits `qwen21` à blanc.
 
 ### État des machines et des personnages
 
