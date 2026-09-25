@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CHARACTER FACTORY — thème</title>
+<meta name="description" content="Jetons, typographie et composants du thème NL. Page statique, branchée sur les mêmes CSS que l'application.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23e0674a'/%3E%3Crect x='12' y='12' width='8' height='8' rx='2' fill='%23170c08'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Azeret+Mono:wght@300;400;500&family=Saira+Semi+Condensed:wght@400;600&display=swap">
+
+<!-- Les MÊMES feuilles que l'application. Cette page ne redéfinit
+     aucune couleur, aucune fonte, aucun composant : elle les montre.
+     Si elle est juste, l'appli l'est aussi. -->
+<link rel="stylesheet" href="./assets/tokens.css">
+<link rel="stylesheet" href="./assets/rack.css">
+<link rel="stylesheet" href="./assets/factory.css">
+
+<style>
+/* Mise en page propre au catalogue, rien qui touche au thème. */
+.kit { max-width: 1180px; margin: 0 auto; padding: var(--s6) var(--s6) 80px; display: flex; flex-direction: column; gap: 44px; }
+.kit h2 {
+  margin: 0 0 4px; font-family: var(--f-disp); font-size: 15px; font-weight: 400;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--ink2);
+}
+.kit h3 {
+  margin: 22px 0 10px; font-family: var(--f-mono); font-size: 9px; letter-spacing: .22em;
+  text-transform: uppercase; color: var(--or);
+}
+.kit > section > p { margin: 0 0 18px; max-width: 74ch; color: var(--ink2); font-size: 12.5px; line-height: 1.75; }
+.rule { height: 1px; background: var(--line); margin: 0; border: 0; }
+.grid { display: grid; gap: 8px; }
+.g4 { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.g2 { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* nuancier */
+.sw { border-radius: var(--r2); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
+.sw .fill { height: 56px; }
+.sw .txt { padding: 8px 10px; background: var(--panel); }
+.sw code { display: block; font-family: var(--f-mono); font-size: 10px; color: var(--ink); letter-spacing: .06em; }
+.sw small { display: block; font-family: var(--f-mono); font-size: 8.5px; color: var(--ink3); letter-spacing: .1em; margin-top: 3px; }
+.sw em { display: block; font-style: normal; font-size: 11px; color: var(--ink2); margin-top: 5px; line-height: 1.5; }
+
+/* spécimens */
+.spec { background: var(--panel); border-radius: var(--r3); padding: var(--s5); }
+.spec .name { font-family: var(--f-mono); font-size: 9px; letter-spacing: .2em; text-transform: uppercase; color: var(--or); }
+.spec .line { margin-top: 10px; overflow: hidden; }
+.spec .use { margin-top: 12px; font-size: 11.5px; line-height: 1.6; color: var(--ink2); }
+.spec .use b { color: var(--ink); font-weight: 600; }
+
+/* démonstration d'un composant */
+.demo { background: var(--panel); border-radius: var(--r3); padding: var(--s5); display: flex; flex-direction: column; gap: 12px; }
+.demo > .lbl { color: var(--ink3); }
+.demo .stagewrap { background: var(--bg); border-radius: var(--r2); padding: 12px; }
+
+/* barème */
+.scale { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.scale div { text-align: center; }
+.scale i { display: block; background: var(--or); border-radius: 2px; }
+.scale span { display: block; font-family: var(--f-mono); font-size: 8.5px; color: var(--ink3); margin-top: 5px; letter-spacing: .08em; }
+.radii { display: flex; gap: 10px; flex-wrap: wrap; }
+.radii div { width: 62px; height: 62px; background: var(--panel3); box-shadow: inset 0 0 0 1px var(--line-cy); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 5px; font-family: var(--f-mono); font-size: 8.5px; color: var(--ink3); }
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <a class="logo" href="./console.html" title="ouvrir l'application">
+    <span class="sq"><i></i></span>
+    <span>
+      <b>Character Factory</b>
+      <small>thème · catalogue</small>
+    </span>
+  </a>
+  <span class="sp"></span>
+  <span class="pill on"><i></i><span>mêmes css que l'appli</span></span>
+  <a class="tb ghost sm" href="./console.html">Ouvrir l'appli ▸</a>
+</header>
+
+<main class="kit">
+
+  <!-- ══ origine ══════════════════════════════════════════ -->
+  <section>
+    <h2>D'où ça vient</h2>
+    <p>
+      Le langage est celui du banc NL — <em>Station NL Rack Verdant</em>, <em>Banc NL Comparatif</em> :
+      blocs pleins, filets fins, chiffres larges, deux familles de couleur sur un fond presque noir.
+      Le CSS d'origine dont tout est tiré est conservé dans
+      <code class="mono" style="letter-spacing:.06em;text-transform:none;color:var(--cy)">docs/reference/nl-bench.css</code>.
+    </p>
+    <p class="warn">
+      Cette page ne définit aucune couleur ni aucune fonte. Elle charge <code>assets/tokens.css</code>,
+      <code>assets/rack.css</code> et <code>assets/factory.css</code>, exactement comme l'application.
+      Modifier un jeton se voit ici immédiatement — et il n'y a donc jamais deux vérités.
+    </p>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ══ palette ══════════════════════════════════════════ -->
+  <section>
+    <h2>Palette</h2>
+    <p>Toutes les couleurs vivent dans <code class="mono" style="letter-spacing:.06em;text-transform:none;color:var(--cy)">assets/tokens.css</code>. Aucune valeur en dur ailleurs.</p>
+
+    <h3>Fonds — du plus profond au plus relevé</h3>
+    <div class="grid g4">
+      <div class="sw"><div class="fill" style="background:var(--bg)"></div><div class="txt"><code>--bg</code><small>#0a0d0b</small><em>le fond de page, presque noir teinté vert</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--panel)"></div><div class="txt"><code>--panel</code><small>#101413</small><em>tout panneau, toute carte, toute rangée</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--panel2)"></div><div class="txt"><code>--panel2</code><small>#151a18</small><em>un cran au-dessus : champs, bulles, boutons</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--panel3)"></div><div class="txt"><code>--panel3</code><small>#1b211e</small><em>le plus relevé : rails, puces, ascenseurs</em></div></div>
+    </div>
+
+    <h3>Encres</h3>
+    <div class="grid g4">
+      <div class="sw"><div class="fill" style="background:var(--ink)"></div><div class="txt"><code>--ink</code><small>#e6eae7</small><em>le texte courant, les valeurs remplies</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--ink2)"></div><div class="txt"><code>--ink2</code><small>#9ca8a2</small><em>le secondaire, la prose explicative</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--ink3)"></div><div class="txt"><code>--ink3</code><small>#7c8884</small><em>les étiquettes, ce qui n'est pas encore rempli</em></div></div>
+    </div>
+
+    <h3>Accents — chacun a un seul emploi</h3>
+    <div class="grid g4">
+      <div class="sw"><div class="fill" style="background:var(--cy)"></div><div class="txt"><code>--cy</code><small>#b9cfd8</small><em>acier pâle : la voie A, les valeurs lues, les chiffres</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--or)"></div><div class="txt"><code>--or</code><small>#e0674a</small><em>orange : l'action, la voie B, l'alerte. Jamais décoratif.</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--grn)"></div><div class="txt"><code>--grn</code><small>#2f6b4a</small><em>vert sourd : un état engagé, une option retenue</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--grn2)"></div><div class="txt"><code>--grn2</code><small>#3d8a60</small><em>vert clair : la progression qui avance</em></div></div>
+    </div>
+
+    <h3>Rampe des dalles de la console</h3>
+    <div class="grid g4">
+      <div class="sw"><div class="fill" style="background:var(--coral-3)"></div><div class="txt"><code>--coral-3</code><small>#f2cdb8</small><em>tête de pile</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--coral-2)"></div><div class="txt"><code>--coral-2</code><small>#e79b7c</small><em>milieu</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--coral-1)"></div><div class="txt"><code>--coral-1</code><small>#a8603c</small><em>bas de pile</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--verd-2)"></div><div class="txt"><code>--verd-2</code><small>#35684a</small><em>l'aval</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--verd-1)"></div><div class="txt"><code>--verd-1</code><small>#2a5540</small><em>l'aval, alterné</em></div></div>
+    </div>
+
+    <h3>Traits et encres inversées</h3>
+    <div class="row">
+      <span class="lbl">--line</span><span class="lbl">--line-cy</span><span class="lbl">--line-or</span><span class="lbl">--line-gr</span>
+      <span class="sp" style="flex:1"></span>
+      <span class="lbl">--on-or</span><span class="lbl">--on-cy</span><span class="lbl">--on-grn</span><span class="lbl">--on-light</span>
+    </div>
+    <p style="margin-top:10px">
+      Les séparations se font par un <b style="color:var(--ink)">filet</b> ou par un décalage de fond, jamais par une bordure épaisse.
+      En pratique : <code class="mono" style="letter-spacing:.06em;text-transform:none;color:var(--cy)">box-shadow: inset 0 0 0 1px var(--line)</code>,
+      qui ne prend pas de place dans la boîte.
+    </p>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ══ typographie ══════════════════════════════════════ -->
+  <section>
+    <h2>Typographie</h2>
+    <p>Quatre fontes, quatre emplois. Deux viennent de Google Fonts, deux sont posées dans <code class="mono" style="letter-spacing:.06em;text-transform:none;color:var(--cy)">assets/fonts/</code>.</p>
+
+    <div class="grid g2">
+      <div class="spec">
+        <span class="name">--f-ui · Chakra Petch</span>
+        <div class="line" style="font-family:var(--f-ui);font-size:26px">Une pilote de fret orbital</div>
+        <div class="use">L'<b>interface et le texte courant</b>. Tout ce qui se lit en bas de casse : prose, messages, valeurs de la fiche, libellés de boutons.</div>
+      </div>
+
+      <div class="spec">
+        <span class="name">--f-mono · Azeret Mono</span>
+        <div class="line" style="font-family:var(--f-mono);font-size:15px;letter-spacing:.14em;text-transform:uppercase">ST—01 · 0° 90° 180° 270°</div>
+        <div class="use">Les <b>étiquettes, références et mesures</b>. Toujours en capitales, toujours très espacé (.14em à .22em), toujours petit (8,5 à 10 px). C'est la voix de la machine.</div>
+      </div>
+
+      <div class="spec">
+        <span class="name">--f-disp · Venus Rising</span>
+        <div class="line venus" style="font-size:30px">Vues orthogonales · 09</div>
+        <div class="use">L'<b>affichage</b> : noms d'étages, rangées de rack, dalles, étiquettes de voie, grands chiffres. C'est la face de travail — elle porte les accents et les chiffres, donc elle va partout.</div>
+      </div>
+
+      <div class="spec">
+        <span class="name">--f-black · Norelli</span>
+        <div class="line" style="font-family:var(--f-black);font-size:30px;text-transform:uppercase;letter-spacing:.02em">Du prompt au personnage</div>
+        <div class="use">Le <b>logotype et le grand titre de la console</b>, et rien d'autre.</div>
+      </div>
+    </div>
+
+    <p class="warn" style="margin-top:18px">
+      Contrainte dure — Norelli ne contient que 54 signes : A-Z, a-z et l'espace.
+      Pas un chiffre, pas un accent, pas un signe de ponctuation, pas même la virgule.
+      Toute chaîne qu'on lui confie doit être écrite pour elle. Deux le sont, et ce sont
+      les deux seules : « CHARACTER FACTORY » et « DU PROMPT AU PERSONNAGE ».
+      Ailleurs, le navigateur changerait de police en plein mot sur le caractère manquant.
+    </p>
+
+    <h3>Les deux voix, côte à côte</h3>
+    <div class="demo">
+      <div class="c-head" style="padding:0">
+        <span class="sec">LOT—3</span>
+        <h2 style="margin:0">Vues et 3D</h2>
+        <span class="cnt">3 étages</span>
+      </div>
+      <p class="lbl">une référence en mono, un nom en venus, un compte en mono — c'est le motif de tout le produit</p>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ══ barèmes ══════════════════════════════════════════ -->
+  <section>
+    <h2>Barèmes</h2>
+    <p>Rayons sobres, espacements serrés. L'outil est dense : on préfère une information de plus à une marge de plus.</p>
+
+    <h3>Rayons</h3>
+    <div class="radii">
+      <div style="border-radius:var(--r1)">--r1 4</div>
+      <div style="border-radius:var(--r2)">--r2 5</div>
+      <div style="border-radius:var(--r3)">--r3 7</div>
+      <div style="border-radius:var(--r4)">--r4 9</div>
+    </div>
+    <p style="margin-top:10px">Au-delà de 9 px, on sort du langage. Le rond complet est réservé aux pastilles d'état et aux poignées.</p>
+
+    <h3>Espacements</h3>
+    <div class="scale">
+      <div><i style="width:var(--s1);height:var(--s1)"></i><span>s1 4</span></div>
+      <div><i style="width:var(--s2);height:var(--s2)"></i><span>s2 6</span></div>
+      <div><i style="width:var(--s3);height:var(--s3)"></i><span>s3 10</span></div>
+      <div><i style="width:var(--s4);height:var(--s4)"></i><span>s4 14</span></div>
+      <div><i style="width:var(--s5);height:var(--s5)"></i><span>s5 18</span></div>
+      <div><i style="width:var(--s6);height:var(--s6)"></i><span>s6 24</span></div>
+    </div>
+
+    <h3>Colonnes</h3>
+    <p><code class="mono" style="letter-spacing:.06em;text-transform:none;color:var(--cy)">--rack-w 252px</code> pour le rack, <code class="mono" style="letter-spacing:.06em;text-transform:none;color:var(--cy)">--sheet-w 340px</code> pour la fiche. Le centre prend ce qui reste. À 1280 px la fiche passe dessous, à 900 px le rack aussi.</p>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ══ composants ═══════════════════════════════════════ -->
+  <section>
+    <h2>Composants</h2>
+    <p>Chaque bloc ci-dessous est le composant réel, pas une reproduction.</p>
+
+    <h3>Boutons — .tb</h3>
+    <div class="demo">
+      <div class="row">
+        <button class="tb go">Action ▸</button>
+        <button class="tb">Neutre</button>
+        <button class="tb ghost">Fantôme</button>
+        <button class="tb on">Engagé</button>
+        <button class="tb" disabled>Inerte</button>
+        <button class="tb go sm">Petit</button>
+        <button class="tb ghost sm">Petit fantôme</button>
+      </div>
+      <div class="row">
+        <span class="seg">
+          <button class="tb on">A</button>
+          <button class="tb">B</button>
+          <button class="tb">Volet</button>
+          <button class="tb">Côte à côte</button>
+        </span>
+        <span class="lbl">.seg — un choix unique parmi peu</span>
+      </div>
+      <p class="lbl">un seul <b style="color:var(--or)">.go</b> orange par écran : c'est l'action principale, pas une décoration</p>
+    </div>
+
+    <h3>Commande locale — .cmd</h3>
+    <div class="demo">
+      <pre class="cmd">./usine planche vera-solen --ab</pre>
+      <p class="lbl">la commande qui lance un étage sur la machine : mono, acier pâle, filet vert — elle se copie telle quelle</p>
+    </div>
+
+    <h3>Pastilles d'état — .pill</h3>
+    <div class="demo">
+      <div class="row" style="gap:22px">
+        <span class="pill"><i></i><span>hors ligne</span></span>
+        <span class="pill on"><i></i><span>dgx · qwen3-vl-32b</span></span>
+        <span class="pill work"><i></i><span>en cours…</span></span>
+        <span class="pill err"><i></i><span>dgx muet</span></span>
+      </div>
+    </div>
+
+    <h3>Champs — .fld</h3>
+    <div class="demo">
+      <input class="fld" placeholder="une ligne…">
+      <textarea class="fld" rows="2" placeholder="plusieurs lignes…"></textarea>
+      <select class="fld"><option>un choix parmi une liste</option></select>
+    </div>
+
+    <h3>Dalle de console — .slab</h3>
+    <div class="demo">
+      <button class="slab t3">
+        <span class="ico"><svg viewBox="0 0 20 20" style="fill:none;stroke:currentColor;stroke-width:1.6"><path d="M4 18c0-3.3 2.7-6 6-6s6 2.7 6 6M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6" stroke-linecap="round"/></svg></span>
+        <span class="body"><span class="line"><span class="ref">ST—01</span><span class="nm">Identité</span></span><span class="sub">fiche · 21 champs · conversation</span></span>
+        <span class="dots"></span><span class="go">Ouvrir</span>
+      </button>
+      <button class="slab t2">
+        <span class="ico"><svg viewBox="0 0 20 20" style="fill:none;stroke:currentColor;stroke-width:1.6"><path d="M3 10a7 7 0 1 0 14 0 7 7 0 0 0-14 0M7 9v1M13 9v1M7 13c1.8 1.4 4.2 1.4 6 0" stroke-linecap="round"/></svg></span>
+        <span class="body"><span class="line"><span class="ref">ST—02</span><span class="nm">Visage</span></span><span class="sub">en local · ./usine visage &lt;perso&gt;</span></span>
+        <span class="dots"></span><span class="go">Voir</span>
+      </button>
+      <button class="slab lk">
+        <span class="ico"><svg viewBox="0 0 20 20" style="fill:none;stroke:currentColor;stroke-width:1.6"><path d="M10 2 3 6v8l7 4 7-4V6zM3 6l7 4 7-4M10 10v8" stroke-linejoin="round"/></svg></span>
+        <span class="body"><span class="line"><span class="ref">ST—06</span><span class="nm">Mesh 3D</span></span><span class="sub">en local · ./usine mesh &lt;perso&gt;</span></span>
+        <span class="dots"></span><span class="go">Voir</span>
+      </button>
+      <p class="lbl">corail = le lot en cours · vert = l'aval. La couleur dit où on travaille, pas ce qui est fini.</p>
+    </div>
+
+    <h3>Rangée de rack — .item</h3>
+    <div class="demo" style="max-width:300px">
+      <ul class="rack" style="margin:0;padding:0;list-style:none">
+        <li class="serie"><span>LOT 2</span><span class="n">3 étages</span></li>
+        <li><button class="item sel"><span class="st ok"></span><span class="txt"><span class="ref">ST-01</span><span class="nm">Identité</span><span class="sub">fiche · 21 champs</span></span><span class="dots"></span></button></li>
+        <li><button class="item locked"><span class="st"></span><span class="txt"><span class="ref">ST-02</span><span class="nm">Visage</span><span class="sub">verrouillé — worker image</span></span><span class="dots"></span></button></li>
+      </ul>
+    </div>
+
+    <h3>Moniteur à volet — .monitor</h3>
+    <div class="demo">
+      <div class="monitor" style="max-width:520px">
+        <div class="layer a" style="background:linear-gradient(135deg,#132a2e,#0a0d0b)"></div>
+        <div class="layer b" style="background:linear-gradient(135deg,#2b1712,#0a0d0b)"></div>
+        <span class="tag a"><b>A</b><span>trellis 2</span></span>
+        <span class="tag b"><b>B</b><span>hunyuan3d 2.1</span></span>
+        <div class="handle"><span class="grip"><i></i><i></i></span></div>
+        <span class="readout">v3</span>
+      </div>
+      <p class="lbl">pour comparer deux moteurs ou deux versions — volet coulissant, côte à côte, A seul, B seul</p>
+    </div>
+
+    <h3>Transport et timeline</h3>
+    <div class="demo">
+      <div class="transport">
+        <button class="tb go">▶</button>
+        <button class="tb">◂◂</button>
+        <button class="tb">▸▸</button>
+        <span class="lbl">boucle</span>
+        <button class="tb on">on</button>
+        <span class="sp"></span>
+        <span class="timecode">00:04:12<small>30 i/s</small></span>
+      </div>
+      <div class="timeline">
+        <div class="tl">
+          <div class="track"><div class="fill" style="width:38%"></div></div>
+          <div class="ticks"></div>
+          <input type="range" value="38">
+        </div>
+        <div class="tl-foot"><span>0</span><span>alt + molette : échelle du temps</span><span>126</span></div>
+      </div>
+    </div>
+
+    <h3>Carte de méta — .meta / .kv</h3>
+    <div class="grid g2">
+      <div class="meta a">
+        <dl class="kv">
+          <dt>pose</dt><dd>A-pose · 45°</dd>
+          <dt>squelette</dt><dd>soma77</dd>
+          <dt>sommets</dt><dd class="big">18 056</dd>
+        </dl>
+        <span class="dots"></span>
+      </div>
+      <div class="meta b">
+        <dl class="kv">
+          <dt>moteur</dt><dd>hunyuan3d 2.1</dd>
+          <dt>licence</dt><dd>exclusion UE</dd>
+          <dt>vram</dt><dd class="big">29 Go</dd>
+        </dl>
+        <span class="dots"></span>
+      </div>
+    </div>
+
+    <h3>Dépôt, avertissement, jauge</h3>
+    <div class="demo">
+      <div class="drop">Dépose une image n'importe où sur la page</div>
+      <p class="warn">Étage verrouillé — il attend un worker résident sur le DGX.</p>
+      <div class="meter">
+        <span>Fiche d'identité</span>
+        <span class="bar"><i style="width:62%"></i></span>
+      </div>
+    </div>
+
+    <h3>Widgets de la conversation</h3>
+    <div class="demo">
+      <div class="msg msg-widget" style="max-width:none">
+        <div class="msg-meta">modèle → archetype</div>
+        <div class="msg-body">
+          <div class="widget-question">Quel archétype ?</div>
+          <div class="widget-area">
+            <div class="chips-row">
+              <button class="chip chip-selected">Vétérane</button>
+              <button class="chip">Franc-tireuse</button>
+              <button class="chip">Mentor</button>
+              <button class="chip chip-other">+ autre…</button>
+            </div>
+            <div class="slider-wrap">
+              <div class="slider-value">42 ans</div>
+              <input type="range" class="slider" value="42">
+              <div class="slider-ticks"><span>18</span><span>80</span></div>
+            </div>
+            <div class="swatches-row">
+              <div class="swatch" style="background:#e0674a"><span>#e0674a</span></div>
+              <div class="swatch" style="background:#2f6b4a"><span>#2f6b4a</span></div>
+              <div class="swatch" style="background:#b9cfd8"><span>#b9cfd8</span></div>
+            </div>
+            <div class="widget-result">→ Vétérane</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Messages</h3>
+    <div class="demo">
+      <div class="msg msg-system"><div class="msg-meta">boot</div><div class="msg-body">// character factory — étage identité.</div></div>
+      <div class="msg msg-user"><div class="msg-meta">toi</div><div class="msg-body">Une pilote de fret orbital, la quarantaine.</div></div>
+      <div class="msg msg-assistant"><div class="msg-meta">modèle · dgx</div><div class="msg-body">Je pose les bases.</div></div>
+      <div class="msg msg-tool"><div class="msg-body">▸ update_character_sheet → ok: character_name, role</div></div>
+      <div class="msg msg-err"><div class="msg-meta">moteur</div><div class="msg-body">// erreur : dgx injoignable</div></div>
+      <div class="msg msg-assistant"><div class="msg-meta">modèle</div><div class="msg-body"><div class="thinking"><span></span><span></span><span></span></div></div></div>
+    </div>
+
+    <h3>Lignes de fiche — .sheet-row</h3>
+    <div class="demo" style="max-width:360px">
+      <div class="sheet-section">
+        <div class="sheet-section-title">CORE</div>
+        <div class="sheet-row"><div class="sheet-key">name</div><div class="sheet-val filled">Vera Solen</div></div>
+        <div class="sheet-row"><div class="sheet-key">role</div><div class="sheet-val filled">pilote de fret orbital</div></div>
+        <div class="sheet-row"><div class="sheet-key">alias</div><div class="sheet-val empty"></div></div>
+      </div>
+    </div>
+
+    <h3>Plan de planche — .sheetgrid</h3>
+    <div class="demo">
+      <div class="sheetgrid">
+        <div class="panel-cell"><span class="az">0°</span><span class="cap">Fullbody<br>front</span></div>
+        <div class="panel-cell"><span class="az">90°</span><span class="cap">Fullbody<br>left</span></div>
+        <div class="panel-cell"><span class="az">180°</span><span class="cap">Fullbody<br>back</span></div>
+        <div class="panel-cell"><span class="az">270°</span><span class="cap">Fullbody<br>right</span></div>
+        <div class="panel-cell"><span class="az">45°</span><span class="cap">Fullbody<br>3/4</span></div>
+      </div>
+    </div>
+
+    <h3>Boîte modale — .scrim / .modal</h3>
+    <div class="demo">
+      <div class="modal" style="width:100%;max-width:460px">
+        <div class="modal-head"><span class="t">// moteur</span><span class="sp"></span><button class="tb ghost sm">×</button></div>
+        <div class="modal-body">
+          <p>Le DGX est interrogé en dialecte OpenAI sur <code>/v1/chat/completions</code>.</p>
+          <input class="fld" placeholder="https://dgx-01.exemple.net">
+        </div>
+        <div class="modal-foot"><span class="sp"></span><button class="tb ghost sm">Annuler</button><button class="tb go sm">Enregistrer ▸</button></div>
+      </div>
+      <p class="lbl">le panneau se ferme au clic hors du panneau, ou à échap</p>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ══ règles ═══════════════════════════════════════════ -->
+  <section>
+    <h2>Les règles</h2>
+    <div class="grid g2">
+      <div class="spec"><span class="name">Sombre, sans bascule</span><div class="use">Le thème est sombre. Il n'y a <b>aucun sélecteur clair/sombre</b>, nulle part. Un passage en clair se ferait en réécrivant <b>tokens.css</b>, pas en ajoutant un bouton.</div></div>
+      <div class="spec"><span class="name">Dense</span><div class="use">C'est un outil professionnel. Une information de plus vaut mieux qu'une marge de plus. Pas de grands blancs, pas de cartes aérées.</div></div>
+      <div class="spec"><span class="name">Un seul orange par écran</span><div class="use">L'orange est l'action. S'il y en a trois, il n'y en a plus aucun. Pour le reste : fantôme, ou neutre.</div></div>
+      <div class="spec"><span class="name">Filets, pas de bordures</span><div class="use"><b>box-shadow inset</b> d'un pixel, jamais <b>border</b> : le filet ne prend pas de place dans la boîte et ne décale rien.</div></div>
+      <div class="spec"><span class="name">Les capitales sont pour la machine</span><div class="use">Étiquettes, références, mesures : mono, capitales, très espacé, petit. La prose reste en bas de casse — un résumé de trois lignes en capitales est illisible.</div></div>
+      <div class="spec"><span class="name">Zoom sémantique</span><div class="use">Plutôt qu'un second niveau ouvert au clic, l'élément en dit plus quand il grandit. Le panneau latéral se ferme au clic dehors et permute si on clique ailleurs.</div></div>
+    </div>
+  </section>
+
+</main>
+
+</body>
+</html>

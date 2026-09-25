@@ -1,0 +1,76 @@
+/* ============================================================
+   CHARACTER FACTORY — jetons de thème
+   Source unique de vérité. Repris du rack NL (Station NL Rack
+   Verdant / Banc NL Comparatif). Aucune couleur en dur ailleurs :
+   tout composant passe par une variable définie ici.
+   ============================================================ */
+
+:root {
+  /* fonds, du plus profond au plus relevé */
+  --bg:      #0a0d0b;
+  --panel:   #101413;
+  --panel2:  #151a18;
+  --panel3:  #1b211e;
+
+  /* encres */
+  --ink:     #e6eae7;
+  --ink2:    #9ca8a2;
+  --ink3:    #7c8884;
+
+  /* accents */
+  --cy:      #b9cfd8;   /* acier pâle — la voie A, les valeurs lues */
+  --or:      #e0674a;   /* orange — l'action, la voie B, l'alerte */
+  --grn:     #2f6b4a;   /* vert sourd — l'état engagé */
+  --grn2:    #3d8a60;   /* vert clair — la progression */
+
+  /* rampe des barres de la console — du plus clair au plus sourd,
+     comme la pile de logiciels du banc NL */
+  --coral-3: #f2cdb8;
+  --coral-2: #e79b7c;
+  --coral-1: #a8603c;
+  --verd-2:  #35684a;
+  --verd-1:  #2a5540;
+  --on-light: #1a0d07;
+
+  /* traits */
+  --line:    rgba(198, 213, 220, .14);
+  --line-cy: rgba(185, 207, 216, .45);
+  --line-or: rgba(224, 103, 74, .70);
+  --line-gr: rgba(47, 107, 74, .85);
+
+  /* encres inversées, posées sur un aplat d'accent */
+  --on-or:   #170c08;
+  --on-cy:   #0a0d0b;
+  --on-grn:  #eaf4ee;
+
+  /* typographie */
+  --f-ui:    'Chakra Petch', 'Saira Semi Condensed', sans-serif;
+  --f-mono:  'Azeret Mono', ui-monospace, monospace;
+  --f-disp:  'Venus Rising', 'Chakra Petch', sans-serif;
+  /* Norelli Demo Black ne porte que 54 glyphes : A-Z et a-z, sans
+     chiffre ni accent. Elle ne peut donc tenir que des chaînes dont on
+     maîtrise le contenu exact — en pratique le seul logotype. Partout
+     ailleurs, un caractère manquant ferait basculer la police en plein
+     mot, ce qui se voit. */
+  --f-black: 'Norelli', 'Venus Rising', 'Chakra Petch', sans-serif;
+
+  /* rayons — sobres, outil professionnel */
+  --r1: 4px;
+  --r2: 5px;
+  --r3: 7px;
+  --r4: 9px;
+
+  /* espacements */
+  --s1: 4px;
+  --s2: 6px;
+  --s3: 10px;
+  --s4: 14px;
+  --s5: 18px;
+  --s6: 24px;
+
+  /* gouttières du banc */
+  --rack-w:  252px;
+  --sheet-w: 340px;
+
+  color-scheme: dark;
+}

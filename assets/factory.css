@@ -1,0 +1,174 @@
+/* ============================================================
+   CHARACTER FACTORY — les étages
+   Conversation, fiche d'identité, widgets interactifs.
+   Les noms de classe sont ceux du générateur d'origine, pour que
+   le code repris continue de s'y accrocher sans réécriture.
+   ============================================================ */
+
+/* ── scène ──────────────────────────────────────────────── */
+.stage { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+.stage-body { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+.stage-note {
+  font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .14em;
+  line-height: 1.7; color: var(--ink3); text-transform: uppercase;
+}
+/* Le résumé d'étage est de la prose, pas une étiquette : on le
+   laisse en bas de casse, sinon il devient illisible sur trois lignes. */
+.stage-blurb {
+  margin: 10px 0 0; font-size: 12px; line-height: 1.65;
+  color: var(--ink2); max-width: 82ch;
+}
+
+/* ── conversation ───────────────────────────────────────── */
+.chat {
+  background: var(--panel); border-radius: var(--r3);
+  display: flex; flex-direction: column; min-height: 0;
+  height: clamp(340px, calc(100vh - 340px), 760px);
+}
+.chat-log { flex: 1; overflow-y: auto; padding: var(--s4); display: flex; flex-direction: column; gap: var(--s3); }
+
+.msg { display: flex; flex-direction: column; gap: 4px; max-width: 94%; }
+.msg-meta { font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--ink3); }
+.msg-body {
+  background: var(--panel2); border-radius: var(--r2); padding: var(--s3) var(--s4);
+  font-size: 12.5px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; word-break: break-word;
+}
+.msg-user { align-self: flex-end; align-items: flex-end; }
+.msg-user .msg-body { background: var(--panel3); box-shadow: inset 0 0 0 1px var(--line-cy); }
+.msg-system .msg-body { background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink3); font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .08em; line-height: 1.8; }
+.msg-tool .msg-body { background: transparent; color: var(--grn2); font-family: var(--f-mono); font-size: 9px; letter-spacing: .1em; padding: 2px var(--s2); }
+.msg-err .msg-body { background: rgba(224,103,74,.12); box-shadow: inset 0 0 0 1px rgba(224,103,74,.5); color: var(--or); }
+.msg-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.msg-images img { width: 78px; height: 78px; object-fit: cover; border-radius: var(--r1); box-shadow: inset 0 0 0 1px var(--line); }
+
+.thinking { display: flex; gap: 5px; padding: 3px 0; }
+.thinking span { width: 5px; height: 5px; border-radius: 50%; background: var(--cy); animation: sPulse 1.1s infinite; }
+.thinking span:nth-child(2) { animation-delay: .18s; }
+.thinking span:nth-child(3) { animation-delay: .36s; }
+
+/* ── zone de saisie ─────────────────────────────────────── */
+.composer { padding: var(--s3) var(--s4) var(--s4); display: flex; flex-direction: column; gap: 8px; box-shadow: inset 0 1px 0 var(--line); }
+.composer-actions { display: flex; align-items: center; gap: 8px; }
+.composer-actions .sp { flex: 1; }
+.composer label.tb { cursor: pointer; }
+
+.previews { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 var(--s4); }
+.previews:empty { display: none; }
+.preview-thumb {
+  position: relative; width: 54px; height: 54px; border-radius: var(--r1);
+  background-size: cover; background-position: center;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.preview-thumb button {
+  position: absolute; top: -5px; right: -5px; width: 17px; height: 17px;
+  border-radius: 50%; background: var(--or); color: var(--on-or);
+  font-size: 11px; line-height: 1; display: flex; align-items: center; justify-content: center;
+}
+
+/* ── widgets interactifs ────────────────────────────────── */
+.msg-widget { max-width: 100%; }
+.msg-widget .msg-body { background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line-gr); }
+.widget-question { font-size: 12.5px; color: var(--ink); margin-bottom: var(--s3); line-height: 1.5; }
+.widget-area { display: flex; flex-direction: column; gap: var(--s3); }
+.widget-locked .widget-area { opacity: .55; }
+.widget-result { font-family: var(--f-mono); font-size: 9px; letter-spacing: .14em; color: var(--grn2); text-transform: uppercase; }
+
+.chips-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  padding: 6px var(--s3); border-radius: var(--r1); background: var(--panel3);
+  color: var(--ink2); font-size: 11px; letter-spacing: .04em;
+  box-shadow: inset 0 0 0 1px transparent; transition: background .12s, color .12s;
+}
+.chip:hover:not(:disabled) { color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-cy); }
+.chip-selected { background: var(--grn); color: var(--on-grn); }
+.chip-other { background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink3); }
+.chips-custom { display: flex; gap: 6px; align-items: center; }
+.chips-custom .fld { flex: 1; }
+
+.slider-wrap { display: flex; flex-direction: column; gap: 6px; }
+.slider-value { font-family: var(--f-disp); font-size: 20px; letter-spacing: .06em; color: var(--cy); }
+.slider { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; }
+.slider::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--panel3); }
+.slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--or); }
+.slider::-moz-range-track { height: 4px; border-radius: 2px; background: var(--panel3); }
+.slider::-moz-range-thumb { width: 14px; height: 14px; border: none; border-radius: 50%; background: var(--or); }
+.slider-ticks { display: flex; justify-content: space-between; font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .16em; color: var(--ink3); }
+
+.swatches-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatches-row:empty { display: none; }
+.swatch {
+  position: relative; display: flex; align-items: flex-end; justify-content: center;
+  width: 62px; height: 46px; border-radius: var(--r1);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.swatch span {
+  font-family: var(--f-mono); font-size: 8px; letter-spacing: .08em;
+  background: rgba(10,13,11,.72); color: var(--ink); padding: 2px 4px;
+  border-radius: 2px; margin-bottom: 4px;
+}
+.swatch-x {
+  position: absolute; top: -5px; right: -5px; width: 17px; height: 17px;
+  border-radius: 50%; background: var(--or); color: var(--on-or); font-size: 11px;
+  line-height: 1; display: flex; align-items: center; justify-content: center;
+}
+.picker-row { display: flex; gap: 8px; align-items: center; }
+.color-picker { width: 42px; height: 30px; border-radius: var(--r1); background: var(--panel3); cursor: pointer; padding: 3px; }
+.widget-confirm { align-self: flex-start; }
+
+/* ── fiche d'identité ───────────────────────────────────── */
+.sheet { background: var(--panel); border-radius: var(--r3); display: flex; flex-direction: column; overflow: hidden; }
+.sheet-fields { padding: var(--s3) var(--s4); overflow-y: auto; max-height: clamp(300px, calc(100vh - 400px), 720px); display: flex; flex-direction: column; gap: var(--s4); }
+.sheet-section { display: flex; flex-direction: column; gap: 2px; }
+.sheet-section-title {
+  font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .22em;
+  text-transform: uppercase; color: var(--or); padding-bottom: 5px;
+  display: flex; align-items: baseline; gap: var(--s3);
+}
+.sheet-section-title::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.sheet-row { display: grid; grid-template-columns: 112px 1fr; gap: var(--s3); padding: 3px 0; align-items: baseline; }
+.sheet-key { font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink3); }
+.sheet-val { font-size: 11.5px; line-height: 1.45; word-break: break-word; }
+.sheet-val.filled { color: var(--ink); }
+.sheet-val.empty { color: var(--panel3); }
+.sheet-val.empty::before { content: "—"; }
+@keyframes flashIn { from { background: rgba(61,138,96,.42); } to { background: transparent; } }
+.sheet-val.flash { animation: flashIn .8s ease-out; border-radius: 2px; }
+.sheet-actions { padding: var(--s3) var(--s4) var(--s4); display: flex; flex-direction: column; gap: 6px; box-shadow: inset 0 1px 0 var(--line); }
+
+/* ── commande locale d'un étage ─────────────────────────── */
+.cmd {
+  margin: 10px 0 0; padding: var(--s3) var(--s4); border-radius: var(--r2);
+  background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line-gr);
+  font-family: var(--f-mono); font-size: 11px; line-height: 1.6; letter-spacing: .02em;
+  color: var(--cy); white-space: pre-wrap; word-break: break-word;
+}
+
+/* ── sortie texte ───────────────────────────────────────── */
+.out { background: var(--panel); border-radius: var(--r3); overflow: hidden; }
+.out pre {
+  margin: 0; padding: var(--s4); max-height: 420px; overflow: auto;
+  font-family: var(--f-mono); font-size: 10.5px; line-height: 1.7;
+  color: var(--ink2); white-space: pre-wrap; word-break: break-word; letter-spacing: 0;
+}
+.method-body {
+  margin: 0; font-family: var(--f-mono); font-size: 10.5px; line-height: 1.75;
+  color: var(--ink2); white-space: pre-wrap; word-break: break-word; letter-spacing: 0;
+}
+
+/* ── grille de planche (la maquette du brief §5.4) ──────── */
+.sheetgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+@media (max-width: 720px) { .sheetgrid { grid-template-columns: repeat(2, 1fr); } }
+.panel-cell {
+  position: relative; aspect-ratio: 2/3; border-radius: var(--r2);
+  background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; padding: var(--s3); text-align: center; overflow: hidden;
+}
+.panel-cell.close { aspect-ratio: 1/1; }
+.panel-cell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.panel-cell .cap {
+  font-family: var(--f-mono); font-size: 8px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ink3); line-height: 1.5; position: relative;
+}
+.panel-cell .az { font-family: var(--f-disp); font-size: 15px; letter-spacing: .06em; color: var(--panel3); position: relative; }
+.panel-cell.has-img .cap, .panel-cell.has-img .az { display: none; }

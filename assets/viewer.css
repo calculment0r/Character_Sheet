@@ -1,0 +1,179 @@
+/* ============================================================
+   CHARACTER FACTORY — viewer 3D
+   Mise en page propre au viewer : le moniteur large à gauche, la
+   colonne de réglages à droite. Aucune teinte ici : tout passe par
+   les jetons de tokens.css, les composants viennent de rack.css.
+   ============================================================ */
+
+/* ── en-tête ────────────────────────────────────────────── */
+.hdr a.logo { color: inherit; text-decoration: none; }
+.hdr .pill { min-width: 0; }
+.hdr .pill > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── la page : moniteur | réglages ──────────────────────── */
+.vw {
+  max-width: 1720px; margin: 0 auto;
+  padding: var(--s5) var(--s6) 48px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--s4); align-items: start;
+}
+/* Le moniteur reste à l'écran pendant qu'on descend dans les réglages. */
+.vw-stage {
+  display: flex; flex-direction: column; gap: var(--s3); min-width: 0;
+  position: sticky; top: 76px;
+}
+.vw-side { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+
+/* ── le moniteur 3D ─────────────────────────────────────── */
+/* rack.css le donne en 16/9 : ici il prend la hauteur de l'écran. Le
+   canevas est transparent, le fond vient des jetons au lieu du noir pur. */
+.vw .monitor {
+  aspect-ratio: auto;
+  height: clamp(320px, calc(100vh - 262px), 1400px);
+  background: radial-gradient(120% 90% at 50% 64%, var(--panel2) 0%, var(--panel) 40%, var(--bg) 80%);
+  touch-action: none;
+}
+.vw .monitor canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+  cursor: grab;
+}
+.vw .monitor canvas:active { cursor: grabbing; }
+.vw .monitor canvas:focus-visible { outline-offset: -2px; }
+/* le filet du moniteur passe au-dessus du canevas */
+.vw .monitor::after {
+  content: ""; position: absolute; inset: 0; z-index: 8; pointer-events: none;
+  border-radius: inherit; box-shadow: inset 0 0 0 1px var(--line);
+}
+body.dragging .vw .monitor::after { box-shadow: inset 0 0 0 1px var(--line-or); }
+/* côte à côte : un filet entre les deux vues */
+.vw .monitor.mode-side::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px;
+  z-index: 2; pointer-events: none; background: var(--line);
+}
+
+/* Les calques A et B ne portent que l'état vide et la cible de dépôt ;
+   l'image vient du canevas, coupé au ciseau par le script. */
+.vw .monitor .layer { z-index: 1; pointer-events: none; }
+.vw .monitor.mode-b .layer.b { clip-path: none; }
+.vw .monitor.mode-wipe .layer.a { clip-path: inset(0 calc(100% - var(--split, 50%)) 0 0); }
+.vw .monitor.mode-wipe .layer.b { clip-path: inset(0 0 0 var(--split, 50%)); }
+.vw .monitor.mode-wipe .layer.a .empty { right: calc(100% - var(--split, 50%)); }
+.vw .monitor.mode-wipe .layer.b .empty { left: var(--split, 50%); }
+.vw .monitor.mode-a .tag.b,
+.vw .monitor.mode-b .tag.a { display: none; }
+body.dragging .vw .monitor .layer.over { box-shadow: inset 0 0 0 2px var(--or); }
+
+.vw .monitor .empty span { max-width: 38ch; font-size: 12px; line-height: 1.6; }
+.vw .monitor .layer.b .empty b { font-size: 16px; }
+
+.vw .monitor .handle { left: var(--split, 50%); touch-action: none; }
+
+/* règle d'échelle, en bas à gauche : même cartouche que la lecture */
+.vw .ruler {
+  left: 12px; right: auto;
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 6px var(--s3) 7px;
+  font-family: var(--f-mono); font-size: 8.5px; font-weight: 400;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--ink2);
+}
+.vw .ruler i {
+  display: block; width: 80px; height: 6px;
+  box-shadow: inset 1px 0 0 var(--cy), inset -1px 0 0 var(--cy), inset 0 -1px 0 var(--cy);
+}
+
+/* ── panneaux de la colonne ─────────────────────────────── */
+.vw-body {
+  position: relative;
+  padding: var(--s3) var(--s4) var(--s4);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.vw-note { margin: 0; font-size: 11.5px; line-height: 1.55; color: var(--ink3); }
+.vw-row { display: flex; align-items: center; gap: 8px; }
+.vw-row .sp { flex: 1; }
+
+/* choix segmentés en grille : la colonne a de la hauteur, pas de largeur */
+.seg.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.seg.grid.g4 { grid-template-columns: 1fr 1fr 2.2fr 1.4fr; }
+.seg.grid .tb,
+.vw .transport .seg .tb {
+  min-width: 0; padding: 0 4px; letter-spacing: .06em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* les deux voies, chacune sa rangée de dépôt */
+.slot-row { display: flex; align-items: stretch; gap: 6px; }
+.slot-row .drop { flex: 1; min-width: 0; padding: 9px var(--s3); gap: var(--s3); }
+.slot-row .drop .k { flex: none; font-family: var(--f-disp); font-size: 13px; letter-spacing: .06em; }
+.slot-row .drop .k.a { color: var(--cy); }
+.slot-row .drop .k.b { color: var(--or); }
+.slot-row .drop .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot-row .drop.full { box-shadow: inset 0 0 0 1px var(--line); color: var(--ink2); }
+.slot-row .drop.full:hover,
+.slot-row .drop.over { box-shadow: inset 0 0 0 1px var(--or); color: var(--or); }
+.slot-row > .tb { height: auto; }
+
+.vw-toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ── clips ──────────────────────────────────────────────── */
+.clips {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 3px;
+  max-height: 196px; overflow-y: auto;
+}
+.clip {
+  display: flex; align-items: baseline; gap: var(--s3); width: 100%;
+  padding: 7px var(--s3); border-radius: var(--r2); background: var(--panel2);
+  font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .06em;
+  color: var(--ink2); text-align: left;
+  transition: background .12s, color .12s;
+}
+.clip:hover { color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.clip.on { background: var(--panel3); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-cy); }
+.clip .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip .d { flex: none; color: var(--ink3); letter-spacing: .12em; text-transform: uppercase; }
+.clip.rest .nm { font-family: var(--f-ui); font-size: 11.5px; letter-spacing: .02em; }
+.clips .none { font-size: 11.5px; color: var(--ink3); padding: 2px; }
+
+/* les cinq poses de contrôle du rig */
+.poses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.poses .tb {
+  min-width: 0; padding: 0 4px; font-size: 9.5px; letter-spacing: .05em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── fiches A et B ──────────────────────────────────────── */
+.meta-head { position: relative; display: flex; align-items: baseline; gap: 8px; }
+.meta-head b { font-family: var(--f-disp); font-size: 13px; font-weight: 400; letter-spacing: .06em; }
+.meta.a .meta-head b { color: var(--cy); }
+.meta.b .meta-head b { color: var(--or); }
+.meta-head span {
+  font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--ink3);
+}
+.vw .kv dd { min-width: 0; overflow-wrap: anywhere; }
+
+/* ── transport et timeline ──────────────────────────────── */
+.vw .transport .tb svg { pointer-events: none; }
+.vw .transport .frame { min-width: 9ch; text-align: right; }
+/* graduation : une marque par image, ou par paquet quand elles se serrent */
+.vw .tl .ticks {
+  background-image: repeating-linear-gradient(90deg, var(--ink3) 0 1px, transparent 1px var(--tick, 25%));
+  background-position: var(--tick-off, 0px) 0;
+}
+.vw .tl input[type=range]:disabled { cursor: default; }
+.vw .tl-foot { gap: var(--s3); }
+.vw .tl-foot span:nth-child(2) { text-align: center; }
+
+/* ── écrans étroits ─────────────────────────────────────── */
+@media (max-width: 900px) {
+  .vw { grid-template-columns: minmax(0, 1fr); padding: var(--s4) var(--s4) 40px; }
+  .vw-stage { position: static; }
+  .vw .monitor { height: clamp(260px, 62vh, 560px); }
+}
+@media (max-width: 520px) {
+  .hdr { padding: 11px var(--s4); gap: var(--s3); }
+  .vw .monitor .tag { padding: 5px 8px; }
+  .vw .monitor .tag span { max-width: 12ch; }
+  .vw .monitor .empty b { font-size: 17px; }
+  .vw .transport .timecode { font-size: 13px; }
+}

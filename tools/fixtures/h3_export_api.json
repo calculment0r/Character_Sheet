@@ -1,0 +1,9 @@
+{
+ "1": {"class_type": "MiniMaxH3ModelLoader", "inputs": {"ckpt_name": "minimax_h3.safetensors"}, "_meta": {"title": "Load H3"}},
+ "2": {"class_type": "LoadImage", "inputs": {"image": "face.png"}, "_meta": {"title": "Load Image"}},
+ "3": {"class_type": "LoadImage", "inputs": {"image": "body.png"}, "_meta": {"title": "Load Image"}},
+ "4": {"class_type": "LoadImage", "inputs": {"image": "sheet.png"}, "_meta": {"title": "Load Image"}},
+ "5": {"class_type": "MiniMaxH3Ref2VA", "inputs": {"model": ["1", 0], "prompt": "a pilot, full body", "image_1": ["2", 0], "image_2": ["3", 0], "image_3": ["4", 0], "width": 768, "height": 1360, "length": 5, "seed": 42, "steps": 30}, "_meta": {"title": "H3 Ref2VA"}},
+ "6": {"class_type": "H3VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}, "_meta": {"title": "Decode"}},
+ "7": {"class_type": "SaveImage", "inputs": {"images": ["6", 0], "filename_prefix": "h3"}, "_meta": {"title": "Save Image"}}
+}

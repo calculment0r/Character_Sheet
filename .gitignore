@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+_artifacts/
+.venv/
+venv/
+.DS_Store
+projects/
+factory.local.json
