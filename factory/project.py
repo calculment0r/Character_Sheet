@@ -11,8 +11,10 @@ Les règles dures du brief sont tenues ici, pas dans la documentation :
   - une seule identité MHR par personnage, figée à la première
     validation (§2) ;
   - chaque étage exige que le précédent soit validé : pas de plein pied
-    sans visage verrouillé, pas de planche sans plein pied validé, pas
-    de vues sans planche validée (§5.6, §6.1).
+    sans visage verrouillé, pas d'A-pose sans plein pied validé, pas de
+    vues sans A-pose validée. La planche H3 n'est plus un étage de
+    validation (décision de Cal, 25/09 : H3 ne fait plus que le
+    turnaround de présentation) ; `./usine planche` reste possible.
 """
 
 from __future__ import annotations
@@ -92,6 +94,8 @@ class Project:
                 data = json.loads(manifest.read_text(encoding="utf-8"))
                 if data.get("schema") != SCHEMA:
                     raise ChainError(f"{manifest} n'est pas un manifeste de la Factory")
+                for cos in data.get("costumes", {}).values():
+                    apose(cos)
                 return cls(folder.resolve(), data)
         raise ChainError(f"aucun personnage « {ref} » — `./usine nouveau` pour en créer un, "
                          f"`./usine liste` pour voir ceux qui existent")
@@ -215,6 +219,7 @@ class Project:
         self.data["costumes"][key] = {
             "name": name, "prompt": prompt, "refs": refs, "created_at": now(),
             "fullbody": {"candidates": [], "validated": None},
+            "apose": {"candidates": [], "validated": None},
             "sheets": [], "sheet": None,
             "views": {"method": None, "raw": {}, "prepared": {}, "check": None, "delighted": False},
             "meshes": [], "rigs": [],
@@ -227,8 +232,9 @@ class Project:
         dest = self.path(f"costumes/{key}/fullbody.png")
         shutil.copy2(self.path(chosen["file"]), dest)
         cos["fullbody"].update(validated=self.rel(dest), validated_from=chosen["file"], validated_at=now())
-        # Un nouveau plein pied rend caduque la planche validée sur l'ancien.
+        # Un nouveau plein pied rend caduques l'A-pose et la planche tirées de l'ancien.
         cos["sheet"] = None
+        apose(cos).update(validated=None, validated_from=None)
         return self.rel(dest)
 
     def require_fullbody(self, cos: dict) -> str:
@@ -236,6 +242,22 @@ class Project:
             raise ChainError("aucun plein pied validé pour ce costume — `./usine pleinpied` puis "
                              "`./usine pleinpied-ok` (§4)")
         return cos["fullbody"]["validated"]
+
+    def validate_apose(self, costume: str, candidate: str) -> str:
+        key, cos = self.costume(costume)
+        chosen = self._pick(apose(cos)["candidates"], candidate, "A-pose")
+        dest = self.path(f"costumes/{key}/apose.png")
+        shutil.copy2(self.path(chosen["file"]), dest)
+        apose(cos).update(validated=self.rel(dest), validated_from=chosen["file"], validated_at=now())
+        # Les vues se font depuis l'A-pose : les anciennes ne valent plus.
+        cos["views"] = {"method": None, "raw": {}, "prepared": {}, "check": None, "delighted": False}
+        return self.rel(dest)
+
+    def require_apose(self, cos: dict) -> str:
+        if not apose(cos).get("validated"):
+            raise ChainError("aucune A-pose validée pour ce costume — `./usine pose` puis `./usine pose-ok` : "
+                             "les vues partent du personnage en A-pose")
+        return apose(cos)["validated"]
 
     def require_sheet(self, cos: dict) -> dict:
         sid = cos.get("sheet")
@@ -263,6 +285,11 @@ class Project:
 
     def next_id(self, prefix: str, existing: list[dict]) -> str:
         return f"{prefix}{len(existing) + 1:03d}"
+
+
+def apose(cos: dict) -> dict:
+    """L'état A-pose d'un costume (absent des manifestes d'avant le 25/09)."""
+    return cos.setdefault("apose", {"candidates": [], "validated": None})
 
 
 def _same_file(a: Path, b: Path) -> bool:

@@ -11,8 +11,10 @@ personne d'après une image de référence :
   qwen2511   Qwen-Image-Edit 2511 (LoRA Lightning 4 pas) : le visage et
              jusqu'à deux images de vêtements.
 
-L'image fait 896 × 1600 px. La pose est l'A-pose du §8.3, la tenue est
-le prompt du costume (écrit par le modèle de texte depuis son brief).
+L'image fait 896 × 1600 px (1152 × 2048 pour Qwen-Image 2.1). La pose est
+naturelle, face à l'objectif : c'est l'image que Cal valide ; l'A-pose
+vient après, imposée par un squelette (`pose.py`). La tenue est le prompt
+du costume (écrit par le modèle de texte depuis son brief).
 """
 
 from __future__ import annotations
@@ -42,9 +44,8 @@ def text(outfit: str, *, garments: int = 0, style: str = "photoreal", tags: bool
     worn = (f"The outfit is the one shown in {others}, every piece kept as it is. " if garments else "")
     return " ".join(filter(None, [
         f"Full-body studio photograph of {person}: keep the face, skin tone, hair, age and build exactly.",
-        "The person stands in a relaxed A-pose, arms held about forty-five degrees away from the torso, palms "
-        "turned toward the thighs, fingers relaxed and naturally separated, feet at hip width, facing the camera "
-        "straight on at eye level.",
+        "The person stands in a natural, relaxed pose, weight on both feet, arms resting naturally, facing the "
+        "camera straight on at eye level.",
         "The whole figure from the top of the head to the soles of the shoes is inside the frame with an even "
         "margin.",
         worn + (f"Outfit: {outfit.strip()}" if outfit.strip() else ""),

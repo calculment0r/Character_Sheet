@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .project import Project
+from .project import Project, apose
 
 
 def _fake(entry: dict | None) -> str:
@@ -45,14 +45,14 @@ def render(p: Project) -> str:
                           else f"./usine pleinpied {slug} --costume {key}")
             continue
 
-        sheet = next((s for s in cos["sheets"] if s["id"] == cos.get("sheet")), None)
-        if sheet:
-            row("ST-04", "Planche", f"{sheet['id']} validée{' (disque)' if sheet['mask_face'] else ''}"
-                                    f"{_fake(sheet)} · {len(cos['sheets'])} planche(s)")
+        ap = apose(cos)
+        if ap.get("validated"):
+            chosen = next((c for c in ap["candidates"] if c["file"] == ap.get("validated_from")), None)
+            row("ST-04", "A-pose", f"validée{_fake(chosen)} · {len(ap['candidates'])} candidat(s)")
         else:
-            row("ST-04", "Planche", f"{len(cos['sheets'])} planche(s), aucune validée")
-            nxt = nxt or (f"./usine planche-ok {slug} <id> --costume {key}" if cos["sheets"]
-                          else f"./usine planche {slug} --costume {key} --ab")
+            row("ST-04", "A-pose", f"{len(ap['candidates'])} candidat(s), aucune validée")
+            nxt = nxt or (f"./usine pose-ok {slug} <numéro> --costume {key}" if ap["candidates"]
+                          else f"./usine pose {slug} --costume {key}")
             continue
 
         v = cos["views"]

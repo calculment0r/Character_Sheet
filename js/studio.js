@@ -40,11 +40,12 @@ const state = {
 };
 
 // Les choix ne prennent jamais l'orange : il y en a un par candidat.
-const PICKS = new Set(['face_lock', 'fullbody_ok', 'sheet_ok', 'rig_ok']);
+const PICKS = new Set(['face_lock', 'fullbody_ok', 'apose_ok', 'rig_ok']);
 const ORTHO = ['front', 'left', 'back', 'right'];
 const VIEWS = [...ORTHO, 'threequarter'];
 const VIEW_LABEL = { front: 'face', left: 'profil gauche', back: 'dos', right: 'profil droit', threequarter: '3/4' };
 const METHOD_LABEL = {
+  'qwen21-pose': 'Qwen-Image 2.1 · squelette par vue',
   orbit: 'H3 · orbite redécoupée',
   per_view: 'H3 · une génération par vue',
   'qwen21-orbit': 'Qwen-Image 2.1 · LoRA orbite',
@@ -54,7 +55,7 @@ const METHOD_LABEL = {
 const NEXT_TEXT = {
   face: 'suite : variantes du visage', face_lock: 'suite : verrouiller un visage',
   costume_add: 'suite : un costume', fullbody: 'suite : plein pied', fullbody_ok: 'suite : valider un plein pied',
-  sheet: 'suite : planche', sheet_ok: 'suite : valider une planche', views: 'suite : vues orthogonales',
+  apose: 'suite : A-pose', apose_ok: 'suite : valider une A-pose', views: 'suite : vues orthogonales',
   prep: 'suite : préparer les vues', check: "suite : contrôle d'alignement", mesh: 'suite : mesh 3D',
   rig: 'suite : rig', rig_ok: 'suite : regarder le rig',
 };
@@ -252,14 +253,14 @@ function card(c) {
 const STAGES = [
   { id: 'face', ref: '01', label: 'Visage' },
   { id: 'costume', ref: '02', label: 'Costume' },
-  { id: 'sheet', ref: '03', label: 'Planche' },
+  { id: 'pose', ref: '03', label: 'A-pose' },
   { id: 'views', ref: '04', label: 'Vues' },
   { id: 'mesh', ref: '05', label: '3D' },
   { id: 'rig', ref: '06', label: 'Rig' },
 ];
 const STAGE_OF = {
   face: 'face', face_lock: 'face', costume_add: 'costume', fullbody: 'costume', fullbody_ok: 'costume',
-  sheet: 'sheet', sheet_ok: 'sheet', views: 'views', prep: 'views', check: 'views', mesh: 'mesh', rig: 'rig',
+  apose: 'pose', apose_ok: 'pose', views: 'views', prep: 'views', check: 'views', mesh: 'mesh', rig: 'rig',
   rig_ok: 'rig',
 };
 const ENGINE_LABEL = {
@@ -270,8 +271,12 @@ const ENGINE_LABEL = {
 };
 const TRAITS = ['audacieux', 'discret', 'loyal', 'impulsif', 'méfiant', 'chaleureux', 'ironique', 'calme', 'têtu',
   'curieux', 'protecteur', 'rêveur', 'rancunier', 'drôle', 'solitaire', 'généreux'];
-// Les actions qui calculent avec H3 : pendant elles, la mémoire manque au modèle de texte.
-const HEAVY = new Set(['fullbody', 'sheet', 'views']);
+// Les rendus H3 (~100 Go) : pendant eux, la mémoire manque au modèle de texte. Qwen-Image 2.1 tient à côté.
+function usesH3(run) {
+  const p = run.params || {};
+  return run.action === 'sheet' || (['face', 'fullbody'].includes(run.action) && p.engine === 'h3')
+    || (run.action === 'views' && ['per_view', 'orbit'].includes(p.method));
+}
 
 function costumeOf(c) {
   return (state.costume && c.costumes[state.costume]) || Object.values(c.costumes)[0] || null;
@@ -283,8 +288,9 @@ function stageStates(c) {
   return {
     face: c.face.locked ? 'done' : c.face.candidates.length ? 'partial' : 'open',
     costume: cos?.fullbody.validated ? 'done' : cos ? 'partial' : 'open',
-    sheet: !cos?.fullbody.validated ? 'locked' : cos.sheet ? 'done' : cos.sheets.length ? 'partial' : 'open',
-    views: !cos?.sheet ? 'locked' : v.check?.ok ? 'done' : Object.keys(v.raw).length ? 'partial' : 'open',
+    pose: !cos?.fullbody.validated ? 'locked' : cos.apose.validated ? 'done'
+      : cos.apose.candidates.length ? 'partial' : 'open',
+    views: !cos?.apose.validated ? 'locked' : v.check?.ok ? 'done' : Object.keys(v.raw).length ? 'partial' : 'open',
     mesh: !v || !Object.keys(v.prepared).length ? 'locked' : cos.meshes.length ? 'done' : 'open',
     rig: !cos?.meshes.length ? 'locked' : cos.rigs.some((r) => r.verdict === 'accepted') ? 'done'
       : cos.rigs.length ? 'partial' : 'open',
@@ -355,7 +361,7 @@ function stageView(stage, d) {
   const key = Object.keys(c.costumes).find((k) => c.costumes[k] === cos);
   const picker = Object.keys(c.costumes).length > 1 ? `<div class="tabs">${Object.entries(c.costumes).map(([k, x]) =>
     `<button class="tb sm ${k === key ? 'on' : 'ghost'}" data-costume-tab="${esc(k)}">${esc(x.name)}</button>`).join('')}</div>` : '';
-  const view = { sheet: boxSheet, views: boxViews, mesh: boxMesh, rig: boxRig }[stage];
+  const view = { pose: boxPose, views: boxViews, mesh: boxMesh, rig: boxRig }[stage];
   return picker + view(c, key, cos, d);
 }
 
@@ -481,12 +487,12 @@ function stageCostume(d) {
         sel: chosen,
         button: chosen ? '' : act('fullbody_ok', 'Valider', {
           costume: key, params: { candidate: String(i + 1) },
-          confirm: fb.validated ? 'Valider ce plein pied ? La planche validée sur l\'ancien ne vaudra plus.' : undefined,
+          confirm: fb.validated ? 'Valider ce plein pied ? L\'A-pose validée sur l\'ancien ne vaudra plus.' : undefined,
         }),
       });
     }).reverse().join('')}</div>`;
   }
-  if (fb.validated) body += goNext('À la planche', 'sheet');
+  if (fb.validated) body += goNext('À l\'A-pose', 'pose');
   const st = fb.validated ? ['done', 'plein pied validé'] : fb.candidates.length ? ['partial', `${fb.candidates.length} plein(s) pied(s)`]
     : ['partial', 'tenue écrite'];
   return box({ sec: '02', title: `Costume · ${cos.name}`, st: st[0], stLabel: st[1], body });
@@ -496,48 +502,52 @@ function waitBox(sec, title, text) {
   return box({ sec, title, st: 'todo', stLabel: 'en attente', body: `<p>${esc(text)}</p>`, wait: true });
 }
 
-function boxSheet(c, key, cos) {
-  if (!cos.fullbody.validated) return waitBox('03', 'Planche', 'La planche attend un plein pied validé.');
-  const form = `sheet.${key}`;
-  let body = `<p>La planche de personnage en une génération : plein pied de face, de profil, de dos, 3/4, gros plans.
-    Elle valide le design avant les vues. Le disque sur le visage des plein pieds se juge sur pièces : A/B en rend
-    deux, même graine, avec et sans.</p>
+function boxPose(c, key, cos) {
+  if (!cos.fullbody.validated) return waitBox('03', 'A-pose', 'L\'A-pose attend un plein pied validé.');
+  const ap = cos.apose;
+  const form = `pose.${key}`;
+  const skel = ap.skeleton ? `<div class="field"><span class="lbl">Squelette</span><div class="refs">
+    <span class="thumb" style="background-image:url('${esc(fileUrl(c.slug, ap.skeleton))}')" title="squelette"
+      data-zoom="${esc(fileUrl(c.slug, ap.skeleton))}" data-cap="squelette A-pose"></span></div></div>` : '';
+  let body = `<p>Le plein pied validé, remis en A-pose : bras à 45°, jambes légèrement ouvertes, la pose que veulent le
+    mesh et le rig. La pose est imposée par un squelette relevé sur le plein pied, pas par le prompt ; la tenue et le
+    visage restent ceux du plein pied.</p>
     <div class="form-row">
-      ${check(`${form}.ab`, 'A/B avec et sans disque', true)}
-      ${check(`${form}.mask_face`, 'disque sur le visage', false)}
+      ${skel}
+      ${select(`${form}.variants`, 'Propositions', [[1, '1'], [2, '2'], [3, '3']], 2)}
       ${input(`${form}.seed`, 'Graine', { placeholder: 'au hasard', cls: 'num' })}
-      <span class="sp"></span>${act('sheet', 'Générer ▸', { form, costume: key })}
+      <span class="sp"></span>${act('apose', 'Générer ▸', { form, costume: key })}
     </div>`;
-  if (cos.sheets.length) {
-    body += `<div class="box-sub">Planches</div><div class="cands wide">${cos.sheets.map((s) => {
-      const chosen = s.id === cos.sheet;
-      const [mark, markCls] = chosen ? ['validée', 'ok'] : stubMark(s);
+  if (ap.candidates.length) {
+    body += `<div class="box-sub">A-poses · valide celle qui tient</div><div class="cands tall">${ap.candidates.map((x, i) => {
+      const chosen = x.file === ap.validated_from;
+      const [mark, markCls] = chosen ? ['validée', 'ok'] : stubMark(x);
       return cand({
-        src: fileUrl(c.slug, s.file, s.at), label: `${s.id} · ${s.mask_face ? 'disque' : 'sans disque'}`,
-        cap: `${s.id} · ${s.mask_face ? 'disque' : 'sans disque'} · graine ${s.seed}`,
-        mark, markCls, sel: chosen,
-        button: chosen ? '' : act('sheet_ok', 'Valider', {
-          costume: key, params: { id: s.id },
-          confirm: cos.views.raw && Object.keys(cos.views.raw).length
-            ? 'Valider cette planche ? Les vues faites sur l\'ancienne ne vaudront plus.' : undefined,
+        src: fileUrl(c.slug, x.file, x.at), label: `n° ${i + 1}`, cap: `n° ${i + 1} · graine ${x.seed}`, mark, markCls,
+        sel: chosen,
+        button: chosen ? '' : act('apose_ok', 'Valider', {
+          costume: key, params: { candidate: String(i + 1) },
+          confirm: Object.keys(cos.views.raw).length
+            ? 'Valider cette A-pose ? Les vues faites sur l\'ancienne ne vaudront plus.' : undefined,
         }),
       });
     }).reverse().join('')}</div>`;
   }
-  const st = cos.sheet ? ['done', `${cos.sheet} validée`] : cos.sheets.length ? ['partial', `${cos.sheets.length} planche(s)`]
+  if (ap.validated) body += goNext('Aux vues', 'views');
+  const st = ap.validated ? ['done', 'validée'] : ap.candidates.length ? ['partial', `${ap.candidates.length} proposition(s)`]
     : ['todo', 'à faire'];
-  return box({ sec: '03', title: 'Planche', st: st[0], stLabel: st[1], body, next: isNext('sheet', 'sheet_ok') });
+  return box({ sec: '03', title: 'A-pose', st: st[0], stLabel: st[1], body, next: isNext('apose', 'apose_ok') });
 }
 
 function boxViews(c, key, cos, d) {
-  if (!cos.sheet) return waitBox('04', 'Vues orthogonales', 'Les vues attendent une planche validée.');
+  if (!cos.apose.validated) return waitBox('04', 'Vues orthogonales', 'Les vues attendent une A-pose validée.');
   const v = cos.views;
   const form = `views.${key}`;
   const methods = (d.view_methods || Object.keys(METHOD_LABEL)).map((m) => [m, METHOD_LABEL[m] || m]);
-  let body = `<p>Face, profils, dos et 3/4, plein cadre, pour la 3D. L'orbite H3 tient les angles ; une génération par
-    vue revient vers la face. Les LoRA d'angle Qwen tournent le plein pied validé.</p>
+  let body = `<p>Face, profils, dos et 3/4, plein cadre, pour la 3D, depuis l'A-pose validée. Par défaut, chaque vue
+    est guidée par le squelette A-pose tourné à son angle : même échelle, même ligne de sol.</p>
     <div class="form-row">
-      ${select(`${form}.method`, 'Méthode', methods, v.method || 'orbit')}
+      ${select(`${form}.method`, 'Méthode', methods, v.method || 'qwen21-pose')}
       ${input(`${form}.seed`, 'Graine', { placeholder: 'au hasard', cls: 'num' })}
       <span class="sp"></span>${act('views', 'Générer ▸', { form, costume: key })}
     </div>`;
@@ -647,7 +657,7 @@ function waitingCard(d) {
   const run = state.jobs.find((j) => j.status === 'running') || state.jobs.find((j) => j.status === 'queued');
   if (!run || !d) return '';
   const c = d.character;
-  const heavy = HEAVY.has(run.action) || (run.action === 'face' && run.params?.engine === 'h3');
+  const heavy = usesH3(run);
   let body;
   if (!Object.keys(c.costumes).length) {
     body = `<p>Pendant que ça calcule : sa tenue. Elle attendra le visage verrouillé.</p>

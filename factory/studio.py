@@ -48,7 +48,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from . import chain, config, h3, memory
-from .project import IDENTITY_SCHEMA, ChainError, Project, list_projects, now
+from .project import IDENTITY_SCHEMA, ChainError, Project, apose, list_projects, now
 
 PORT = 8765
 STATIC_DIRS = ("js", "assets", "data", "docs/img", "etat")
@@ -303,6 +303,16 @@ def a_fullbody_ok(p: Project, q: dict, report):
     return {"validated": chain.fullbody_ok(p, _costume(p, q), str(q.get("candidate", "")))}
 
 
+def a_apose(p: Project, q: dict, report):
+    key = _costume(p, q)
+    one = lambda seed, report: chain.apose(p, key, variants=1, seed=seed, report=report)
+    return {"made": _variants(one, _int(q.get("variants"), 2, 1, 4), _seed(q), report)}
+
+
+def a_apose_ok(p: Project, q: dict, report):
+    return {"validated": chain.apose_ok(p, _costume(p, q), str(q.get("candidate", "")))}
+
+
 def a_sheet(p: Project, q: dict, report):
     return {"made": chain.sheet(p, _costume(p, q), mask_face=bool(q.get("mask_face")), ab=bool(q.get("ab")),
                                 seed=_seed(q), report=report)}
@@ -314,7 +324,7 @@ def a_sheet_ok(p: Project, q: dict, report):
 
 def a_views(p: Project, q: dict, report):
     names = [n for n in (q.get("names") or []) if n in (*chain.ORTHO, "threequarter")] or None
-    raw = chain.views(p, _costume(p, q), method=q.get("method") or "per_view", names=names, seed=_seed(q),
+    raw = chain.views(p, _costume(p, q), method=q.get("method") or "qwen21-pose", names=names, seed=_seed(q),
                       report=report)
     return {"views": sorted(raw)}
 
@@ -357,7 +367,9 @@ def a_rig_ok(p: Project, q: dict, report):
 
 
 def _gpu_views(q: dict, p: Project | None = None):
-    method = q.get("method") or "per_view"
+    method = q.get("method") or "qwen21-pose"
+    if method == "qwen21-pose":
+        return ("qwen21", "portrait")
     return ("h3", "h3") if method in ("per_view", "orbit") else ("qwen", "views")
 
 
@@ -384,6 +396,8 @@ ACTIONS = {
     "costume_edit": (a_costume_edit, "costume modifié", None),
     "fullbody":     (a_fullbody, "plein pied", _gpu_fullbody, read_costume_brief),
     "fullbody_ok":  (a_fullbody_ok, "plein pied validé", None),
+    "apose":        (a_apose, "A-pose", ("qwen21", "portrait")),
+    "apose_ok":     (a_apose_ok, "A-pose validée", None),
     "sheet":        (a_sheet, "planche", ("h3", "h3")),
     "sheet_ok":     (a_sheet_ok, "planche validée", None),
     "views":        (a_views, "vues orthogonales", _gpu_views),
@@ -434,8 +448,9 @@ def _next(p: Project) -> dict | None:
         fb = cos["fullbody"]
         if not fb.get("validated"):
             return {"action": "fullbody_ok" if fb["candidates"] else "fullbody", "costume": key}
-        if not cos.get("sheet"):
-            return {"action": "sheet_ok" if cos["sheets"] else "sheet", "costume": key}
+        ap = apose(cos)
+        if not ap.get("validated"):
+            return {"action": "apose_ok" if ap["candidates"] else "apose", "costume": key}
         v = cos["views"]
         if not v["raw"]:
             return {"action": "views", "costume": key}
@@ -472,7 +487,8 @@ def summary(p: Project) -> dict:
         ("ST-03", "costumes", "Costumes", state(bool(costumes), False)),
         ("ST-04", "fullbody", "Plein pied", state(any_(lambda c: c["fullbody"].get("validated")),
                                                   any_(lambda c: c["fullbody"]["candidates"]))),
-        ("ST-05", "sheet", "Planche", state(any_(lambda c: c.get("sheet")), any_(lambda c: c["sheets"]))),
+        ("ST-05", "pose", "A-pose", state(any_(lambda c: apose(c).get("validated")),
+                                          any_(lambda c: apose(c)["candidates"]))),
         ("ST-06", "views", "Vues", state(any_(lambda c: (c["views"].get("check") or {}).get("ok")),
                                          any_(lambda c: c["views"]["raw"]))),
         ("ST-07", "mesh", "Mesh 3D", state(any_(lambda c: c["meshes"]), False)),

@@ -14,7 +14,7 @@ import zlib
 from pathlib import Path
 
 from . import config, h3, imaging, prompts, views_qwen
-from .project import ChainError, Project, now
+from .project import ChainError, Project, apose as apose_of, now
 
 ORTHO = ("front", "left", "back", "right")
 TOLERANCE_DEG = 5.0
@@ -120,11 +120,12 @@ def costume_add(p: Project, name: str, *, prompt: str = "", refs: list[str] = ()
 
 def fullbody(p: Project, costume: str | None, *, variants: int = 2, seed: int | None = None,
              prompt: str = "", engine: str | None = None, report=None) -> list[dict]:
-    """Le plein pied habillé, le visage verrouillé comme référence (§4).
+    """Le plein pied habillé, le visage verrouillé comme référence (§4),
+    en pose naturelle : l'A-pose vient ensuite, par `apose`.
 
     Par Qwen-Image 2.1 turbo en HD (`figure.py`, `qwen21.py`) : H3 le
     rendait à 768 px, mains et matières comprises, trop pauvre pour une
-    image qui sert ensuite de référence à la planche et aux vues."""
+    image qui sert ensuite de référence à l'A-pose et aux vues."""
     from . import figure
 
     locked = p.require_face()
@@ -176,6 +177,51 @@ def fullbody_ok(p: Project, costume: str | None, candidate: str) -> str:
     return out
 
 
+# ── A-pose ─────────────────────────────────────────────────────────
+
+def apose(p: Project, costume: str | None, *, variants: int = 2, seed: int | None = None, report=None) -> list[dict]:
+    """Le plein pied validé remis en A-pose (`pose.py`) : un squelette
+    relevé sur lui par DWPose, bras à 45°, donné à Qwen-Image 2.1 turbo
+    avec le plein pied. Les vues et le mesh partent de là."""
+    from . import pose, qwen21
+    from . import stubs as sketches
+
+    p.require_face()
+    key, cos = p.costume(costume)
+    body = p.require_fullbody(cos)
+    report = report or _report()
+    state = apose_of(cos)
+    folder = p.dir(f"costumes/{key}/apose")
+    skel = pose.skeletons(p.path(body), folder / "skeleton.png", report=report)[0]
+    state["skeleton"] = p.rel(skel)
+    text = pose.text_apose(prompts.describe_outfit(p.sheet, cos["prompt"]), p.data["style"])
+    base = _seed(seed)
+    made = []
+    for i in range(variants):
+        s = base + i
+        dest = folder / f"cand-{len(state['candidates']) + 1:03d}.png"
+        print(f"  A-pose {i + 1}/{variants} · Qwen-Image 2.1 turbo · graine {s}")
+        qwen21.generate(prompt=text, refs=[p.path(body), skel], dest=dest, seed=s, size=pose.SIZE,
+                        resolution=pose.RESOLUTION, report=report,
+                        stub=lambda: sketches.mannequin(pose.SIZE, azimuth=0.0, seed=identity_seed(p)))
+        backend = config.backend("portrait")
+        dest.with_suffix(".json").write_text(json.dumps(
+            {"kind": "apose", "backend": backend, "seed": s, "prompt": text, "refs": [body, p.rel(skel)]},
+            ensure_ascii=False, indent=2), encoding="utf-8")
+        entry = {"file": p.rel(dest), "seed": s, "backend": backend, "engine": "qwen21", "at": now()}
+        state["candidates"].append(entry)
+        made.append(entry)
+        p.save()
+    return made
+
+
+def apose_ok(p: Project, costume: str | None, candidate: str) -> str:
+    key, _ = p.costume(costume)
+    out = p.validate_apose(key, candidate)
+    p.save()
+    return out
+
+
 # ── planche ────────────────────────────────────────────────────────
 
 def sheet(p: Project, costume: str | None, *, mask_face: bool = False, ab: bool = False,
@@ -212,34 +258,38 @@ def sheet(p: Project, costume: str | None, *, mask_face: bool = False, ab: bool 
 
 
 def sheet_ok(p: Project, costume: str | None, sheet_id: str) -> dict:
+    """Retenir une planche H3. Elle n'ouvre plus les vues (Cal, 25/09) :
+    les méthodes H3 des vues la prennent en référence si elle existe."""
     key, cos = p.costume(costume)
     chosen = next((s for s in cos["sheets"] if s["id"] == sheet_id), None)
     if chosen is None:
         raise ChainError(f"planche inconnue : {sheet_id} (existantes : {', '.join(s['id'] for s in cos['sheets'])})")
     cos["sheet"] = sheet_id
     cos["sheet_mask_face"] = chosen["mask_face"]
-    # De nouvelles références pour les vues : les anciennes ne valent plus.
-    cos["views"] = {"method": None, "raw": {}, "prepared": {}, "check": None, "delighted": False}
     p.save()
     return chosen
 
 
 # ── vues orthogonales ──────────────────────────────────────────────
 
-VIEW_METHODS = ("per_view", "orbit", *views_qwen.METHODS)
+VIEW_METHODS = ("qwen21-pose", "per_view", "orbit", *views_qwen.METHODS)
 
 
-def views(p: Project, costume: str | None, *, method: str = "per_view", names: list[str] | None = None,
+def views(p: Project, costume: str | None, *, method: str = "qwen21-pose", names: list[str] | None = None,
           threequarter: bool = True, seed: int | None = None, bench: bool = False, report=None) -> dict:
-    """Les vues orthogonales (§6.1), par l'une des méthodes :
+    """Les vues orthogonales (§6.1), depuis l'A-pose validée, par l'une
+    des méthodes :
 
-      per_view      une génération H3 par vue, visage, plein pied et planche
-                    en références — H3 y revient vers la face ;
+      qwen21-pose   par défaut : une édition Qwen-Image 2.1 turbo par vue,
+                    l'A-pose en <image1> et le squelette A-pose tourné à
+                    l'azimut de la vue en <image2> (`pose.py`) — profils,
+                    dos, même échelle et même ligne de sol tenus ; la face
+                    est l'A-pose elle-même ;
+      per_view      une génération H3 par vue — H3 y revient vers la face ;
       orbit         un plan H3 en orbite, frames choisies sur la silhouette ;
       qwen21-orbit, qwen-2511, qwen-2509
-                    le plein pied de face validé, tourné par un LoRA
-                    d'angle Qwen (`views_qwen.py`) ; la face est le plein
-                    pied lui-même.
+                    l'A-pose tournée par un LoRA d'angle Qwen
+                    (`views_qwen.py`, voir les réserves de `docs/ETUDES.md`).
 
     Avec `bench`, les vues vont dans `views/banc/<méthode>/`, avec leur
     planche contact, et le manifeste n'est pas touché : c'est le banc du
@@ -248,15 +298,41 @@ def views(p: Project, costume: str | None, *, method: str = "per_view", names: l
         raise ChainError(f"méthode de vues inconnue : {method} (possibles : {', '.join(VIEW_METHODS)})")
     locked = p.require_face()
     key, cos = p.costume(costume)
-    body = p.require_fullbody(cos)
-    plate = p.require_sheet(cos)
+    p.require_fullbody(cos)
+    body = p.require_apose(cos)
     report = report or _report()
     names = list(names or ORTHO) + (["threequarter"] if threequarter and not names else [])
-    refs = [p.path(locked), p.path(body), p.path(plate["file"])]
+    plate = next((x for x in cos["sheets"] if x["id"] == cos.get("sheet")), None)
+    refs = [p.path(locked), p.path(body)] + ([p.path(plate["file"])] if plate else [])
     folder = p.dir(f"costumes/{key}/views/" + (f"banc/{method}" if bench else "raw"))
     s = _seed(seed)
     raw: dict[str, dict] = {}
-    if method == "orbit":
+    if method == "qwen21-pose":
+        from . import pose, qwen21
+        from . import stubs as sketches
+
+        turns = {n: int(prompts.AZIMUTHS[n][0]) for n in names if n != "front"}
+        skel = pose.skeletons(p.path(body), folder / "skeleton.png", sorted(set(turns.values())), report=report)
+        for n in names:
+            dest = folder / f"{n}.png"
+            if n == "front":
+                imaging.load(p.path(body)).save(dest)
+                raw[n] = {"file": p.rel(dest), "azimuth": 0.0, "azimuth_source": "A-pose validée", "seed": None,
+                          "backend": "reprise", "at": now()}
+                continue
+            az = turns[n]
+            text = pose.text_view(az, p.data["style"])
+            print(f"  vue {n} · {az}° · squelette · graine {s}")
+            qwen21.generate(prompt=text, refs=[p.path(body), skel[az]], dest=dest, seed=s, size=pose.SIZE,
+                            resolution=pose.RESOLUTION, report=report,
+                            stub=lambda: sketches.mannequin(pose.SIZE, azimuth=float(az), seed=identity_seed(p)))
+            backend = config.backend("portrait")
+            dest.with_suffix(".json").write_text(json.dumps(
+                {"kind": "view", "method": method, "azimuth": az, "backend": backend, "seed": s, "prompt": text,
+                 "refs": [body, p.rel(skel[az])]}, ensure_ascii=False, indent=2), encoding="utf-8")
+            raw[n] = {"file": p.rel(dest), "azimuth": float(az), "azimuth_source": "demandé (squelette)", "seed": s,
+                      "backend": backend, "prompt": text, "at": now()}
+    elif method == "orbit":
         azimuths = {n: prompts.AZIMUTHS[n][0] for n in names}
         sections = prompts.orbit(p.sheet, p.data["notes"], costume_prompt=cos["prompt"], style=p.data["style"])
         print(f"  orbite · {len(names)} azimuts à extraire · graine {s}")

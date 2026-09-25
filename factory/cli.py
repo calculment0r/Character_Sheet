@@ -96,7 +96,21 @@ def cmd_pleinpied(args) -> None:
 def cmd_pleinpied_ok(args) -> None:
     p = _p(args)
     print(f"plein pied validé : {p.path(chain.fullbody_ok(p, args.costume, args.candidat))}")
-    print(f"  suite : ./usine planche {p.data['slug']} --ab")
+    print(f"  suite : ./usine pose {p.data['slug']}")
+
+
+def cmd_pose(args) -> None:
+    p = _p(args)
+    made = chain.apose(p, args.costume, variants=args.variantes, seed=args.graine)
+    for e in made:
+        print(f"A-pose : {p.path(e['file'])}")
+    print(f"  choisir : ./usine pose-ok {p.data['slug']} <numéro>")
+
+
+def cmd_pose_ok(args) -> None:
+    p = _p(args)
+    print(f"A-pose validée : {p.path(chain.apose_ok(p, args.costume, args.candidat))}")
+    print(f"  suite : ./usine vues {p.data['slug']}")
 
 
 def cmd_planche(args) -> None:
@@ -110,8 +124,7 @@ def cmd_planche(args) -> None:
 def cmd_planche_ok(args) -> None:
     p = _p(args)
     s = chain.sheet_ok(p, args.costume, args.id)
-    print(f"planche {s['id']} validée{' (avec disque)' if s['mask_face'] else ''}")
-    print(f"  suite : ./usine vues {p.data['slug']}")
+    print(f"planche {s['id']} retenue{' (avec disque)' if s['mask_face'] else ''} — elle ne conditionne plus les vues")
 
 
 def cmd_vues(args) -> None:
@@ -259,21 +272,31 @@ def build() -> argparse.ArgumentParser:
     perso(sp), costume(sp)
     sp.add_argument("candidat")
 
-    sp = cmd("planche", cmd_planche, "character sheet H3 en cinq frames (§5)")
+    sp = cmd("pose", cmd_pose, "le plein pied validé remis en A-pose, par squelette (Qwen-Image 2.1)")
+    perso(sp), costume(sp)
+    sp.add_argument("--variantes", type=int, default=2)
+    sp.add_argument("--graine", type=int)
+
+    sp = cmd("pose-ok", cmd_pose_ok, "valider une A-pose — les vues en partiront")
+    perso(sp), costume(sp)
+    sp.add_argument("candidat")
+
+    sp = cmd("planche", cmd_planche, "character sheet H3 en cinq frames (§5) — hors validation depuis le 25/09")
     perso(sp), costume(sp)
     sp.add_argument("--disque", action="store_true", help="disque neutre sur le visage des plein pieds")
     sp.add_argument("--ab", action="store_true", help="deux planches, avec et sans disque, même graine")
     sp.add_argument("--graine", type=int)
 
-    sp = cmd("planche-ok", cmd_planche_ok, "valider une planche")
+    sp = cmd("planche-ok", cmd_planche_ok, "retenir une planche")
     perso(sp), costume(sp)
     sp.add_argument("id", help="identifiant de la planche, ex. s002")
 
     sp = cmd("vues", cmd_vues, "vues orthogonales plein cadre (§6)")
     perso(sp), costume(sp)
-    sp.add_argument("--methode", default="per_view", choices=list(chain.VIEW_METHODS),
-                    help="per_view (H3, une génération par vue), orbit (H3, un plan redécoupé), ou un LoRA d'angle "
-                         "Qwen qui tourne le plein pied validé : qwen21-orbit, qwen-2511, qwen-2509")
+    sp.add_argument("--methode", default="qwen21-pose", choices=list(chain.VIEW_METHODS),
+                    help="qwen21-pose (par défaut : Qwen-Image 2.1, squelette A-pose tourné par vue), per_view "
+                         "(H3, une génération par vue), orbit (H3, un plan redécoupé), ou un LoRA d'angle Qwen qui "
+                         "tourne l'A-pose : qwen21-orbit, qwen-2511, qwen-2509")
     sp.add_argument("--orbite", action="store_true", help="raccourci de --methode orbit")
     sp.add_argument("--banc", action="store_true",
                     help="ranger dans views/banc/<méthode>/ sans toucher au manifeste, pour comparer les méthodes")

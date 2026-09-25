@@ -134,7 +134,9 @@ def comfy_route(tmp: Path, ident: Path) -> None:
         usine("pleinpied-ok", "test-pilote", "1")
         usine("planche", "test-pilote")
         usine("planche-ok", "test-pilote", "s001")
-        usine("vues", "test-pilote", "--sans-34")
+        usine("pose", "test-pilote", "--variantes", "1")
+        usine("pose-ok", "test-pilote", "1")
+        usine("vues", "test-pilote", "--sans-34", "--methode", "per_view")
         root = tmp / "comfy" / "test-pilote"
         meta = json.loads((root / "costumes/veste/views/raw/left.json").read_text(encoding="utf-8"))
         check("H3 par ComfyUI : cinq frames rendues, la plus nette gardée",
@@ -262,8 +264,8 @@ def studio_route(tmp: Path) -> None:
         steps = [run(slug, "costume_add", name="Voyage", prompt="long manteau de cuir", refs=[upload]),
                  run(slug, "fullbody", costume="voyage", variants=2),
                  run(slug, "fullbody_ok", costume="voyage", candidate="1"),
-                 run(slug, "sheet", costume="voyage", ab=True),
-                 run(slug, "sheet_ok", costume="voyage", id="s002"),
+                 run(slug, "apose", costume="voyage", variants=2),
+                 run(slug, "apose_ok", costume="voyage", candidate="2"),
                  run(slug, "views", costume="voyage", method="orbit"),
                  run(slug, "prep", costume="voyage"),
                  run(slug, "check", costume="voyage"),
@@ -275,8 +277,8 @@ def studio_route(tmp: Path) -> None:
         cos = detail["character"]["costumes"]["voyage"]
         failed = [(i, s.get("error")) for i, s in enumerate(steps) if s["status"] != "done"]
         check("studio : du costume au rig accepté, un travail par étage, la file vide ensuite",
-              not failed and bad == 409 and len(cos["refs"]) == 1 and cos["sheet"] == "s002"
-              and all(stages[k] == "done" for k in ("face", "costumes", "fullbody", "sheet", "views", "mesh", "rig"))
+              not failed and bad == 409 and len(cos["refs"]) == 1 and cos["apose"]["validated"]
+              and all(stages[k] == "done" for k in ("face", "costumes", "fullbody", "pose", "views", "mesh", "rig"))
               and detail["summary"]["next"] is None, str(failed or stages))
 
         code, ctype, img = call(f"/files/{slug}/{detail['character']['face']['locked']}")
@@ -499,13 +501,25 @@ def main() -> int:
     sheets = manifest()["costumes"]["veste"]["sheets"]
     check("A/B du disque : deux planches, même graine",
           len(sheets) == 2 and sheets[0]["seed"] == sheets[1]["seed"] and sheets[1]["mask_face"])
-    usine("vues", "test-pilote", expect=2)
-    check("pas de vues sans planche validée", True)
     usine("planche-ok", "test-pilote", "s002")
+    usine("vues", "test-pilote", expect=2)
+    check("pas de vues sans A-pose validée, planche ou pas", True)
+    usine("pose", "test-pilote", "--variantes", "2", "--graine", "5")
+    ap = manifest()["costumes"]["veste"]["apose"]
+    sent = json.loads((root / "costumes/veste/apose/cand-001.json").read_text(encoding="utf-8"))
+    check("A-pose : deux propositions, le plein pied validé en <image1> et le squelette en <image2>",
+          len(ap["candidates"]) == 2 and (root / ap["skeleton"]).exists()
+          and sent["refs"] == ["costumes/veste/fullbody.png", "costumes/veste/apose/skeleton.png"]
+          and "<image2>" in sent["prompt"])
+    usine("pose-ok", "test-pilote", "2")
 
     usine("vues", "test-pilote")
     raw = manifest()["costumes"]["veste"]["views"]["raw"]
-    check("quatre vues orthogonales et le 3/4", set(raw) == {"front", "left", "back", "right", "threequarter"})
+    left = json.loads((root / "costumes/veste/views/raw/left.json").read_text(encoding="utf-8"))
+    check("quatre vues orthogonales et le 3/4, chacune guidée par le squelette tourné à son angle",
+          set(raw) == {"front", "left", "back", "right", "threequarter"}
+          and left["refs"] == ["costumes/veste/apose.png", "costumes/veste/views/raw/skeleton_090.png"]
+          and raw["front"]["azimuth_source"] == "A-pose validée")
     usine("mesh", "test-pilote", expect=2)
     check("pas de mesh sans contrôle d'alignement", True)
     usine("prep", "test-pilote")
