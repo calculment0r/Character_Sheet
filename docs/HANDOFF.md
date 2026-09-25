@@ -11,6 +11,88 @@ Cadrage complet : [`BRIEF_CHARACTER_FACTORY.md`](./BRIEF_CHARACTER_FACTORY.md)
 
 ---
 
+## 00. REPRENDRE ICI — Qwen-Image 2.1 turbo pour tout valider (25/09, soir)
+
+**Lire ceci d'abord. Les sections suivantes décrivent le studio tel qu'il
+est, mais la chaîne d'images change selon les décisions ci-dessous.**
+
+### Les décisions de Cal (25/09, dites en session, à tenir)
+
+1. **Les images qu'on valide sortent de Qwen-Image 2.1**, qui génère et
+   édite : visage, plein pied, vues, en HD. Cal l'a installé exprès.
+2. **H3 ne sert plus qu'à la fin** : un turnaround de présentation, une
+   fois tout le personnage validé en HD. La planche H3 n'est plus un étage
+   de validation (règle « vues après la planche » à retirer du code et de
+   `CLAUDE.md` : décision explicite de Cal).
+3. **Qwen-Image 2.1 en INT8 turbo** : base INT8 de Comfy-Org + LoRA turbo
+   de Viggle v0.2.1 (6 pas). Installé sur DGX2 le 25/09, voir plus bas.
+4. Portraits en **gros plan**, sans vêtements (fait). Onglet Costume sans
+   bouton Enregistrer, rendu toujours visible (fait).
+5. Façon de travailler : **retrouver ce qui a déjà été décidé ou fourni
+   avant de choisir un modèle** — transcripts des sessions précédentes
+   (outils `search_session_transcripts`, `export_transcript`), mémoire
+   `C:/Users/calcu/.claude/projects/C--claude/memory`, workflows officiels
+   de ComfyUI sur DGX2 (`~/comfyui-env/lib/python3.12/site-packages/comfyui_workflow_templates_json/templates/`),
+   Hugging Face. Cal perd un temps fou quand on réinvente.
+
+### Ce qui est prêt et vérifié sur DGX2
+
+- Poids téléchargés (`~/ComfyUI/models`) :
+  `diffusion_models/qwen_image_2.1_int8_convrot.safetensors`,
+  `text_encoders/qwen3vl_8b_int8_convrot.safetensors`,
+  `loras/qwen_image_2.1_viggle_turbo_v0.2.1_r256_comfy.safetensors`
+  (conversion ComfyUI de t8star) et `loras/Qwen-Image-2.1-viggle-turbo-v0.2.1-6step-lora-r256.safetensors`
+  (Viggle brut). VAE `qwen_image_2.1_vae_bf16` déjà là.
+- **`factory/qwen21.py`** : le montage de t8star en nœuds natifs
+  (`LoraLoaderBypassModelOnly` force 1,0 — surtout pas un LoRA fusionné —,
+  `ManualSigmas` 6 pas décalés selon la résolution, euler, `BasicGuider`,
+  pas de négatif), taille libre (`EmptyLatentImage`), références
+  `<image1>…<image3>`.
+  `qwen21.generate(prompt=…, refs=[…], dest=…, seed=…, size=qwen21.FULLBODY)`.
+- **Essai réel** (visage verrouillé d'`essai-atelier` en `<image1>`, tenue
+  « veryday ») : 3 pleins pieds **1152 × 2048 en 28 s** (37 s le premier,
+  chargement compris), identité tenue, matières, mains et coupe justes.
+  Images : `dgx2:/tmp/qwen21_fb/fb_21..23.png` ; script
+  `tools/remote/qwen21_fullbody_try.py` (à lancer sur DGX2 avec le python
+  du dépôt). **Défaut** : bras le long du corps au lieu de l'A-pose — à
+  régler (formulation, ou une image de pose en `<image2>`), sinon les vues
+  et le rig en souffriront.
+- Référence : README de `Viggle/Qwen-Image-2.1-viggle-turbo` (règles des
+  6 pas ; édition entraînée à 1024² et 1536² d'aire → en 9:16, 768 × 1376
+  ou 1152 × 2048).
+
+### À faire, dans l'ordre
+
+1. **Plein pied** : `chain.fullbody` passe par `qwen21.generate` par défaut
+   (visage verrouillé `<image1>`, vêtements `<image2>`, `<image3>`, taille
+   `FULLBODY`) ; régler l'A-pose. `factory/figure.py` (FLUX.2 et
+   Qwen-Edit 2511, testés ce jour : meilleurs que H3) peut rester en option
+   ou disparaître.
+2. **Visage** : moteur `qwen21` de `portrait.py` → `qwen21.generate` en t2i
+   (`FACE`), à comparer à Z-Image ; le défaut se tranche avec Cal sur pièces.
+3. **Vues** depuis le plein pied validé, par Qwen 2.1 en édition (« même
+   personne, même tenue, vue de dos, profil gauche… ») ou le LoRA orbite
+   (`views_qwen.qwen21-orbit`, à passer en turbo), en HD.
+4. **Retirer la planche H3 des étages de validation** et ajouter en fin de
+   chaîne un **turnaround H3** de présentation. Frise du studio :
+   Visage · Costume · Vues · 3D · Rig · Turnaround.
+5. `./usine doctor` : valider les gabarits `qwen21` à blanc.
+6. Relancer `tools/chain_check.py` (44/44 au 25/09) et le parcours de page.
+
+### État des machines et des personnages
+
+- Studio en route sur DGX2 (`http://192.168.10.247:8765/`). Redémarrage :
+  `pkill -f "[m] factory studio"; PYTHONUNBUFFERED=1 setsid nohup ./usine studio > studio.log 2>&1 < /dev/null &`
+  (écrire `[m]` : sinon `pkill` tue la session ssh qui le lance).
+- Personnages sur DGX2 : `essai-atelier` (celui de Cal : visage Z-Image
+  verrouillé, tenue « veryday », deux pleins pieds H3 à jeter), `kevin`
+  (portraits H3, rien de verrouillé), `ilse-varga`, `maren-ostrova`.
+- Parcours de page en Edge headless : `npm install playwright-core` dans le
+  dossier temporaire, `chromium.launch({ channel: 'msedge' })`, studio
+  lancé avec `FACTORY_H3=stub FACTORY_PORTRAIT=stub FACTORY_BRIEF=stub FACTORY_STUB_DELAY=1.5`.
+
+---
+
 ## 0. REPRENDRE ICI — le studio tourne sur DGX2 (état au 25/09/2026)
 
 **L'atelier (25/09, après-midi — retours de Cal sur Kévin)**. Cal a

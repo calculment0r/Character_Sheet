@@ -294,7 +294,8 @@ def a_fullbody(p: Project, q: dict, report):
     key = _costume(p, q)
     if "prompt" in q:
         p.data["costumes"][key]["prompt"] = str(q["prompt"]).strip()
-    one = lambda seed, report: chain.fullbody(p, key, variants=1, seed=seed, report=report)
+    engine = q.get("engine") or None
+    one = lambda seed, report: chain.fullbody(p, key, variants=1, seed=seed, engine=engine, report=report)
     return {"made": _variants(one, _int(q.get("variants"), 2, 1, 6), _seed(q), report)}
 
 
@@ -360,6 +361,12 @@ def _gpu_views(q: dict, p: Project | None = None):
     return ("h3", "h3") if method in ("per_view", "orbit") else ("qwen", "views")
 
 
+def _gpu_fullbody(q: dict, p: Project | None = None):
+    engine = q.get("engine") or config.setting("fullbody_engine", "flux2")
+    return {"h3": ("h3", "h3"), "flux2": ("flux2", "portrait"), "qwen2511": ("qwenedit", "portrait")}.get(
+        engine, ("h3", "h3"))
+
+
 def _gpu_face(q: dict, p: Project | None = None):
     engine = face_engine(p, q)
     return ("h3", "h3") if engine == "h3" else (engine, "portrait")
@@ -374,7 +381,7 @@ ACTIONS = {
     "face_lock":    (a_face_lock, "verrouillage du visage", None),
     "costume_add":  (a_costume_add, "nouveau costume", None),
     "costume_edit": (a_costume_edit, "costume modifié", None),
-    "fullbody":     (a_fullbody, "plein pied", ("h3", "h3"), read_costume_brief),
+    "fullbody":     (a_fullbody, "plein pied", _gpu_fullbody, read_costume_brief),
     "fullbody_ok":  (a_fullbody_ok, "plein pied validé", None),
     "sheet":        (a_sheet, "planche", ("h3", "h3")),
     "sheet_ok":     (a_sheet_ok, "planche validée", None),

@@ -119,26 +119,48 @@ def costume_add(p: Project, name: str, *, prompt: str = "", refs: list[str] = ()
 
 
 def fullbody(p: Project, costume: str | None, *, variants: int = 2, seed: int | None = None,
-             prompt: str = "", report=None) -> list[dict]:
-    """Le plein pied habillé, le visage verrouillé comme référence (§4)."""
+             prompt: str = "", engine: str | None = None, report=None) -> list[dict]:
+    """Le plein pied habillé, le visage verrouillé comme référence (§4).
+
+    Par un modèle d'image (`figure.py`, FLUX.2 dev par défaut) : H3 le
+    rendait à 768 px, mains et matières comprises, trop pauvre pour une
+    image qui sert ensuite de référence à la planche et aux vues."""
+    from . import figure
+
     locked = p.require_face()
     key, cos = p.costume(costume)
     if prompt:
         cos["prompt"] = prompt
+    engine = engine or config.setting("fullbody_engine", "flux2")
+    if engine not in figure.ENGINES:
+        raise ChainError(f"moteur de plein pied inconnu : {engine} (possibles : {', '.join(figure.ENGINES)})")
     report = report or _report()
     refs = [p.path(locked)] + [p.path(r) for r in cos["refs"]]
-    sections = prompts.fullbody(p.sheet, p.data["notes"], garments=len(cos["refs"]), costume_prompt=cos["prompt"],
-                                style=p.data["style"])
+    if engine == "h3":
+        sections = prompts.fullbody(p.sheet, p.data["notes"], garments=len(cos["refs"]),
+                                    costume_prompt=cos["prompt"], style=p.data["style"])
+    else:
+        outfit = prompts.describe_outfit(p.sheet, cos["prompt"])
+        text = figure.text(outfit, garments=len(cos["refs"]), style=p.data["style"])
     base = _seed(seed)
     made = []
     for i in range(variants):
         s = base + i
         n = len(cos["fullbody"]["candidates"]) + 1
         dest = p.dir(f"costumes/{key}/fullbody") / f"cand-{n:03d}.png"
-        print(f"  variante {i + 1}/{variants} · graine {s}")
-        out = h3.still("fullbody", sections=sections, refs=refs, dest=dest, seed=s, report=report,
-                       extra={"identity_seed": identity_seed(p), "azimuth": 0.0})
-        entry = {"file": p.rel(dest), "seed": s, "backend": out.backend, "at": now()}
+        print(f"  variante {i + 1}/{variants} · {figure.ENGINES[engine]} · graine {s}")
+        if engine == "h3":
+            out = h3.still("fullbody", sections=sections, refs=refs, dest=dest, seed=s, report=report,
+                           extra={"identity_seed": identity_seed(p), "azimuth": 0.0})
+            backend = out.backend
+        else:
+            figure.generate(engine, prompt=text, refs=refs, dest=dest, seed=s, report=report,
+                            identity_seed=identity_seed(p))
+            backend = config.backend("portrait")
+            dest.with_suffix(".json").write_text(json.dumps(
+                {"kind": "fullbody", "engine": engine, "backend": backend, "seed": s, "prompt": text,
+                 "refs": [str(r) for r in refs]}, ensure_ascii=False, indent=2), encoding="utf-8")
+        entry = {"file": p.rel(dest), "seed": s, "backend": backend, "engine": engine, "at": now()}
         cos["fullbody"]["candidates"].append(entry)
         made.append(entry)
         p.save()

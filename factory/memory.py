@@ -86,7 +86,7 @@ COMFY_CAPABILITIES = ("h3", "prep", "trellis", "views", "sam3dbody", "portrait")
 # Ce qu'une famille de modèles prend en mémoire une fois chargée, en Go,
 # relevé sur DGX2 (H3 : 50 Go sur le GPU et 53 Go de RAM pour son
 # encodeur Qwen3-VL-32B). Estimé pour les autres, d'après leurs poids.
-FAMILY_GB = {"h3": 100.0, "zimage": 24.0, "qwen21": 34.0, "flux2": 75.0, "birefnet": 4.0, "qwen": 34.0,
+FAMILY_GB = {"h3": 100.0, "zimage": 24.0, "qwen21": 34.0, "flux2": 75.0, "qwenedit": 34.0, "birefnet": 4.0, "qwen": 34.0,
              "trellis": 40.0, "sam3d": 20.0, "unirig": 20.0}
 
 
