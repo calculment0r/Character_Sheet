@@ -85,10 +85,24 @@ qu'attend la reconstruction. Azimut : 0 face, 90 flanc gauche du
 personnage (+X, il regarde le bord gauche de l'image), 180 dos, 270 flanc
 droit. ~50 s la vue en 1344 × 1792.
 
-**À faire** : les 3/4 (donner plus de relief au squelette : épaules et
-hanches en profondeur, pieds) ; mesurer l'azimut obtenu (SAM 3D Body,
-déjà sur DGX2) pour le contrôle ±5° ; relever DWPose sur l'A-pose validée
-elle-même plutôt que sur le squelette théorique.
+**Mesuré (25/09, soir)** — SAM 3D Body par ComfyUI (`sam3d.py`), premier
+passage réel, 10 s pour cinq vues, signe confirmé : profil gauche 93,8°,
+dos 179,0°, profil droit 265,2° → contrôle ±5° passé sur angles mesurés.
+Le 3/4 (demandé 45°) sortait à 320° : tourné du **mauvais côté**, ce que
+le contrôle, limité aux quatre vues du mesh, ne voyait pas.
+
+Corrigé en trois temps :
+- **tête en cylindre** dans le squelette (`view()` de `apose_skeleton.py`) :
+  chaque point du visage a son angle autour de l'axe du cou et se cache
+  derrière — une tête plate tournée se lisait comme une face étroite ;
+- **direction dans l'image** dans le prompt des 3/4 (« vers le bord gauche
+  de l'image »), comme pour les profils ;
+- **mesurer puis choisir** (`chain.views`, `qwen21-pose`) : chaque vue est
+  mesurée dès qu'elle sort, relancée sur la graine suivante si elle
+  s'écarte (±5° pour les vues du mesh, ±10° pour le 3/4), trois essais au
+  plus, la plus proche gardée, son angle mesuré passé au contrôle.
+  Justification : même corrigé, Qwen rate un 3/4 sur deux environ
+  (mesures : 315° demandé → 321, 322, 325, 349 ; 45° → 0, 342, 32, 360).
 
 **Écarté** :
 - `template_qwen_Image_2512_360_lora` : un **panorama équirectangulaire**

@@ -76,20 +76,24 @@ est, mais la chaîne d'images change selon les décisions ci-dessous.**
 
 ### À faire, dans l'ordre
 
-1. **Faire tourner l'A-pose et les vues sur `essai-atelier` dans le
-   studio** (le moteur réel n'a tourné que par les scripts d'essai).
-2. **Les 3/4** : donner du relief au squelette (épaules, hanches, pieds).
-3. **Mesurer l'azimut** des vues (SAM 3D Body) pour le contrôle ±5°.
-4. **Planche de référence** : branchée d'après le workflow Civitai trouvé
+1. ~~A-pose, planche et vues depuis le studio~~ : faits sur
+   `essai-atelier` (A-pose validée par Cal, planches s003/s004 à valider).
+2. ~~Mesure SAM 3D Body~~ : branchée et vérifiée, contrôle ±5° passé ;
+   les vues se mesurent et se relancent seules (`docs/ETUDES.md` §3).
+3. **Les 3/4** : encore une réussite sur deux par graine ; la boucle
+   mesurer-choisir compense. Si ça ne suffit pas : donner de la
+   profondeur au torse du squelette (épaules, hanches) et des pieds.
+4. **Mesh** d'`essai-atelier` (TRELLIS.2 multi-vues, vues mesurées) : au
+   feu vert de Cal.
+5. **Planche de référence** : branchée d'après le workflow Civitai trouvé
    par Cal (`chain.sheet`, moteur `qwen21`, frise : … A-pose · Planche ·
    Vues …, voir `docs/ETUDES.md` §5). A-pose réelle vérifiée depuis le
-   studio sur `essai-atelier` (2 candidats, non validés : à Cal). Reste :
-   la planche de garde-robe du workflow (une image de vêtement → planche
-   des pièces), et le **turnaround H3** de fin de chaîne nourri par la
-   planche validée. Si Cal dépose le zip du workflow, comparer ses prompts
-   aux nôtres.
-5. **Visage** par Qwen 2.1 turbo, à comparer à Z-Image devant Cal.
-6. `./usine doctor` : valider les gabarits `qwen21` à blanc.
+   studio sur `essai-atelier`. Le workflow lui-même a été rejoué (zip de
+   Cal) : sa planche de garde-robe invente des accessoires, on ne la
+   reprend pas. Reste : le **turnaround H3** de fin de chaîne, nourri par
+   la planche validée.
+6. **Visage** par Qwen 2.1 turbo, à comparer à Z-Image devant Cal.
+7. `./usine doctor` : valider les gabarits `qwen21` à blanc.
 
 ### État des machines et des personnages
 
