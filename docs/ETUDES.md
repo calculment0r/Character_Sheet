@@ -123,6 +123,28 @@ elle-même plutôt que sur le squelette théorique.
 
 ## 5. La planche
 
+**Branchée (25/09, soir)** d'après le workflow Civitai trouvé par Cal,
+« Qwen Image 2.1 Character Reference Sheet Generator – Face + Wardrobe +
+Pose » (nikhilprasanth, https://civitai.com/models/2960890 ; le zip
+demande une connexion, méthode relevée sur sa page et ses captures) :
+identité, tenue et mise en page données à part — visage, planche de
+garde-robe, image de mannequin (face, dos, buste) qui ne donne que la
+composition — et une planche 1920 × 1088 en trois cases : face et dos en
+pied, gros plan tête et épaules.
+
+Notre version (`chain.sheet`, moteur `qwen21`, après l'A-pose) [V, essai
+sur `essai-atelier`, 8 planches, ~66 s l'une] : `<image1>` le visage
+verrouillé **coupé au-dessus du col**, `<image2>` l'A-pose validée (la
+tenue exacte), `<image3>` une mise en page faite des squelettes A-pose
+(face, dos, buste agrandi).
+- Le portrait verrouillé entier fait passer son haut dans le gros plan
+  (t-shirt noir au lieu du hoodie), même en l'interdisant en prose : il
+  faut le couper au-dessus du col.
+- Mise en page en squelettes contre mannequin rendu d'après eux : le
+  mannequin est plus joli mais le gros plan perd la tenue (col de pull,
+  pas de capuche) ; les squelettes la tiennent (zip, cordons, capuche).
+- Face et dos en A-pose, même tenue, même visage, même échelle.
+
 Deux usages, deux méthodes [V, pratique publiée ; I, choix] :
 
 - **Pour la chaîne** : pas de planche générée d'un coup. Les vues HD,
