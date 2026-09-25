@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 NEUTRAL = (128, 128, 128)
 
@@ -123,17 +123,75 @@ def matte_builtin(img: Image.Image) -> Image.Image:
     return out
 
 
+def _main_gate(mask: np.ndarray) -> np.ndarray:
+    """La zone de la plus grande tache, large de quelques pixels autour
+    d'elle. Les taches sont repérées en basse résolution, par blocs : un
+    bloc compte s'il contient un seul pixel du masque, si bien qu'aucun
+    bord fin de la silhouette n'est perdu ; la porte est ensuite élargie
+    d'un bloc, pour que la traîne douce du contour passe entière."""
+    h, w = mask.shape
+    s = max(1, max(h, w) // 256)
+    H, W = -(-h // s), -(-w // s)
+    pad = np.zeros((H * s, W * s), dtype=bool)
+    pad[:h, :w] = mask
+    small = pad.reshape(H, s, W, s).any(axis=(1, 3))
+    labels, sizes, _ = _components(small)
+    if not sizes:
+        return np.ones_like(mask)
+    keep = np.kron(labels == max(sizes, key=sizes.get), np.ones((s, s), dtype=bool))[:h, :w]
+    grown = Image.fromarray(keep.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(2 * s + 1))
+    return np.asarray(grown) > 0
+
+
 def with_mask(img: Image.Image, mask: Image.Image) -> Image.Image:
-    """Pose un masque de détoureur en alpha. On ne garde que la plus
-    grande tache — une ombre portée détachée, une poussière s'en vont —
-    et le contour garde la douceur du masque."""
+    """Pose le masque d'un détoureur en alpha, tel quel : sa transition
+    douce fait le bord (cheveux, tissu). On n'en retire que ce qui est
+    détaché de la silhouette — une ombre portée, une poussière.
+
+    Le 25/09, cette fonction tranchait le masque à 50 % et le coupait par
+    une silhouette reconstruite en blocs de 5 px : le contour sortait en
+    marches d'escalier, alors que BiRefNet rendait un bord propre."""
     soft = np.asarray(mask.convert("L").resize(img.size, Image.LANCZOS), dtype=np.float32)
-    solid = _clean(soft > 127)
-    inner = _shift_min(solid.astype(np.float32), 1) > 0.5
-    alpha = np.where(inner, 255.0, np.where(solid, np.maximum(soft, 128.0), 0.0))
-    out = img.convert("RGBA")
-    out.putalpha(Image.fromarray(alpha.astype(np.uint8)))
+    # BiRefNet plafonne à 254 dans la silhouette et laisse un voile de 1 à
+    # 4 dans le fond : on étire, le plein devient opaque, le voile disparaît.
+    soft = np.clip((soft - 4.0) / (250.0 - 4.0), 0.0, 1.0) * 255.0
+    alpha = np.where(_main_gate(soft > 127), soft, 0.0)
+    rgb = _decontaminate(np.asarray(img.convert("RGB"), dtype=np.float32), alpha / 255.0)
+    out = Image.fromarray(rgb.astype(np.uint8)).convert("RGBA")
+    out.putalpha(Image.fromarray(np.clip(alpha, 0, 255).astype(np.uint8)))
     return out
+
+
+def _box(x: np.ndarray, r: int) -> np.ndarray:
+    """Moyenne sur une fenêtre carrée de côté 2r + 1, en flottants (sommes
+    cumulées, bords répétés)."""
+    for axis in (0, 1):
+        pad = [(0, 0), (0, 0)]
+        pad[axis] = (r + 1, r)
+        c = np.cumsum(np.pad(x, pad, mode="edge"), axis=axis, dtype=np.float64)
+        hi = np.take(c, np.arange(2 * r + 1, c.shape[axis]), axis=axis)
+        lo = np.take(c, np.arange(0, c.shape[axis] - 2 * r - 1), axis=axis)
+        x = (hi - lo) / (2 * r + 1)
+    return x.astype(np.float32)
+
+
+def _decontaminate(rgb: np.ndarray, a: np.ndarray, radius: int = 24) -> np.ndarray:
+    """Retire le fond des pixels de bord. Un pixel à demi couvert vaut
+    a·F + (1 − a)·B : le fond B d'un studio H3 est lisse (gris, dégradé,
+    vignetage), on l'estime en floutant l'image là où elle est du fond
+    seul, et on en tire la couleur propre F. Sans cela, le bord garde un
+    liseré gris sur tout autre fond."""
+    edge = (a > 0.0) & (a < 0.98)
+    if not edge.any():
+        return rgb
+    only_bg = (a < 0.02).astype(np.float32)
+    weight = _box(only_bg, radius)
+    bg = np.stack([_box(rgb[..., c] * only_bg, radius) for c in range(3)], axis=-1) / np.maximum(weight, 1e-3)[..., None]
+    # Loin de tout fond visible (au milieu d'une main levée), on garde l'image.
+    known = weight > 0.02
+    safe = np.maximum(a, 0.08)[..., None]
+    clean = np.clip((rgb - (1.0 - a[..., None]) * bg) / safe, 0, 255)
+    return np.where((edge & known)[..., None], clean, rgb)
 
 
 def matte(img: Image.Image, engine: str = "builtin", *, workdir: Path | None = None) -> Image.Image:
