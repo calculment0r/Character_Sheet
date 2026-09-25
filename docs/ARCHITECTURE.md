@@ -6,10 +6,14 @@ dans [`BRIEF_CHARACTER_FACTORY.md`](./BRIEF_CHARACTER_FACTORY.md).
 
 ## Le découpage
 
-Tout tourne sur la machine, sans serveur — décision de Cal : pas d'API
-pour l'instant.
+Tout tourne sur la machine, DGX2 — décision de Cal : pas d'API
+distante pour l'instant. Le studio est un serveur local, sur le réseau
+de la maison, pas une API.
 
 ```
+./usine studio                         ← le studio : studio.html, cartes et étages à la main
+    │     studio.py                    serveur (stdlib), file à un ouvrier, relais du modèle de texte
+    │     memory.py                    décharger Ollama, vider ComfyUI, attendre de la mémoire
 ./usine <commande>                     ← une commande par étage
     │
     ├── factory/                       la chaîne, en Python
@@ -28,8 +32,13 @@ pour l'instant.
 ```
 
 La console (`console.html`) reste l'outil de l'étage Identité : une
-conversation avec le modèle de texte local qui remplit la fiche, puis
-un export JSON que `./usine nouveau --identite` reprend.
+conversation avec le modèle de texte local qui remplit la fiche. Servie
+par le studio, elle crée ou met à jour le personnage elle-même ; ouverte
+seule, elle exporte un JSON que `./usine nouveau --identite` reprend.
+
+Le studio appelle les fonctions de `chain.py` telles quelles : il n'a
+pas de règle à lui. Un travail GPU passe par la file ; les `print` de
+l'étage vont à son journal, ses `report` à sa progression.
 
 `api/` — FastAPI, file RQ, MinIO, tunnel — reste dans le dépôt pour le
 jour où la page pilotera la chaîne à distance. Rien de la chaîne locale

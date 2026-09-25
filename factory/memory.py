@@ -132,9 +132,11 @@ class Manager:
         self.wait_for(self.min_free_gb, say)
 
     def before_chat(self, say=lambda m: None) -> None:
-        # Le modèle de texte (~20 Go) peut cohabiter avec un travail en
-        # cours ; on ne vérifie que la marge.
-        self.wait_for(22.0, say, patient=False)
+        # Le modèle de texte (qwen3-vl 32B, contexte 32k : ~31 Go) peut
+        # cohabiter avec un travail en cours ; on ne vérifie que la marge,
+        # et seulement s'il n'est pas déjà chargé.
+        if not llm_loaded():
+            self.wait_for(float(config.setting("llm_gb", "32")), say, patient=False)
 
     def wait_for(self, need_gb: float, say, patient: bool = True) -> None:
         free = available_gb()

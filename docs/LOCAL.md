@@ -1,9 +1,52 @@
 # La chaîne en local
 
-Tout tourne sur la machine. Pas de serveur, pas de file, pas de tunnel :
-une commande par étage, `./usine <commande>`, et un dossier par
-personnage sous `projects/`. L'API de `api/` reste dans le dépôt pour
-plus tard ; la chaîne locale ne s'en sert pas.
+Tout tourne sur la machine, DGX2. Deux façons de s'en servir, qui
+écrivent dans les mêmes dossiers : le **studio**, une page qui mène
+chaque personnage à la main, et `./usine <commande>`, une commande par
+étage. Un dossier par personnage sous `projects/`. L'API de `api/` reste
+dans le dépôt pour plus tard ; la chaîne locale ne s'en sert pas.
+
+---
+
+## Le studio
+
+```sh
+# sur DGX2, dans ~/Character_Factory
+setsid nohup ./usine studio > studio.log 2>&1 < /dev/null &
+```
+
+Puis, depuis le PC : **http://192.168.10.247:8765/** (ou l'adresse
+Tailscale de DGX2, `100.108.108.65`). L'accueil montre les personnages
+en cartes ; un clic ouvre le personnage, un bloc par étage : visage,
+costumes, plein pied, planche, vues (préparation et contrôle compris),
+mesh, rig. L'étape suivante prend l'orange. La fiche d'identité se
+remplit par la conversation (`console.html?new=1` pour un nouveau
+personnage, `?slug=<perso>` pour reprendre le sien) : fiche, notes et
+conversation s'enregistrent au studio après chaque tour.
+
+- **Une seule file, un seul ouvrier** : un calcul à la fois. Avant
+  chaque travail, le studio décharge le modèle de texte d'Ollama et vide
+  l'instance de ComfyUI qui ne sert pas (`factory/memory.py`) ; il
+  attend puis refuse sous `min_free_gb` (30 Go) de mémoire libre.
+- **Le modèle de texte** passe par le studio (`/v1/…`, relais vers
+  Ollama) : réglé par `llm_url` et `llm_model` dans `factory.local.json`.
+- Les choix (verrouiller, valider, accepter) se jouent tout de suite,
+  sauf pendant un travail sur le même personnage : il tient une copie
+  du manifeste et l'écraserait en finissant.
+- `factory.local.json` de DGX2 :
+
+  ```json
+  {
+    "comfyui_url": "http://127.0.0.1:8188",
+    "comfyui_url_h3": "http://127.0.0.1:8189",
+    "backends": {"h3": "comfyui", "prep": "comfyui", "trellis": "comfyui"},
+    "llm_url": "http://127.0.0.1:11434",
+    "llm_model": "qwen3-vl-32b-32k"
+  }
+  ```
+
+  H3 va sur `:8189` (`ComfyUI-H3TEST`, qui a les nœuds accélérateurs
+  Spectrum et Sol-Attn), tout le reste sur `:8188`.
 
 ---
 

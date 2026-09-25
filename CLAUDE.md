@@ -12,17 +12,23 @@ Reprise du travail : `docs/HANDOFF.md`
 
 ## Lancer
 
+On ne travaille que sur **DGX2** (`ssh dgx2`, dépôt dans
+`~/Character_Factory`, venv `.venv`). Le PC ne sert qu'à écrire le code
+et à ouvrir la page.
+
 ```sh
+./usine studio            # le studio, sur DGX2 : http://192.168.10.247:8765/
 ./usine doctor            # ce qui tourne déjà : GPU, ComfyUI et ses nœuds H3, paquets
 ./usine gabarit export.json   # adopter le workflow H3 de ComfyUI (export API)
-./usine page              # la page, pour l'étage Identité
 ./usine etat <perso>      # où en est un personnage, et la commande suivante
 ```
 
-Une commande par étage, un dossier par personnage sous `projects/`,
-un manifeste `project.json`. H3 passe par ComfyUI (moteur par défaut) ;
-les autres capacités sont factices tant que `./usine doctor` n'a pas
-trouvé leur modèle.
+Le studio (`factory/studio.py`, `studio.html`, `js/studio.js`) mène
+chaque personnage à la main, étage par étage, avec une file à un
+ouvrier ; `./usine <étage>` fait la même chose en ligne de commande.
+Un dossier par personnage sous `projects/`, un manifeste `project.json`.
+H3 passe par ComfyUI `:8189`, le reste par `:8188` ; les capacités sans
+modèle trouvé par `./usine doctor` sont factices.
 
 `api/`, `start.sh`, `check.sh` et `docs/CLOUDFLARE.md` restent pour le
 jour où la page devra piloter la chaîne à distance. Ne pas les étendre
@@ -37,6 +43,8 @@ python3 tools/chain_check.py     # la chaîne entière, moteurs factices + traje
 Rend 0 si tout passe. **Le lancer après toute modification de
 `factory/`.** Il rejoue le skinning glTF comme un viewer : une pose qui
 casse se voit dans ses chiffres.
+
+Il mène aussi le studio par son API, du personnage créé au rig accepté.
 
 Après une modification de la console (`console.html`, `js/`, `assets/`) :
 

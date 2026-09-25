@@ -529,7 +529,11 @@ def _interrupt_ours(url: str) -> bool:
 
 
 def llm_model() -> str:
-    return config.setting("llm_model", "qwen3-vl:30b-a3b-instruct")
+    # qwen3-vl 32B dense, dérivé en contexte 32k (`ollama create` avec
+    # PARAMETER num_ctx 32768) : au banc du 25/09, le seul des modèles de
+    # DGX2 qui range la fiche par les outils à chaque tour ; le 30B-A3B
+    # la récite en texte. Sans num_ctx, Ollama réserve 262k de contexte.
+    return config.setting("llm_model", "qwen3-vl-32b-32k")
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
