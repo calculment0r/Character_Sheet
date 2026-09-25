@@ -11,6 +11,87 @@ Cadrage complet : [`BRIEF_CHARACTER_FACTORY.md`](./BRIEF_CHARACTER_FACTORY.md)
 
 ---
 
+## 0. REPRENDRE ICI — le studio (état au 25/09/2026)
+
+**Ce que Cal veut (25/09)** : une vraie application, pas une chaîne en
+ligne de commande. Une page d'accueil avec les personnages en **cartes** ;
+un clic ouvre le personnage ; on y fait **toute l'expérience de
+conception à la main** : fiche d'identité avec traits de personnalité
+(la conversation de `console.html`, reprise de l'ancien générateur),
+prompts du visage, variantes, verrouillage, costumes (description +
+images de vêtements), plein pied, planche, vues, 3D, rig. S'il faut un
+modèle de texte, en mettre un adapté. **Idéal : tout sur DGX2**, en
+chargeant/déchargeant les modèles pour tenir la mémoire.
+
+**Architecture retenue** (à construire) :
+
+- `./usine studio` → `factory/studio.py`, serveur `http.server` (stdlib)
+  qui tourne **sur DGX2** (dépôt cloné dans `~/Character_Factory`, venv,
+  `factory.local.json` en `127.0.0.1`), port 8765, ouvert depuis le PC
+  sur `http://192.168.10.247:8765/`.
+  - `/` → `studio.html` (accueil, cartes) ; `#/p/<slug>` → page personnage.
+  - `/v1/models`, `/v1/chat/completions` → relais vers Ollama de DGX2
+    (`llm_url`, modèle `llm_model`, proposé : `qwen3-vl:30b-a3b-instruct`,
+    vision + appels d'outils, 19 Go ; sinon `qwen3:30b-a3b`). La console
+    le trouve seule : servie hors github.io, elle cherche `/v1` sur son
+    origine (`js/config.js`, `implicitBase`).
+  - `/api/characters` (GET liste, POST création depuis `{sheet, notes,
+    style}`), `/api/characters/<slug>` (détail), `PUT …/identity`,
+    `POST …/actions/<action>` (face, face_lock, costume_add, fullbody,
+    fullbody_ok, sheet, sheet_ok, views, prep, check, mesh, rig →
+    `chain.*` et `cli_motion.cmd_rig` avec un `SimpleNamespace`),
+    `/api/uploads` (images de référence), `/api/jobs[/<id>]`, `/api/system`,
+    `/files/<slug>/…` (fichiers du personnage).
+  - **File de travaux** : un seul thread ouvrier, un travail GPU à la
+    fois ; progression par le `report` des étages ; les `print` des
+    étages routés vers le journal du travail (proxy de `sys.stdout` par
+    thread).
+  - **Mémoire** : `factory/memory.py` (écrit, pas encore branché) —
+    décharge Ollama avant chaque génération, vide ComfyUI (`/free`) quand
+    on change de famille de modèles, attend/refuse sous 30 Go libres.
+- Front : `studio.html` + `js/studio.js` (+ `assets/studio.css`, à montrer
+  dans `theme.html`) ; règles du thème (jetons, filets en box-shadow, un
+  seul bouton orange par écran, Norelli réservée). Cartes : visage
+  verrouillé (ou dernier candidat), nom, rôle, avancement des étages.
+  Page personnage : une section par étage, l'action principale en orange,
+  grilles de candidats avec « Verrouiller » / « Valider », panneau des
+  travaux (polling). `console.html?new=1` / `?slug=…` : la conversation
+  crée ou met à jour le personnage (POST/PUT) au lieu d'exporter un JSON.
+- Tester d'abord **sur le PC avec les moteurs factices** (`FACTORY_*=stub`),
+  puis déployer sur DGX2.
+
+**Constats sur DGX2 à régler au déploiement** :
+
+- Aucune instance ComfyUI ne sait tout faire. `:8188` (principale) valide
+  TRELLIS, Qwen (les trois), BiRefNet, SAM 3D Body, mais pas le gabarit H3
+  (manquent `MiniMaxH3MemoryEfficientSolAttentionPatch` et
+  `SpectrumApplyMiniMaxH3`, deux accélérateurs). `:8189` (H3TEST) n'a pas
+  les nœuds Qwen-Image 2.1 et son `ModelPreviewOverrideKJ` n'a pas
+  `tiny_vae`. Choix : **une seule instance, `:8188`**, avec soit un gabarit
+  H3 sans ces trois nœuds (rebrancher le LoRA 148 sur l'UNET 127), soit
+  l'installation des deux nœuds dans `~/ComfyUI/custom_nodes` (copie
+  depuis `~/ComfyUI-H3TEST/custom_nodes`, puis redémarrage).
+- Le 25/09 au matin, DGX2 (redémarré à 09:48) avait un travail en cours
+  sur `:8188` (55 Go) qui n'était pas à nous ; Cal était en train de le
+  libérer. Ne rien lancer sans vérifier `/queue` et `MemAvailable`.
+- Ollama (0.0.0.0:11434) : qwen3-vl:32b/30b-a3b-instruct, qwen3:30b-a3b,
+  mistral-small3.2:24b, qwen2.5, hermes-3-70b…
+- `~/Character_Sheet` existe déjà sur DGX2 (ancien clone) : ne pas s'en
+  servir, cloner la branche de travail à côté.
+
+**Toujours en attente de Cal** : licence Llama-3 (Kimodo) ; numpy de
+DGX2 pour Hunyuan3D ; feu vert pour le banc des vues Qwen, TRELLIS.2 et
+UniRig ; disque sur le visage.
+
+**Façon de travailler (retours de Cal)** : chercher d'abord un modèle ou
+un outil fait pour le geste (Hugging Face, modèles de workflows ComfyUI)
+avant de bricoler ; télécharger directement sur les DGX sans demander ;
+passer par ssh/curl, jamais par le navigateur intégré (autorisations) ;
+un seul gros calcul par machine ; tenir la page d'état publiée à jour
+(`CLAUDE.md`, section GitHub Pages).
+
+---
+
 ## 1. Les décisions de Cal
 
 - **Tout en local, pas d'API pour l'instant.** La chaîne est `./usine`,
