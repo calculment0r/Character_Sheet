@@ -20,7 +20,16 @@ local, sans rien d'autre que la bibliothèque standard :
   /api/characters/<slug>       GET le détail ; PUT …/identity ; POST …/actions/<action>
   /api/uploads                 POST une image de référence (corps brut)
   /api/jobs[/<id>]             la file de travaux ; POST …/<id>/cancel
+  /api/attention               ce qui attend Cal, tous personnages confondus
   /files/<slug>/<chemin>       les fichiers d'un personnage
+
+L'autopilote (`autopilot.py`, décision de Cal du 27/09) : dès qu'un
+plein pied est validé, A-pose, vues, préparation, contrôle, mesh et rig
+s'enchaînent seuls, validés par la mesure ; Cal n'est appelé qu'après
+deux échecs (`data["attention"]`, action `attention`). Chaque étape est
+un travail de la file, en priorité basse : un travail demandé par Cal
+passe devant dès que l'étape en cours finit. Un étage technique lancé à
+la main met l'autopilote du costume en pause ; `autopilot` le relance.
 
 Une seule file, un seul ouvrier : un travail GPU à la fois. Avant
 chaque travail, `memory.Manager` décharge le modèle de texte et vide le
@@ -33,6 +42,7 @@ from __future__ import annotations
 
 import http.server
 import io
+import itertools
 import json
 import mimetypes
 import queue
@@ -47,7 +57,7 @@ import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
-from . import chain, config, h3, memory
+from . import autopilot, chain, config, h3, memory
 from .project import IDENTITY_SCHEMA, ChainError, Project, apose, list_projects, now
 
 PORT = 8765
@@ -92,10 +102,14 @@ class _Router(io.TextIOBase):
         self.real.flush()
 
 
+USER, AUTO = 0, 1      # priorités de la file : Cal d'abord, l'autopilote ensuite
+
+
 class Job:
-    def __init__(self, slug: str, action: str, params: dict, label: str) -> None:
+    def __init__(self, slug: str, action: str, params: dict, label: str, priority: int = USER) -> None:
         self.id = uuid.uuid4().hex[:12]
         self.slug, self.action, self.params, self.label = slug, action, params, label
+        self.priority = priority
         self.status = "queued"          # queued | running | done | error | cancelled
         self.progress = 0.0
         self.message = "en file"
@@ -105,6 +119,7 @@ class Job:
         self.result = None
         self.error = None
         self.cancel = False
+        self.run_order = None     # rang de départ dans la file (1, 2…), pour lire les priorités
 
     def write(self, s: str) -> None:
         self._partial += s
@@ -119,9 +134,9 @@ class Job:
 
     def public(self, full: bool = False) -> dict:
         return {"id": self.id, "slug": self.slug, "action": self.action, "label": self.label,
-                "params": self.params, "status": self.status, "progress": round(self.progress, 3),
+                "params": self.params, "status": self.status, "auto": self.priority == AUTO, "progress": round(self.progress, 3),
                 "message": self.message, "created": self.created, "started": self.started, "ended": self.ended,
-                "error": self.error, "result": self.result,
+                "error": self.error, "result": self.result, "run_order": self.run_order,
                 "log": self.lines if full else self.lines[-10:]}
 
 
@@ -300,7 +315,16 @@ def a_fullbody(p: Project, q: dict, report):
 
 
 def a_fullbody_ok(p: Project, q: dict, report):
-    return {"validated": chain.fullbody_ok(p, _costume(p, q), str(q.get("candidate", "")))}
+    """Le dernier choix de Cal avant la 3D : l'autopilote part de là, sauf
+    `autopilot: false` (menée à la main) ou FACTORY_AUTOPILOT=off."""
+    key = _costume(p, q)
+    out = {"validated": chain.fullbody_ok(p, key, str(q.get("candidate", "")))}
+    if autopilot.enabled() and q.get("autopilot", True) not in (False, "off", "0", 0):
+        out["autopilot"] = autopilot.start(p, key, why="plein pied validé")
+    else:
+        autopilot.state(p.data["costumes"][key])["state"] = "off"
+        p.save()
+    return out
 
 
 def a_apose(p: Project, q: dict, report):
@@ -310,7 +334,15 @@ def a_apose(p: Project, q: dict, report):
 
 
 def a_apose_ok(p: Project, q: dict, report):
-    return {"validated": chain.apose_ok(p, _costume(p, q), str(q.get("candidate", "")))}
+    """Cal peut toujours choisir l'A-pose lui-même : un autopilote en
+    marche prend la suite depuis elle, un autopilote qui l'appelait repart."""
+    key = _costume(p, q)
+    out = {"validated": chain.apose_ok(p, key, str(q.get("candidate", "")))}
+    st = autopilot.state(p.data["costumes"][key])
+    if st.get("state") in ("running", "failed"):
+        autopilot.settle(p, key, ("apose_failed",), "choisie par Cal")
+        out["autopilot"] = autopilot.resume(p, key, why="A-pose choisie par Cal")
+    return out
 
 
 def a_sheet(p: Project, q: dict, report):
@@ -349,12 +381,38 @@ def a_mesh(p: Project, q: dict, report):
 
 
 def a_rig(p: Project, q: dict, report):
-    from .cli_motion import cmd_rig
+    from .cli_motion import rig
 
     mesh = q.get("mesh")
-    cmd_rig(SimpleNamespace(perso=str(p.root), costume=_costume(p, q), pose="apose",
-                            mesh=int(mesh) if str(mesh or "").isdigit() else None))
-    return {}
+    e = rig(p, _costume(p, q), mesh=int(mesh) if str(mesh or "").isdigit() else None, report=report)
+    return {"version": e["version"], "glb": e["glb"]}
+
+
+def a_autopilot(p: Project, q: dict, report):
+    """Une étape de l'autopilote ; le studio le remet en file tant qu'il
+    reste à faire."""
+    key = _costume(p, q)
+    job = getattr(_local, "job", None)
+    return {"costume": key, **autopilot.run_step(p, key, report, cancelled=lambda: bool(getattr(job, "cancel", 0)))}
+
+
+def a_autopilot_stop(p: Project, q: dict, report):
+    key = _costume(p, q)
+    autopilot.stop(p, key)
+    return {"costume": key, "state": autopilot.state(p.data["costumes"][key]).get("state")}
+
+
+def a_attention(p: Project, q: dict, report):
+    """La réponse de Cal à ce qui l'attend : `do` = dismiss, retry ou
+    choose (avec `candidate`)."""
+    return autopilot.resolve(p, str(q.get("id") or ""), str(q.get("do") or "dismiss"),
+                             candidate=str(q["candidate"]) if q.get("candidate") else None)
+
+
+def _gpu_autopilot(q: dict, p: Project | None = None):
+    if p is None:
+        return ("qwen21", "portrait")      # sans le manifeste : c'est un travail, le plus souvent Qwen
+    return autopilot.spot(p, q.get("costume") or None)
 
 
 def a_rig_ok(p: Project, q: dict, report):
@@ -409,7 +467,14 @@ ACTIONS = {
     "mesh":         (a_mesh, "mesh 3D", ("trellis", "trellis")),
     "rig":          (a_rig, "rig SOMA", ("unirig", None)),
     "rig_ok":       (a_rig_ok, "verdict du rig", None),
+    "autopilot":    (a_autopilot, "autopilote", _gpu_autopilot),
+    "autopilot_stop": (a_autopilot_stop, "autopilote en pause", None),
+    "attention":    (a_attention, "réponse à ce qui attend", None),
 }
+
+# Les étages techniques : lancés à la main, ils mettent l'autopilote du
+# costume en pause, pour ne pas se battre avec lui (panneau de débogage).
+MANUAL_TECH = ("apose", "views", "prep", "check", "mesh", "rig", "rig_ok")
 
 # Le moteur de chaque capacité, pour savoir si un travail touche au GPU.
 _ENGINE = {"h3": "h3", "views": "h3", "prep": "prep", "trellis": "trellis", "sam3dbody": "sam3dbody",
@@ -450,6 +515,15 @@ def _next(p: Project) -> dict | None:
         fb = cos["fullbody"]
         if not fb.get("validated"):
             return {"action": "fullbody_ok" if fb["candidates"] else "fullbody", "costume": key}
+        # L'autopilote mène la suite : rien à faire pour Cal tant qu'il
+        # tourne ; s'il l'appelle, c'est l'entrée « ce qui attend ».
+        pilot = autopilot.state(cos)
+        if pilot.get("state") == "running":
+            return {"action": "autopilot", "costume": key, "step": pilot.get("step"), "wait": True}
+        if pilot.get("state") == "failed":
+            return {"action": "attention", "costume": key, "id": (pilot.get("failed") or {}).get("id")}
+        if pilot.get("state") == "done":
+            continue
         ap = apose(cos)
         if not ap.get("validated"):
             return {"action": "apose_ok" if ap["candidates"] else "apose", "costume": key}
@@ -510,6 +584,9 @@ def summary(p: Project) -> dict:
         "costumes": len(costumes),
         "stages": [{"ref": r, "id": i, "label": lab, "state": st} for r, i, lab, st in stages],
         "next": _next(p),
+        "autopilot": {k: {f: (c.get("autopilot") or {}).get(f) for f in ("state", "step", "at", "failed")}
+                      for k, c in d["costumes"].items() if (c.get("autopilot") or {}).get("state") not in (None, "off")},
+        "attention": len(autopilot.open_items(p)),
     }
 
 
@@ -522,7 +599,11 @@ def backends() -> dict:
 class Studio:
     def __init__(self) -> None:
         self.jobs: list[Job] = []
-        self.queue: queue.Queue[Job] = queue.Queue()
+        # File à priorités : (priorité, ordre d'arrivée, travail). Les étapes
+        # de l'autopilote passent après tout travail demandé par Cal.
+        self.queue: queue.PriorityQueue = queue.PriorityQueue()
+        self._order = itertools.count()
+        self._runs = itertools.count(1)
         self.running: Job | None = None
         # Le personnage d'un calcul en cours : les choix faits pendant ce
         # calcul (verrouiller, écrire le costume, corriger la fiche) passent
@@ -531,16 +612,47 @@ class Studio:
         self.memory = memory.Manager()
         self.lock = threading.Lock()
         threading.Thread(target=self._worker, name="ouvrier", daemon=True).start()
+        # Un studio relancé reprend les autopilotes qui tournaient.
+        for slug, key in autopilot.pending(list_projects()):
+            self.kick(slug, key)
 
     # la file
 
-    def submit(self, slug: str, action: str, params: dict) -> Job:
-        job = Job(slug, action, params, ACTIONS[action][1])
+    def submit(self, slug: str, action: str, params: dict, priority: int = USER) -> Job:
+        job = Job(slug, action, params, ACTIONS[action][1], priority)
         with self.lock:
             self.jobs.append(job)
-            del self.jobs[:-200]
-        self.queue.put(job)
+            # On garde les 200 derniers, jamais un travail encore en file.
+            old = [j for j in self.jobs[:-200] if j.status == "queued"]
+            self.jobs[:] = old + self.jobs[-200:]
+        self.queue.put((priority, next(self._order), job))
         return job
+
+    def kick(self, slug: str, costume: str) -> Job:
+        """Met en file l'étape suivante de l'autopilote d'un costume, sauf
+        s'il en a déjà une qui attend."""
+        with self.lock:
+            waiting = next((j for j in self.jobs if j.action == "autopilot" and j.slug == slug
+                            and j.params.get("costume") == costume and j.status == "queued"), None)
+        return waiting or self.submit(slug, "autopilot", {"costume": costume}, AUTO)
+
+    def _continue(self, job: Job) -> None:
+        """Après une étape : la suivante, si l'autopilote tourne encore."""
+        try:
+            p = self.project(job.slug)
+            key = job.params.get("costume")
+            with p.lock:
+                if job.cancel:
+                    autopilot.stop(p, key, why="étape annulée : autopilote en pause")
+                    go = False
+                elif job.status != "done":
+                    go = autopilot.crashed(p, key, job.error or job.status)
+                else:
+                    go = autopilot.state(p.data["costumes"][key]).get("state") == "running"
+            if go:
+                self.kick(job.slug, key)
+        except (ChainError, KeyError, ValueError) as exc:
+            print(f"  autopilote {job.slug} : pas de suite ({exc})")
 
     def busy(self, slug: str) -> bool:
         return self.running is not None and self.running.slug == slug
@@ -554,6 +666,10 @@ class Studio:
     def cancel(self, job: Job) -> str:
         if job.status == "queued":
             job.status, job.message, job.ended = "cancelled", "annulé avant de partir", now()
+            if job.action == "autopilot":
+                p = self.project(job.slug)
+                with p.lock:
+                    autopilot.stop(p, job.params.get("costume"), why="étape annulée : autopilote en pause")
             return "annulé"
         if job.status != "running":
             return "déjà fini"
@@ -566,12 +682,13 @@ class Studio:
 
     def _worker(self) -> None:
         while True:
-            job = self.queue.get()
+            _, _, job = self.queue.get()
             if job.status != "queued":
                 continue
             self.running = job
             _local.job = job
             job.status, job.started, job.message = "running", now(), "démarrage"
+            job.run_order = next(self._runs)
             try:
                 self._run(job)
                 job.status, job.progress = "done", 1.0
@@ -591,6 +708,8 @@ class Studio:
                 _local.job = None
                 self.live.pop(job.slug, None)
                 self.running = None
+                if job.action == "autopilot":
+                    self._continue(job)
 
     def _run(self, job: Job) -> None:
         fn, _, _, *pre = ACTIONS[job.action]
@@ -618,17 +737,44 @@ class Studio:
         if action not in ACTIONS:
             raise ChainError(f"action inconnue : {action}")
         Project.open(slug)
+        if action == "autopilot":
+            # Relancer depuis la page : `restart` repart du plein pied validé,
+            # sinon reprise là où il s'est arrêté, budget d'essais rendu.
+            p = self.project(slug)
+            with p.lock:
+                key = _costume(p, params)
+                if params.get("restart"):
+                    autopilot.start(p, key, why="relancé depuis le studio")
+                else:
+                    autopilot.resume(p, key, why="relancé depuis le studio", fresh=True)
+            return {"job": self.kick(slug, key).public(), "autopilot": autopilot.state(p.data["costumes"][key])}
         if where(action, params) is not None:
+            if action in MANUAL_TECH:
+                self._manual(self.project(slug), action, params)
             return {"job": self.submit(slug, action, params).public()}
         p = self.project(slug)
         out = io.StringIO()
         _local.job = SimpleNamespace(write=out.write)
         try:
             with p.lock:
+                if action in MANUAL_TECH:
+                    self._manual(p, action, params)
                 result = ACTIONS[action][0](p, params, lambda pr, m: None)
         finally:
             _local.job = None
+        if isinstance(result, dict) and result.get("autopilot"):
+            self.kick(slug, result["autopilot"])
         return {"result": result, "log": out.getvalue().strip()}
+
+    def _manual(self, p: Project, action: str, params: dict) -> None:
+        """Un étage technique lancé à la main : l'autopilote du costume se
+        met en pause plutôt que de se battre avec Cal."""
+        try:
+            key, _ = p.costume(params.get("costume") or None)
+        except ChainError:
+            return
+        with p.lock:
+            autopilot.stop(p, key, why=f"{ACTIONS[action][1]} lancé à la main : autopilote en pause")
 
     def system(self) -> dict:
         return {
@@ -811,6 +957,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._json(s.system())
         if head == "uploads" and method == "POST":
             return self._json(self._upload())
+        if head == "attention" and method == "GET":
+            items = [{"slug": p.data["slug"], "name": p.data["name"], **a}
+                     for p in (s.project(q.data["slug"]) for q in list_projects()) for a in autopilot.open_items(p)]
+            return self._json({"attention": sorted(items, key=lambda a: a["at"], reverse=True)})
         if head == "jobs":
             if len(parts) == 1 and method == "GET":
                 q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
@@ -836,7 +986,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 from .portrait import ENGINES
 
                 p = s.project(slug)
+                autopilot.attention(p)      # la clé existe toujours dans `character`
                 return self._json({"character": p.data, "summary": summary(p), "busy": s.busy(slug),
+                                   "attention": autopilot.open_items(p),
                                    "face_engines": ENGINES,
                                    "backends": backends(), "view_methods": list(chain.VIEW_METHODS)})
             if len(parts) == 3 and parts[2] == "identity" and method == "PUT":

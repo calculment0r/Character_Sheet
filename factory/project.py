@@ -15,6 +15,11 @@ Les règles dures du brief sont tenues ici, pas dans la documentation :
     vues sans A-pose validée. La planche H3 n'est plus un étage de
     validation (décision de Cal, 25/09 : H3 ne fait plus que le
     turnaround de présentation) ; `./usine planche` reste possible.
+
+Depuis le 27/09 (décision de Cal), les étages techniques — A-pose, vues,
+mesh, rig — peuvent être validés par la machine sur mesure
+(`autopilot.py`) : la validation le dit (`validated_by`, la mesure avec).
+L'ordre des étages, lui, ne change pas.
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ import shutil
 import tempfile
 import threading
 import unicodedata
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -79,6 +85,7 @@ class Project:
             "costumes": {},
             "takes": [],
             "timelines": {},
+            "attention": [],
         }
         p = cls(folder, data)
         p.save()
@@ -231,10 +238,13 @@ class Project:
         chosen = self._pick(cos["fullbody"]["candidates"], candidate, "plein pied")
         dest = self.path(f"costumes/{key}/fullbody.png")
         shutil.copy2(self.path(chosen["file"]), dest)
-        cos["fullbody"].update(validated=self.rel(dest), validated_from=chosen["file"], validated_at=now())
-        # Un nouveau plein pied rend caduques l'A-pose et la planche tirées de l'ancien.
+        cos["fullbody"].update(validated=self.rel(dest), validated_from=chosen["file"], validated_at=now(),
+                               validation=uuid.uuid4().hex[:10])
+        # Un nouveau plein pied rend caduques l'A-pose, la planche et les
+        # vues tirées de l'ancien ; meshes et rigs restent, versionnés.
         cos["sheet"] = None
-        apose(cos).update(validated=None, validated_from=None)
+        apose(cos).update(validated=None, validated_from=None, validated_by=None, validated_metric=None)
+        cos["views"] = {"method": None, "raw": {}, "prepared": {}, "check": None, "delighted": False}
         return self.rel(dest)
 
     def require_fullbody(self, cos: dict) -> str:
@@ -243,12 +253,15 @@ class Project:
                              "`./usine pleinpied-ok` (§4)")
         return cos["fullbody"]["validated"]
 
-    def validate_apose(self, costume: str, candidate: str) -> str:
+    def validate_apose(self, costume: str, candidate: str, *, by: str = "cal", metric: dict | None = None) -> str:
+        """`by` : « cal », ou « auto » quand l'autopilote l'a choisie sur
+        mesure (décision de Cal du 27/09) — la mesure est rangée avec."""
         key, cos = self.costume(costume)
         chosen = self._pick(apose(cos)["candidates"], candidate, "A-pose")
         dest = self.path(f"costumes/{key}/apose.png")
         shutil.copy2(self.path(chosen["file"]), dest)
-        apose(cos).update(validated=self.rel(dest), validated_from=chosen["file"], validated_at=now())
+        apose(cos).update(validated=self.rel(dest), validated_from=chosen["file"], validated_at=now(),
+                          validated_by=by, validated_metric=metric)
         # Les vues se font depuis l'A-pose : les anciennes ne valent plus.
         cos["views"] = {"method": None, "raw": {}, "prepared": {}, "check": None, "delighted": False}
         return self.rel(dest)
@@ -290,6 +303,13 @@ class Project:
 def apose(cos: dict) -> dict:
     """L'état A-pose d'un costume (absent des manifestes d'avant le 25/09)."""
     return cos.setdefault("apose", {"candidates": [], "validated": None})
+
+
+def fullbody_token(cos: dict) -> str | None:
+    """Ce qui distingue une validation du plein pied d'une autre, même
+    faite dans la même seconde : ce dont partent l'A-pose et l'autopilote."""
+    fb = cos["fullbody"]
+    return fb.get("validation") or fb.get("validated_at")
 
 
 def _same_file(a: Path, b: Path) -> bool:
