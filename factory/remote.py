@@ -15,11 +15,17 @@ Réglages par capacité, dans factory.local.json ou en FACTORY_… :
 DGX1 et DGX2 sont des clones, clés d'hôte comprises : ssh ne sait pas
 les distinguer. Quand l'hôte porte le nom d'une machine, on vérifie
 donc `hostname` avant de lancer quoi que ce soit.
+
+La chaîne tourne elle-même sur DGX2 : un hôte qui est la machine
+courante (`local`, `localhost`, ou son propre nom) se lance sans ssh —
+DGX2 ne sait pas s'ouvrir une session ssh sur lui-même.
 """
 
 from __future__ import annotations
 
 import shlex
+import shutil
+import socket
 import subprocess
 import uuid
 from pathlib import Path
@@ -30,12 +36,30 @@ from .project import ChainError
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ClearAllForwardings=yes", "-o", "ConnectTimeout=15"]
 
 
+def is_local(host: str) -> bool:
+    return host.lower() in ("local", "localhost", socket.gethostname().lower())
+
+
 def _ssh(host: str, command: str, *, timeout: float) -> subprocess.CompletedProcess:
-    return subprocess.run(["ssh", *SSH_OPTS, host, command], capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", timeout=timeout)
+    argv = ["bash", "-c", command] if is_local(host) else ["ssh", *SSH_OPTS, host, command]
+    return subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+
+
+def _local_path(spec: str) -> str | None:
+    """`hôte:chemin` → le chemin, si l'hôte est la machine courante."""
+    host, sep, path = spec.partition(":")
+    return str(Path(path).expanduser()) if sep and len(host) > 1 and is_local(host) else None
 
 
 def _scp(src: str, dest: str, *, timeout: float = 600) -> None:
+    a, b = _local_path(src), _local_path(dest)
+    if a or b:
+        try:
+            target = Path(b or dest)
+            shutil.copy2(a or src, target / Path(a or src).name if target.is_dir() else target)
+        except OSError as exc:
+            raise ChainError(f"copie {src} → {dest} impossible : {exc}") from exc
+        return
     res = subprocess.run(["scp", "-q", *SSH_OPTS, src, dest], capture_output=True, text=True, encoding="utf-8",
                          errors="replace", timeout=timeout)
     if res.returncode:
@@ -73,7 +97,8 @@ def run(capability: str, script: Path, *, args: list[str], inputs: dict[str, Pat
                 _ssh(host, f"mv {job}/{shlex.quote(Path(f).name)} {job}/{shlex.quote(name)}", timeout=60)
         line = " ".join([python, f"{job}/{script.name}", *(shlex.quote(a.replace("{job}", job)) for a in args)])
         report(0.1, f"{capability} tourne")
-        res = _ssh(host, f"cd {shlex.quote(cwd or job)} && {line}", timeout=timeout)
+        where = f"~/{shlex.quote(cwd[2:])}" if cwd.startswith("~/") else shlex.quote(cwd or job)
+        res = _ssh(host, f"cd {where} && {line}", timeout=timeout)
         (workdir.mkdir(parents=True, exist_ok=True))
         (workdir / f"{capability}.log").write_text(res.stdout + "\n--- stderr ---\n" + res.stderr, encoding="utf-8")
         if res.returncode:
