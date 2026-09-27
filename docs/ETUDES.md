@@ -127,13 +127,81 @@ Corrigé en trois temps :
   officiel `3d_pixal3d_multi_views` accepte aussi une planche 4 vues qu'il
   découpe. Tous ses poids sont sur DGX2 ; `workflows/trellis2_mv.json` en
   est tiré.
-- Le sens de « left » (flanc gauche du personnage ou gauche du
-  spectateur) n'est pas confirmé : le vérifier sur un personnage
-  asymétrique.
-- Les 3/4 ne nourrissent pas Pixal3D : ils servent la planche et le
-  contrôle (rendre le mesh à 45° et comparer).
+- « left » = flanc gauche du personnage (+X) [V, code du nœud : caméra
+  `left` en +X, la face regarde le bord gauche de l'image — comme nos
+  vues].
 - Hunyuan3D 2.1 n'a pas de multi-vues pour la forme ; seul Hunyuan3D-2mv
-  (base 2.0) en a, et ses poids ne sont pas sur DGX2.
+  (base 2.0) en a, et sa licence exclut l'UE.
+
+### 4.1 Les quatre bras (27/09) — face et dos seulement
+
+Cal : « v2 a quatre bras ». Rejoué sur DGX1 (`essai-atelier`, mêmes
+vues, rendus sans éclairage sous 8 azimuts, `tools/remote/mesh_render.py`).
+
+**Cause** [V] : les profils de Qwen ne tiennent pas l'A-pose. Vu de
+côté, un bras levé à 45° dans le plan du corps doit rester devant le
+torse ; Qwen le balance d'avant en arrière (profil gauche : bras vers
+l'arrière ; profil droit : un bras devant, un derrière). Pixal3D projette
+les traits DINOv3 de chaque vue dans la grille et les **moyenne**, sans
+test de visibilité (article Pixal3D, `"multiview_fusion": "average"`) :
+les bras des profils y laissent leur copie. Profondeur du mesh : 0,31 à
+0,32 (unités du modèle) avec quatre bras, 0,19 à 0,21 sans.
+
+| Essai (graine) | Vues | Bras | Temps |
+|---|---|---|---|
+| v001, v002, v003 (DGX2), A (DGX1, graine de v002) | 4 | **4 bras dans 3 essais sur 4** | 242 s |
+| B, E, s11, s22, s33 | face + dos | **2 sur 5** | 183 s |
+| C | face seule | 2 ; crâne et cheveux faux | 133 s |
+| O1, O2 (nœud d'orbite libre, hors ComfyUI officiel) | face + 3/4 (36,4°) + dos | 2 sur 2 ; pas mieux que face + dos | 257 s |
+
+**Retenu** : `mesh_views=front,back` par défaut (`mesh_comfy.py`, REF 1
+face, REF 2 dos). Face et dos portent toute l'A-pose ; la profondeur vient
+de l'a priori du modèle, juste sur les cinq essais. Les quatre vues
+restent possibles pour des profils aux bras justes.
+
+« Plus de vues ? » [V, recherche 27/09] : le nœud natif n'accepte que
+face/gauche/dos/droite ; l'amont (`inference_mv.py`) prend n'importe quel
+nombre de caméras (article : 2, 4, 6 vues, gain régulier **avec des vues
+cohérentes**). Plus de vues générées par Qwen = plus de chances d'un
+membre mal placé, que la moyenne recopie. Un nœud d'orbite libre (35
+lignes, appelle `_build_pixal3d_conditioning`) a été essayé sur une
+instance privée de DGX1 avec le 3/4 : deux bras, forme équivalente. Pas
+branché : il faudrait un nœud tiers dans le ComfyUI de DGX2 pour un gain
+non démontré. Pas de TRELLIS.2 « multi-image » officiel (c'était TRELLIS
+1) ; Hunyuan3D 2.5/3 = API seulement ; PSHuman, LHM : autres sorties
+(nuage, gaussiennes), dépendances lourdes.
+
+### 4.2 La couleur reprise des vues (27/09)
+
+La couleur des voxels de TRELLIS.2 **change d'une graine à l'autre**
+(hoodie bleu roi rendu marine, sarcelle ou violet ; zip doré ; moustache
+verte ; grains blancs à l'ourlet, gris sur le pantalon) et le visage n'y
+tient qu'en quelques voxels. `factory/texproject.py` repeint l'albedo
+depuis la face et le dos bruts (1344 × 1792, détourés, azimut mesuré) :
+caméra FOV 20 calée sur la silhouette du mesh (IoU 0,93–0,94), z-buffer,
+poids cos⁴, rien près d'une rupture de profondeur (sinon la joue lit la
+capuche), voxels gardés hors des vues et ramenés vers les vues par une
+table couleur → couleur apprise sur les paires de même teinte. ~45 s en
+numpy sur DGX, texture 4096. `model_voxels.glb` reste à côté.
+
+Les profils n'y entrent pas : même filtrés par accord avec les voxels,
+ils laissent des traînées sur le pantalon et le hoodie.
+
+**Occlusion ambiante** : portée 0,71 de la diagonale → tout le corps (les
+creux noircissaient sous un éclairage d'ambiance) ; 0,03, force 0,7.
+Elle reste dans le canal R de l'ORM, jamais dans l'albedo.
+
+**Limites** : les mains, mal superposées entre mesh et image, gardent la
+couleur des voxels ; quelques taches claires à l'ourlet sur les côtés ;
+le dessous des bras et le dessus de la tête viennent des voxels.
+Sans profil, **l'arrière du crâne dépend de la graine** : 2 essais sur 6
+(B, v004 de DGX1) ont une bosse (chignon, crâne en pointe). Les deux
+essais avec le 3/4 (nœud d'orbite, `tools/remote/pixal3d_orbit_node.py`)
+avaient une tête juste et collaient mieux au profil droit (IoU de la
+tête 0,84–0,88 contre 0,57–0,73) : c'est la piste suivante, si Cal
+accepte un nœud tiers dans le ComfyUI de DGX2. Comparaison :
+`etat/15_mesh_face_dos.jpg` (v002 à quatre bras, v004 couleur des voxels,
+v004 albedo des vues).
 
 ## 5. La planche
 

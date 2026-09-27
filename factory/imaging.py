@@ -195,8 +195,12 @@ def _decontaminate(rgb: np.ndarray, a: np.ndarray, radius: int = 24) -> np.ndarr
 
 
 def matte(img: Image.Image, engine: str = "builtin", *, workdir: Path | None = None) -> Image.Image:
-    if img.mode == "RGBA" and np.asarray(img)[..., 3].min() < 250:
-        return img  # déjà détouré
+    # Déjà détouré s'il a vraiment du fond transparent. Qwen rend du RGBA
+    # presque opaque (alpha 241 à 255) : le test « alpha < 250 quelque
+    # part » prenait ses vues pour détourées, et le dos et le profil droit
+    # d'essai-atelier sont sortis de la préparation avec tout leur fond.
+    if img.mode == "RGBA" and (np.asarray(img)[..., 3] < 128).mean() > 0.01:
+        return img
     if engine == "comfyui":
         from . import comfy
 

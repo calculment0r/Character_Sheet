@@ -524,8 +524,8 @@
   "inputs": {
    "resolution": 1024,
    "samples": 64,
-   "max_distance": 0.71,
-   "strength": 1,
+   "max_distance": 0.03,
+   "strength": 0.7,
    "bias": 0.01,
    "low_poly": [
     "196",
@@ -876,7 +876,7 @@
   },
   "class_type": "LoadImage",
   "_meta": {
-   "title": "REF 2"
+   "title": "REF 3"
   }
  },
  "403": {
@@ -885,7 +885,7 @@
   },
   "class_type": "LoadImage",
   "_meta": {
-   "title": "REF 3"
+   "title": "REF 2"
   }
  },
  "404": {
@@ -913,9 +913,10 @@
  "_factory": {
   "adopted_from": "3d_pixal3d_multi_views.json (modèle ComfyUI 0.35), converti par l'interface",
   "changes": [
-   "planche 4 vues découpée → REF 1 face, REF 2 gauche, REF 3 dos, REF 4 droite",
+   "planche 4 vues découpée → REF 1 face, REF 2 dos, REF 3 gauche, REF 4 droite : deux références suffisent pour face et dos (27/09)",
    "graines des quatre KSampler → {{seed}}",
-   "aperçus 3D et Save3DAdvanced retirés → SaveGLB « OUT » sur le mesh texturé"
+   "aperçus 3D et Save3DAdvanced retirés → SaveGLB « OUT » sur le mesh texturé",
+   "occlusion ambiante : portée 0,03 de la diagonale (0,71 : tout le corps s'assombrissait), force 0,7 (27/09)"
   ]
  }
 }

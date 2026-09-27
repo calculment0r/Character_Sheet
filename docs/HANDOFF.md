@@ -83,8 +83,13 @@ est, mais la chaîne d'images change selon les décisions ci-dessous.**
 3. **Les 3/4** : encore une réussite sur deux par graine ; la boucle
    mesurer-choisir compense. Si ça ne suffit pas : donner de la
    profondeur au torse du squelette (épaules, hanches) et des pieds.
-4. **Mesh** d'`essai-atelier` (TRELLIS.2 multi-vues, vues mesurées) : au
-   feu vert de Cal.
+4. **Mesh** d'`essai-atelier` : v001–v003 faits le 27/09 ; v002 et v003
+   ont **quatre bras**. Corrigé (`docs/ETUDES.md` §4.1–4.2) : Pixal3D ne
+   reçoit plus que **face et dos** (`mesh_views`), l'**albedo est repris
+   des vues** face et dos (`texproject.py`, `model_voxels.glb` gardé à
+   côté), occlusion ambiante à portée 0,03. Essais sur DGX1 : 6 graines
+   sur 6 à deux bras, mais l'arrière du crâne rate 2 fois sur 6 (piste :
+   le 3/4 par un nœud d'orbite). À refaire sur DGX2 et montrer à Cal.
 5. **Planche de référence** : branchée d'après le workflow Civitai trouvé
    par Cal (`chain.sheet`, moteur `qwen21`, frise : … A-pose · Planche ·
    Vues …, voir `docs/ETUDES.md` §5). A-pose réelle vérifiée depuis le
