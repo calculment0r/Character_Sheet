@@ -319,6 +319,20 @@ def sheet_ok(p: Project, costume: str | None, sheet_id: str) -> dict:
     return chosen
 
 
+# ── planche de présentation ────────────────────────────────────────
+
+def presentation(p: Project, costume: str | None, *, redo: list[str] | None = None, seed: int | None = None,
+                 theme: str | None = None, report=None) -> dict:
+    """La planche qu'on montre (`presentation.py`) : expressions, poses
+    naturelles, détails, palette, taille, composées en 3840 × 2160. Elle
+    n'attend que le visage verrouillé et le plein pied validé. Sans
+    `redo`, seules les cases qui manquent se font ; `redo` en nomme
+    (`joie`, `marche`…), des groupes (`expressions`…), ou `all`."""
+    from . import presentation as pres
+
+    return pres.run(p, costume, redo=redo, seed=seed, theme=theme, report=report)
+
+
 # ── vues orthogonales ──────────────────────────────────────────────
 
 VIEW_METHODS = ("qwen21-pose", "per_view", "orbit", *views_qwen.METHODS)

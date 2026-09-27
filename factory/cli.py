@@ -122,6 +122,19 @@ def cmd_planche(args) -> None:
     print(f"  valider : ./usine planche-ok {p.data['slug']} <id>")
 
 
+def cmd_presentation(args) -> None:
+    p = _p(args)
+    redo = [r for part in args.refaire or [] for r in part.split(",") if r]
+    st = chain.presentation(p, args.costume, redo=redo or None, seed=args.graine, theme=args.theme)
+    for g, entries in st["panels"].items():
+        for e in entries:
+            score = f" · identité {e['score']:.3f}" if e.get("score") is not None else ""
+            print(f"  {g[:-1] if g.endswith('s') else g} {e['id']}{score} : {p.path(e['file'])}")
+    print(f"planche : {p.path(st['sheet'])}")
+    for t, f in st["variants"].items():
+        print(f"  {t} : {p.path(f)}")
+
+
 def cmd_planche_ok(args) -> None:
     p = _p(args)
     s = chain.sheet_ok(p, args.costume, args.id)
@@ -289,6 +302,15 @@ def build() -> argparse.ArgumentParser:
     sp.add_argument("--variantes", type=int, default=1)
     sp.add_argument("--disque", action="store_true", help="h3 : disque neutre sur le visage des plein pieds")
     sp.add_argument("--ab", action="store_true", help="h3 : deux planches, avec et sans disque, même graine")
+    sp.add_argument("--graine", type=int)
+
+    sp = cmd("presentation", cmd_presentation,
+             "planche de présentation : expressions, poses naturelles, détails, palette, taille (3840 × 2160)")
+    perso(sp), costume(sp)
+    sp.add_argument("--refaire", action="append", metavar="CASES",
+                    help="cases à refaire, ex. joie,marche ; groupes : expressions, poses, details ; all ; "
+                         "sheet (la composition seule). Sans : les cases qui manquent")
+    sp.add_argument("--theme", choices=["clair", "sombre", "both"], help="fond de la planche (défaut : clair)")
     sp.add_argument("--graine", type=int)
 
     sp = cmd("planche-ok", cmd_planche_ok, "retenir une planche")

@@ -264,6 +264,7 @@ def studio_route(tmp: Path) -> None:
         steps = [run(slug, "costume_add", name="Voyage", prompt="long manteau de cuir", refs=[upload]),
                  run(slug, "fullbody", costume="voyage", variants=2),
                  run(slug, "fullbody_ok", costume="voyage", candidate="1"),
+                 run(slug, "presentation", costume="voyage", redo=["expressions", "details"]),
                  run(slug, "apose", costume="voyage", variants=2),
                  run(slug, "apose_ok", costume="voyage", candidate="2"),
                  run(slug, "sheet", costume="voyage", variants=1),
@@ -523,6 +524,26 @@ def main() -> int:
           len(made) == 2 and layout.size == (1920, 1088) and (root / made[0]["file"]).exists()
           and "<image3>" in (root / "costumes/veste/sheets" / made[0]["id"] / "prompt.txt").read_text(encoding="utf-8"))
     usine("planche-ok", "test-pilote", made[1]["id"])
+
+    usine("presentation", "test-pilote", "--theme", "both", "--graine", "21")
+    pres = manifest()["costumes"]["veste"]["presentation"]
+    ids = {g: [e["id"] for e in v] for g, v in pres["panels"].items()}
+    board = Image.open(root / pres["sheet"])
+    check("présentation : six expressions, cinq poses sur squelette, quatre détails, palette, 3840 × 2160 en deux fonds",
+          len(ids["expressions"]) == 6 and len(ids["poses"]) == 5 and len(ids["details"]) == 4
+          and board.size == (3840, 2160) and set(pres["variants"]) == {"clair", "sombre"}
+          and 2 <= len(pres["palette"]) <= 6
+          and all((root / e["cut"]).exists() and (root / e["skeleton"]).exists() for e in pres["panels"]["poses"])
+          and all("<image1>" in e["prompt"] for e in pres["panels"]["expressions"] + pres["panels"]["poses"])
+          and "<image2>" in pres["panels"]["poses"][0]["prompt"],
+          f"{ids} · palette {pres['palette']}")
+    seeds = {e["id"]: e["seed"] for v in pres["panels"].values() for e in v}
+    usine("presentation", "test-pilote", "--refaire", "joie,marche", "--graine", "900")
+    again = manifest()["costumes"]["veste"]["presentation"]
+    changed = {e["id"] for v in again["panels"].values() for e in v if e["seed"] != seeds[e["id"]]}
+    out = usine("presentation", "test-pilote", "--refaire", "inconnue", expect=2)
+    check("présentation : --refaire ne refait que les cases nommées, une case inconnue est refusée",
+          changed == {"joie", "marche"} and "case inconnue" in out, str(sorted(changed)))
 
     usine("vues", "test-pilote")
     raw = manifest()["costumes"]["veste"]["views"]["raw"]

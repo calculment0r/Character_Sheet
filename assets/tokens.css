@@ -41,6 +41,19 @@
   /* voile posé sur une image, sous une étiquette */
   --veil:    rgba(10, 13, 11, .82);
 
+  /* planche de présentation, rendue en PNG par factory/presentation_sheet.py :
+     la variante sombre reprend --bg, --panel et les encres ; la claire,
+     un fond de studio gris, a ses propres jetons. --shade est l'ombre de
+     contact sous les pieds. */
+  --paper:       #e6e6e2;
+  --paper2:      #dadad5;
+  --paper-ink:   #141816;
+  --paper-ink2:  #4c5551;
+  --paper-ink3:  #7d8682;
+  --paper-line:  rgba(20, 24, 22, .18);
+  --paper-shade: rgba(20, 24, 22, .30);
+  --shade:       rgba(0, 0, 0, .55);
+
   /* encres inversées, posées sur un aplat d'accent */
   --on-or:   #170c08;
   --on-cy:   #0a0d0b;

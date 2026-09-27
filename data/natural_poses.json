@@ -1,0 +1,76 @@
+{
+  "_doc": [
+    "Les poses naturelles de la planche de présentation (`factory/presentation.py`), posées sur les os du personnage par `tools/remote/natural_skeleton.py`.",
+    "Repère du personnage, en pixels de son plein pied : x vers la droite de l'image (la gauche du personnage), y vers le bas, z vers la caméra. R = droite du personnage (à gauche de l'image), L = sa gauche.",
+    "Directions (upper, fore, thigh, shin) : vecteurs libres, normalisés au calcul. Cibles `ik` : un repère du corps plus un décalage, x en largeurs d'épaules, y et z en hauteurs de corps ; `pole` : où pointe le coude.",
+    "Angles en degrés. yaw : le corps tourne vers le bord gauche de l'image (même sens que les azimuts des vues) ; torso_yaw : les épaules par rapport aux hanches ; head_yaw : la tête par rapport aux épaules ; *_drop : la hanche ou l'épaule gauche du personnage descend (négatif : la droite) ; head_roll : la tête penche vers la droite de l'image.",
+    "hand : keep (la main suit l'avant-bras en bloc) ou hide (cachée : poche, bras croisés, main sur la hanche)."
+  ],
+  "poses": [
+    {
+      "id": "repos", "label": "au repos",
+      "hint": "stands relaxed with the weight on the right leg, the left knee slightly bent, both hands pushed into the front pockets of the trousers so that only the wrists show",
+      "yaw": 12, "head_yaw": -8, "head_roll": 3, "hip_drop": 5, "shoulder_drop": -3,
+      "arms": {
+        "R": {"ik": {"from": "hip_R", "offset": [0.10, 0.03, 0.07]}, "pole": [-1, 0.2, -0.8], "hand": "hide"},
+        "L": {"ik": {"from": "hip_L", "offset": [-0.10, 0.03, 0.07]}, "pole": [1, 0.2, -0.8], "hand": "hide"}
+      },
+      "legs": {
+        "R": {"thigh": [0.10, 1, 0], "shin": [0.02, 1, 0]},
+        "L": {"thigh": [0.02, 1, 0.18], "shin": [0.10, 1, -0.05]}
+      }
+    },
+    {
+      "id": "bras", "label": "bras croisés",
+      "hint": "stands with the feet apart and the arms folded across the chest",
+      "yaw": -15, "head_yaw": 10, "head_roll": -2,
+      "arms": {
+        "R": {"ik": {"from": "shoulder_L", "offset": [-0.10, 0.17, 0.09]}, "pole": [-1, 1, 0], "hand": "hide"},
+        "L": {"ik": {"from": "shoulder_R", "offset": [0.10, 0.14, 0.12]}, "pole": [1, 1, 0], "hand": "hide"}
+      },
+      "legs": {
+        "R": {"thigh": [-0.12, 1, 0], "shin": [-0.02, 1, 0]},
+        "L": {"thigh": [0.12, 1, 0], "shin": [0.02, 1, 0]}
+      }
+    },
+    {
+      "id": "marche", "label": "en marche",
+      "hint": "walks toward the camera in mid-stride, the right foot forward, the arms swinging naturally",
+      "yaw": 15, "torso_yaw": 6, "head_yaw": -12,
+      "arms": {
+        "R": {"upper": [-0.20, 1, -0.28], "fore": [-0.12, 1, -0.12], "hand": "keep"},
+        "L": {"upper": [0.18, 1, 0.30], "fore": [0.10, 1, 0.70], "hand": "keep"}
+      },
+      "legs": {
+        "R": {"thigh": [0, 1, 0.42], "shin": [0, 1, 0.12]},
+        "L": {"thigh": [0, 1, -0.30], "shin": [0, 1, -0.62]}
+      }
+    },
+    {
+      "id": "hanche", "label": "main sur la hanche",
+      "hint": "stands with the right hand resting on the hip and the elbow out, the weight on the left leg, the left arm hanging loose",
+      "yaw": -20, "head_yaw": 8, "head_roll": 4, "hip_drop": -5, "shoulder_drop": 3,
+      "arms": {
+        "R": {"ik": {"from": "hip_R", "offset": [-0.10, -0.07, 0.0]}, "pole": [-1, -0.1, -0.4], "hand": "hide"},
+        "L": {"upper": [0.10, 1, 0.04], "fore": [0.06, 1, 0.22], "hand": "keep"}
+      },
+      "legs": {
+        "R": {"thigh": [-0.04, 1, 0.18], "shin": [-0.10, 1, -0.04]},
+        "L": {"thigh": [-0.10, 1, 0], "shin": [-0.02, 1, 0]}
+      }
+    },
+    {
+      "id": "epaule", "label": "par-dessus l'épaule",
+      "hint": "is seen from behind at three-quarters and looks back over the left shoulder toward the camera",
+      "yaw": 150, "torso_yaw": -25, "head_yaw": -65,
+      "arms": {
+        "R": {"upper": [-0.08, 1, 0], "fore": [-0.03, 1, 0.12], "hand": "keep"},
+        "L": {"upper": [0.08, 1, 0], "fore": [0.03, 1, 0.12], "hand": "keep"}
+      },
+      "legs": {
+        "R": {"thigh": [-0.05, 1, 0], "shin": [0, 1, 0]},
+        "L": {"thigh": [0.06, 1, 0.10], "shin": [0.04, 1, 0]}
+      }
+    }
+  ]
+}
