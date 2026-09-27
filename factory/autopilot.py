@@ -285,7 +285,8 @@ def run_step(p: Project, key: str, report, cancelled=lambda: False) -> dict:
             tries[step] = tries.get(step, 0) + 1
             _log(st, f"{step} : échec {tries[step]}/{STEP_TRIES} — {exc}")
             if tries[step] >= STEP_TRIES or isinstance(exc, Hopeless):
-                _escalate(p, key, st, KIND[kind], f"{step} a échoué deux fois : {exc}", step=step)
+                why = f"{step} : {exc}" if isinstance(exc, Hopeless) else f"{step} a échoué deux fois : {exc}"
+                _escalate(p, key, st, KIND[kind], why, step=step)
     live = state(cos)       # un nouveau départ a pu remplacer l'état pendant l'étape
     live["at"] = now()
     p.save()

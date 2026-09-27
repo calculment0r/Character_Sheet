@@ -11,6 +11,63 @@ Cadrage complet : [`BRIEF_CHARACTER_FACTORY.md`](./BRIEF_CHARACTER_FACTORY.md)
 
 ---
 
+## 000. L'autopilote — les étages techniques sans Cal (27/09)
+
+**Décision de Cal (27/09)** : il ne voit ni ne valide les étages
+techniques (A-pose, vues, planches pour le modèle vidéo, mesh, rig). Il
+ne choisit que le goût : visage, tenue et plein pied, voix, expressions.
+Le reste tourne derrière, validé par la mesure, et ne l'appelle qu'après
+deux échecs. Un panneau de débogage (autre chantier) montre tout.
+
+- **`factory/autopilot.py`** : dès `fullbody_ok` (studio), l'état
+  `cos["autopilot"]` passe à `running` et le studio enchaîne, un travail
+  par étape : `apose:gen` ×2 → `apose:pick` → `views:front,left`,
+  `views:back`, `views:right`, `views:threequarter` → `prep` → `check` →
+  `mesh` → `rig`. L'étape suivante se lit toujours dans le manifeste :
+  un studio relancé reprend seul (`autopilot.pending` au démarrage).
+- **Priorité** : la file du studio est une file à priorités ; les étapes
+  de l'autopilote sont en priorité basse, un travail de Cal passe devant
+  dès que l'étape en cours finit (au pire une étape : ~2 min pour une
+  vue avec ses relances, plus pour le mesh). Un étage technique lancé à
+  la main met l'autopilote du costume en pause ; action `autopilot`
+  (`restart` pour repartir du plein pied) pour le relancer,
+  `autopilot_stop` pour l'arrêter.
+- **Mesures** : A-pose par DWPose (`apose_pick.py`,
+  `tools/remote/pose_measure.py`) — bras à 45 ± 12° chacun, coudes
+  tendus, jambes à peine ouvertes, de face (carrure, nez centré,
+  épaules non inversées), corps entier dans le cadre, une personne,
+  couleur de la tenue région par région contre le plein pied
+  (histogrammes Lab, ≥ 0,55) ; trois tours de deux, puis Cal choisit.
+  Vues : SAM 3D Body et le contrôle ±5° (deux reprises des vues
+  fautives). Mesh : triangles, envergure et profondeur rapportées à la
+  taille. Rig : rejeu du skinning des poses de contrôle
+  (`rigcheck.py`) — 77 articulations, bind 35–55°, mains au-dessus de la
+  tête bras levés, hanches plus bas accroupi, rien de disloqué. Chaque
+  validation porte `validated_by: "auto"` et sa mesure.
+- **Ce qui attend Cal** : `data["attention"]` = `[{id, kind, title,
+  text, costume, options, at, resolved}]`, sortes `apose_failed`,
+  `views_failed`, `mesh_failed`, `rig_failed`, `rig_review` (un coup
+  d'œil facultatif), `autopilot_failed`. Dans `GET
+  /api/characters/<slug>` (`character.attention`, et `attention` : les
+  ouvertes) et `GET /api/attention` (tous les personnages). Réponse :
+  action `attention` `{id, do: dismiss|retry|choose, candidate}`.
+- Un moteur factice dans une vraie chaîne (UniRig pas branché, par
+  exemple) n'est jamais validé : Cal est appelé tout de suite.
+- `FACTORY_AUTOPILOT=off`, ou `fullbody_ok` avec `autopilot: false`,
+  pour mener un costume à la main.
+
+**Essai réel (27/09, copie d'`essai-atelier`, studio de test `:8792`,
+ComfyUI partagé avec un autre chantier)** : `fullbody_ok` → deux A-poses
+(1 min l'une), toutes deux recevables (notes 0,872 et 0,786 ; la
+première bras à 45/46°, marge haute 12 %, tenue 0,93 ; la seconde bras
+à 40°, cadrée plus serré), la première validée seule → vues en 11 min
+(le 3/4 en trois graines : 32,7° / 325,2° / 35,5°, gardé à 35,5°) →
+contrôle mesuré : gauche 87,2°, dos 179,3°, droite 267,2° → mesh
+TRELLIS.2 validé en 4 min (49 119 triangles, envergure 0,75 × la
+taille, profondeur 0,22) → rig : UniRig encore factice sur DGX2, Cal
+appelé aussitôt (`rig_failed`), comme prévu. Calibrage de la note
+d'A-pose : `docs/ETUDES.md` §7.
+
 ## 00. REPRENDRE ICI — Qwen-Image 2.1 turbo pour tout valider (25/09, soir)
 
 **Lire ceci d'abord. Les sections suivantes décrivent le studio tel qu'il

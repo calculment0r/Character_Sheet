@@ -134,7 +134,8 @@ class Job:
 
     def public(self, full: bool = False) -> dict:
         return {"id": self.id, "slug": self.slug, "action": self.action, "label": self.label,
-                "params": self.params, "status": self.status, "auto": self.priority == AUTO, "progress": round(self.progress, 3),
+                "params": self.params, "status": self.status, "auto": self.priority == AUTO,
+                "progress": round(self.progress, 3),
                 "message": self.message, "created": self.created, "started": self.started, "ended": self.ended,
                 "error": self.error, "result": self.result, "run_order": self.run_order,
                 "log": self.lines if full else self.lines[-10:]}
