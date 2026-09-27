@@ -244,8 +244,8 @@ def studio_route(tmp: Path) -> None:
               and detail["summary"]["next"] is None, str(failed or stages))
         _, listing = js("/api/characters")
         ilse = next(c for c in listing["characters"] if c["slug"] == slug)
-        check("studio : l'affiche du casting est le plein pied validé, sans voix ni question en attente",
-              ilse["poster"] == f"/files/{slug}/costumes/voyage/fullbody.png" and ilse["voice"] is None
+        check("studio : l'affiche du casting est la planche de présentation, sans voix ni question en attente",
+              ilse["poster"] == f"/files/{slug}/costumes/voyage/presentation/sheet.png" and ilse["voice"] is None
               and ilse["attention"] == 0, str({k: ilse.get(k) for k in ("poster", "voice", "attention")}))
 
         # L'autopilote par le studio : Cal valide un plein pied, la machine
