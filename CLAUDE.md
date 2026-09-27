@@ -27,8 +27,9 @@ et à ouvrir la page.
 ```
 
 Le studio (`factory/studio.py`, `studio.html`, `js/studio.js`) mène
-chaque personnage à la main, étage par étage, avec une file à un
-ouvrier ; `./usine <étage>` fait la même chose en ligne de commande.
+chaque personnage étage par étage, avec une file à un ouvrier ; après
+le plein pied validé, l'autopilote enchaîne les étages techniques en
+priorité basse ; `./usine <étage>` fait chaque étage en ligne de commande.
 Un dossier par personnage sous `projects/`, un manifeste `project.json`.
 H3 passe par ComfyUI `:8189`, le reste par `:8188` ; les capacités sans
 modèle trouvé par `./usine doctor` sont factices.
@@ -122,6 +123,13 @@ Ne pas les affaiblir sans une décision explicite de Cal.
   passé (`chain.py`).
 - Le rig refuse un bind en T-pose, demandé ou mesuré sur le squelette
   (`cli_motion.py`, `rig.py`).
+- Cal ne valide que le goût — visage, tenue et plein pied, voix,
+  expressions (décision du 27/09). A-pose, vues, contrôle, mesh et rig
+  tournent seuls après le plein pied et sont validés **par une mesure**
+  (`autopilot.py`, `apose_pick.py`, `rigcheck.py`), rangée avec
+  `validated_by: "auto"` ; deux échecs appellent Cal
+  (`data["attention"]`). Les garde-fous ci-dessus restent : l'autopilote
+  passe par eux, jamais à côté.
 - H3 n'a pas de prompt négatif : toute contrainte s'écrit en prose, et
   chaque référence porte un rôle nommé (`prompts.py`).
 

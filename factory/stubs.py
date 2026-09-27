@@ -149,6 +149,28 @@ def mannequin(size: tuple[int, int], *, azimuth: float, seed: int, mask_face: bo
     return img
 
 
+def mannequin_keypoints(size: tuple[int, int], *, arms_down: bool = False) -> list:
+    """Ce que DWPose relèverait sur `mannequin(size, azimuth=0)` : les 18
+    points OpenPose en pixels, [x, y, score]. OpenPose « droit » est la
+    droite du personnage, à gauche de l'image. `arms_down` laisse pendre
+    les bras : une A-pose ratée, pour essayer les refus."""
+    w, h = size
+    px_per_m = min(h * 0.84 / 1.75, w * 0.88 / 1.36)
+    ox, oy = w / 2, h * 0.5 + 0.84 * px_per_m
+    j = dict(JOINTS)
+    if arms_down:
+        for side in ("l", "r"):
+            sx, sy, sz = j[f"{side}_shoulder"]
+            j[f"{side}_elbow"] = (sx, sy - 0.28, sz)
+            j[f"{side}_wrist"] = (sx, sy - 0.55, sz)
+    hx, hy, hz = j["head"]
+    j.update(r_eye=(hx - 0.035, hy + 0.01, hz), l_eye=(hx + 0.035, hy + 0.01, hz),
+             r_ear=(hx - 0.075, hy, hz), l_ear=(hx + 0.075, hy, hz))
+    order = ("nose", "neck", "r_shoulder", "r_elbow", "r_wrist", "l_shoulder", "l_elbow", "l_wrist", "r_hip",
+             "r_knee", "r_ankle", "l_hip", "l_knee", "l_ankle", "r_eye", "l_eye", "r_ear", "l_ear")
+    return [[ox + j[n][0] * px_per_m, oy - j[n][1] * px_per_m, 0.9] for n in order]
+
+
 def portrait(size: tuple[int, int], *, seed: int, label: str | None = "FACTICE") -> Image.Image:
     """Le portrait neutre du §3, en caricature : face, regard caméra,
     bouche fermée, fond uni."""

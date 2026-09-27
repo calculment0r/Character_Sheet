@@ -17,23 +17,23 @@ def _p(args) -> Project:
 
 # ── rig ────────────────────────────────────────────────────────────
 
-def cmd_rig(args) -> None:
-    if args.pose == "tpose":
-        raise ChainError("le bind se fait en A-pose ; la conversion vers la T-pose SOMA est un delta, pas un "
-                         "bind (§8.2). On ne modélise jamais en T-pose.")
-    p = _p(args)
-    key, cos = p.costume(args.costume)
+def rig(p: Project, costume: str | None, *, mesh: int | None = None, report=None) -> dict:
+    """Rigge un mesh du costume (le dernier par défaut) et range le rig,
+    verdict « unseen ». Travaille sur le `Project` reçu : le studio lui
+    passe celui qu'il partage avec les choix faits pendant le calcul."""
+    key, cos = p.costume(costume)
     if not cos["meshes"]:
         raise ChainError("aucun mesh pour ce costume — `./usine mesh` d'abord")
-    mesh = cos["meshes"][-1] if args.mesh is None else next(
-        (m for m in cos["meshes"] if m["version"] == args.mesh), None)
-    if mesh is None:
-        raise ChainError(f"mesh v{args.mesh} introuvable")
+    chosen = cos["meshes"][-1] if mesh is None else next((m for m in cos["meshes"] if m["version"] == mesh), None)
+    if chosen is None:
+        raise ChainError(f"mesh v{mesh} introuvable")
+    mesh = chosen
     version = len(cos["rigs"]) + 1
     out_dir = p.dir(f"costumes/{key}/rig/v{version:03d}")
 
-    def report(pr, msg):
-        print(f"    {int(pr * 100):3d} %  {msg}", flush=True)
+    if report is None:
+        def report(pr, msg):
+            print(f"    {int(pr * 100):3d} %  {msg}", flush=True)
 
     try:
         res = rig_mod.build(mesh_glb=p.path(mesh["glb"]), out_dir=out_dir, report=report)
@@ -45,9 +45,20 @@ def cmd_rig(args) -> None:
              "bind_delta": p.rel(res["bind_delta"]), "meta": res["meta"], "verdict": "unseen", "at": now()}
     cos["rigs"].append(entry)
     p.save()
-    print(f"rig v{version} sur mesh v{mesh['version']} ({res['backend']}) : {p.path(entry['glb'])}")
-    print(f"  bras à {res['meta']['arm_angle_deg']}° de la verticale (A-pose) · "
-          f"{res['meta']['joints']} articulations · hanches à {res['meta']['hip_height_m']} m")
+    return entry
+
+
+def cmd_rig(args) -> None:
+    if args.pose == "tpose":
+        raise ChainError("le bind se fait en A-pose ; la conversion vers la T-pose SOMA est un delta, pas un "
+                         "bind (§8.2). On ne modélise jamais en T-pose.")
+    p = _p(args)
+    key, _ = p.costume(args.costume)
+    entry = rig(p, key, mesh=args.mesh)
+    version = entry["version"]
+    print(f"rig v{version} sur mesh v{entry['mesh']} ({entry['backend']}) : {p.path(entry['glb'])}")
+    print(f"  bras à {entry['meta']['arm_angle_deg']}° de la verticale (A-pose) · "
+          f"{entry['meta']['joints']} articulations · hanches à {entry['meta']['hip_height_m']} m")
     print(f"  regarder les cinq poses : ./usine voir {p.data['slug']} --costume {key} --a rig:{version}")
     print(f"  puis : ./usine rig-ok {p.data['slug']} accepte --costume {key}")
 

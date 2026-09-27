@@ -27,7 +27,8 @@ sys.stdout.reconfigure(encoding="utf-8")   # Windows : une sortie redirigée ser
 
 import numpy as np  # noqa: E402
 
-from factory.gltf import GLB, slerp, trs_matrix  # noqa: E402
+from factory.gltf import GLB  # noqa: E402
+from factory.rigcheck import clip_pose, skinned  # noqa: E402  (le rejeu du skinning glTF)
 
 results: list[tuple[str, bool, str]] = []
 
@@ -44,59 +45,6 @@ def usine(*args: str, expect: int = 0) -> str:
         print(res.stdout, res.stderr)
         raise SystemExit(f"./usine {' '.join(args)} → {res.returncode}, attendu {expect}")
     return res.stdout + res.stderr
-
-
-# ── rejeu du skinning glTF ─────────────────────────────────────────
-
-def _pose_overrides(g: GLB, anim: dict, t: float) -> dict:
-    out = {}
-    for ch in anim["channels"]:
-        smp = anim["samplers"][ch["sampler"]]
-        times = g.read_accessor(smp["input"]).reshape(-1)
-        vals = g.read_accessor(smp["output"])
-        i = int(np.clip(np.searchsorted(times, t, side="right") - 1, 0, len(times) - 1))
-        j = min(i + 1, len(times) - 1)
-        a = 0.0 if j == i else float((t - times[i]) / (times[j] - times[i]))
-        path = ch["target"]["path"]
-        v = slerp(vals[i], vals[j], a) if path == "rotation" else vals[i] * (1 - a) + vals[j] * a
-        out[(path, ch["target"]["node"])] = v
-    return out
-
-
-def skinned(g: GLB, overrides: dict) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """Positions des sommets déformés, et position monde de chaque nœud."""
-    nodes = g.doc["nodes"]
-    parent = {c: i for i, n in enumerate(nodes) for c in n.get("children", [])}
-    cache: dict[int, np.ndarray] = {}
-
-    def world(i: int) -> np.ndarray:
-        if i not in cache:
-            n = nodes[i]
-            m = trs_matrix(overrides.get(("translation", i), n.get("translation", [0, 0, 0])),
-                           overrides.get(("rotation", i), n.get("rotation", [0, 0, 0, 1])),
-                           n.get("scale", [1, 1, 1]))
-            cache[i] = world(parent[i]) @ m if i in parent else m
-        return cache[i]
-
-    skin = g.doc["skins"][0]
-    ibm = g.read_accessor(skin["inverseBindMatrices"]).reshape(-1, 4, 4).transpose(0, 2, 1)
-    joint_m = np.stack([world(j) @ ibm[k] for k, j in enumerate(skin["joints"])])
-    verts = []
-    for mesh in g.doc["meshes"]:
-        for prim in mesh["primitives"]:
-            p = g.read_accessor(prim["attributes"]["POSITION"]).astype(float)
-            jj = g.read_accessor(prim["attributes"]["JOINTS_0"]).astype(int)
-            ww = g.read_accessor(prim["attributes"]["WEIGHTS_0"]).astype(float)
-            m = np.einsum("vk,vkij->vij", ww, joint_m[jj])
-            verts.append(np.einsum("vij,vj->vi", m, np.c_[p, np.ones(len(p))])[:, :3])
-    where = {nodes[j].get("name", str(j)): world(j)[:3, 3] for j in skin["joints"]}
-    return np.vstack(verts), where
-
-
-def clip_pose(g: GLB, name: str) -> tuple[np.ndarray, dict]:
-    anim = next(a for a in g.doc["animations"] if a["name"] == name)
-    times = g.read_accessor(anim["samplers"][0]["input"]).reshape(-1)
-    return skinned(g, _pose_overrides(g, anim, float(times[-1])))
 
 
 # ── le trajet H3 → ComfyUI ─────────────────────────────────────────
@@ -263,7 +211,7 @@ def studio_route(tmp: Path) -> None:
         bad, _, _ = call("/api/uploads", raw=b"pas une image")
         steps = [run(slug, "costume_add", name="Voyage", prompt="long manteau de cuir", refs=[upload]),
                  run(slug, "fullbody", costume="voyage", variants=2),
-                 run(slug, "fullbody_ok", costume="voyage", candidate="1"),
+                 run(slug, "fullbody_ok", costume="voyage", candidate="1", autopilot=False),
                  run(slug, "apose", costume="voyage", variants=2),
                  run(slug, "apose_ok", costume="voyage", candidate="2"),
                  run(slug, "sheet", costume="voyage", variants=1),
@@ -282,6 +230,42 @@ def studio_route(tmp: Path) -> None:
               not failed and bad == 409 and len(cos["refs"]) == 1 and cos["apose"]["validated"]
               and all(stages[k] == "done" for k in ("face", "costumes", "fullbody", "pose", "sheet", "views", "mesh", "rig"))
               and detail["summary"]["next"] is None, str(failed or stages))
+
+        # L'autopilote par le studio : Cal valide un plein pied, la machine
+        # fait le reste ; un travail de Cal demandé pendant ce temps passe
+        # devant les étapes de l'autopilote.
+        run(slug, "costume_add", name="Soir", prompt="robe noire")
+        run(slug, "fullbody", costume="soir", variants=1)
+        _, busy = js(f"/api/characters/{kid}/actions/face", {"variants": 3})
+        code, ok = js(f"/api/characters/{slug}/actions/fullbody_ok", {"costume": "soir", "candidate": "1"})
+        _, mine = js(f"/api/characters/{kid}/actions/face", {"variants": 1})
+        for _ in range(1200):
+            _, detail = js(f"/api/characters/{slug}")
+            pilot = detail["character"]["costumes"]["soir"].get("autopilot") or {}
+            if pilot.get("state") != "running":
+                break
+            time.sleep(0.05)
+        _, jobs = js(f"/api/jobs?slug={slug}")
+        auto = [j for j in jobs["jobs"] if j["action"] == "autopilot" and j["params"].get("costume") == "soir"]
+        _, mine = js(f"/api/jobs/{mine['job']['id']}")
+        cos = detail["character"]["costumes"]["soir"]
+        first = min(j["run_order"] for j in auto) if auto else 0
+        check("studio : plein pied validé, l'autopilote mène seul A-pose, vues, contrôle, mesh et rig, validés par "
+              "la mesure ; le travail de Cal passe devant",
+              code == 200 and ok["result"]["autopilot"] == "soir" and pilot.get("state") == "done"
+              and cos["apose"]["validated_by"] == "auto" and cos["views"]["check"]["validated_by"] == "auto"
+              and cos["rigs"][-1]["verdict"] == "accepted" and all(j["auto"] for j in auto)
+              and mine["status"] == "done" and mine["run_order"] < first and detail["summary"]["next"] is None,
+              f"état {pilot.get('state')}, {len(auto)} étapes, Cal parti {mine.get('run_order')}ᵉ, "
+              f"autopilote {first}ᵉ ; {pilot.get('log', [{}])[-1].get('message')}")
+        _, waiting = js("/api/attention")
+        review = [a for a in waiting["attention"] if a["slug"] == slug and a["kind"] == "rig_review"]
+        code, _ = js(f"/api/characters/{slug}/actions/attention", {"id": review[0]["id"] if review else "", "do": "dismiss"})
+        _, after = js("/api/attention")
+        check("studio : ce qui attend Cal, listé pour tous les personnages et rangé d'un clic",
+              len(review) == 1 and code == 200 and review[0]["costume"] == "soir"
+              and not any(a["id"] == review[0]["id"] for a in after["attention"]),
+              f"{len(waiting['attention'])} entrées")
 
         code, ctype, img = call(f"/files/{slug}/{detail['character']['face']['locked']}")
         outside = [call(p)[0] for p in (f"/files/{slug}/../../identite.json", "/factory.local.json",
@@ -311,6 +295,99 @@ def studio_route(tmp: Path) -> None:
     finally:
         for proc in procs:
             proc.terminate()
+
+
+def autopilot_route(root: Path) -> None:
+    """L'autopilote en direct, sans studio : une A-pose que la mesure
+    refuse trois tours de suite appelle Cal, qui choisit ; un studio
+    relancé reprend l'autopilote où il en était et le mène au rig accepté ;
+    un mesh qui échoue deux fois appelle Cal, sa relance aboutit."""
+    import contextlib
+    import io
+    import time
+
+    from factory import autopilot, studio as studio_mod
+    from factory.project import Project
+
+    quiet = lambda: contextlib.redirect_stdout(io.StringIO())  # noqa: E731
+    usine("costume", "test-pilote", "ville", "--prompt", "costume sombre")
+    usine("pleinpied", "test-pilote", "--costume", "ville", "--variantes", "1")
+    usine("pleinpied-ok", "test-pilote", "1", "--costume", "ville")
+
+    def drive(p: Project) -> dict:
+        for _ in range(60):
+            with quiet():
+                r = autopilot.run_step(p, "ville", lambda a, b: None)
+            if not r["continue"]:
+                return r
+        return {"state": "boucle"}
+
+    os.environ["FACTORY_STUB_FAIL"] = "apose"
+    p = Project.open(root)
+    with quiet():
+        autopilot.start(p, "ville", why="essai")
+    r = drive(p)
+    cos = p.data["costumes"]["ville"]
+    item = next((a for a in autopilot.open_items(p) if a["kind"] == "apose_failed"), None)
+    cands = cos["apose"]["candidates"]
+    chosen = [o for o in (item or {}).get("options", []) if o["action"] == "choose"]
+    check("autopilote : A-pose bras ballants refusée par la mesure trois tours de suite, Cal appelé avec le choix",
+          r["state"] == "failed" and item is not None and len(cands) == 2 * autopilot.APOSE_ROUNDS
+          and all(not c["measure"]["ok"] and any("bras" in f for f in c["measure"]["fails"]) for c in cands)
+          and len(chosen) == 4 and not cos["apose"].get("validated"),
+          f"{len(cands)} propositions, état {r['state']}, {len(chosen)} choix")
+    del os.environ["FACTORY_STUB_FAIL"]
+
+    with quiet():
+        autopilot.resolve(p, item["id"], "choose", candidate=chosen[0]["candidate"])
+    check("autopilote : Cal choisit, l'A-pose est validée à son nom et l'autopilote repart",
+          cos["apose"]["validated_by"] == "cal" and autopilot.state(cos)["state"] == "running"
+          and not autopilot.open_items(p))
+
+    # Le studio « meurt » ici : un nouveau studio doit reprendre seul.
+    with quiet():
+        studio_mod.Studio()
+        for _ in range(600):
+            st = autopilot.state(Project.open(root).data["costumes"]["ville"])
+            if st["state"] != "running":
+                break
+            time.sleep(0.05)
+    p = Project.open(root)
+    cos = p.data["costumes"]["ville"]
+    chk, mesh = cos["views"]["check"], cos["meshes"][-1]
+    rig = cos["rigs"][-1]
+    review = [a for a in autopilot.open_items(p) if a["kind"] == "rig_review"]
+    check("autopilote : repris par un studio relancé, vues, contrôle, mesh et rig validés par la mesure",
+          st["state"] == "done" and chk["ok"] and chk["validated_by"] == "auto"
+          and set(cos["views"]["raw"]) == {"front", "left", "back", "right", "threequarter"}
+          and mesh["validated_by"] == "auto" and mesh["views_check"] == chk["at"]
+          and rig["verdict"] == "accepted" and rig["validated_by"] == "auto" and rig["validated_metric"]["ok"]
+          and rig["mesh"] == mesh["version"] and len(review) == 1,
+          f"état {st['state']}, rig {rig['verdict']} {rig.get('validated_metric', {}).get('fails')}")
+
+    usine("pleinpied-ok", "test-pilote", "1", "--costume", "ville")
+    os.environ["FACTORY_STUB_FAIL"] = "mesh"
+    p = Project.open(root)
+    with quiet():
+        autopilot.start(p, "ville", why="nouveau plein pied")
+    r = drive(p)
+    cos = p.data["costumes"]["ville"]
+    ap = cos["apose"]
+    item = next((a for a in autopilot.open_items(p) if a["kind"] == "mesh_failed"), None)
+    check("autopilote : nouveau plein pied — A-pose choisie par la mesure, aval refait ; mesh en échec deux fois, "
+          "Cal appelé",
+          ap["validated_by"] == "auto" and 40 <= ap["validated_metric"]["arms_deg"]["left"] <= 50
+          and ap["validated_metric"]["outfit"]["similarity"] >= 0.9 and r["state"] == "failed" and item is not None
+          and autopilot.state(cos)["tries"].get("mesh") == 2 and not any(a["kind"] == "rig_review"
+                                                                        for a in autopilot.open_items(p)),
+          f"A-pose {ap.get('validated_metric', {}).get('arms_deg')}, état {r['state']}")
+    del os.environ["FACTORY_STUB_FAIL"]
+    with quiet():
+        out = autopilot.resolve(p, item["id"], "retry")
+    r = drive(p)
+    check("autopilote : relancé par Cal, le mesh passe et le rig suit",
+          out.get("autopilot") == "ville" and r["state"] == "done"
+          and p.data["costumes"]["ville"]["rigs"][-1]["verdict"] == "accepted")
 
 
 def orbit_selection() -> None:
@@ -668,6 +745,7 @@ def main() -> int:
     check("GLB animé : un seul clip, celui de la timeline",
           [a["name"] for a in gb.doc["animations"]] == ["timeline/main"])
 
+    autopilot_route(root)
     studio_route(tmp)
     comfy_route(tmp, ident)
     native_template()

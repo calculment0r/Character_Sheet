@@ -14,7 +14,7 @@ import zlib
 from pathlib import Path
 
 from . import config, h3, imaging, prompts, views_qwen
-from .project import ChainError, Project, apose as apose_of, now
+from .project import ChainError, Project, apose as apose_of, fullbody_token, now
 
 ORTHO = ("front", "left", "back", "right")
 TOLERANCE_DEG = 5.0
@@ -190,6 +190,9 @@ def apose(p: Project, costume: str | None, *, variants: int = 2, seed: int | Non
     p.require_face()
     key, cos = p.costume(costume)
     body = p.require_fullbody(cos)
+    # Le plein pied dont partent ces A-poses : l'autopilote ne choisit que
+    # parmi celles du plein pied validé en cours.
+    source = fullbody_token(cos)
     report = report or _report()
     state = apose_of(cos)
     folder = p.dir(f"costumes/{key}/apose")
@@ -209,7 +212,8 @@ def apose(p: Project, costume: str | None, *, variants: int = 2, seed: int | Non
         dest.with_suffix(".json").write_text(json.dumps(
             {"kind": "apose", "backend": backend, "seed": s, "prompt": text, "refs": [body, p.rel(skel)]},
             ensure_ascii=False, indent=2), encoding="utf-8")
-        entry = {"file": p.rel(dest), "seed": s, "backend": backend, "engine": "qwen21", "at": now()}
+        entry = {"file": p.rel(dest), "seed": s, "backend": backend, "engine": "qwen21", "fullbody": source,
+                 "at": now()}
         state["candidates"].append(entry)
         made.append(entry)
         p.save()

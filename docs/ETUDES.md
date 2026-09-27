@@ -277,7 +277,31 @@ Deux usages, deux méthodes [V, pratique publiée ; I, choix] :
 - Absents : SeedVR2 (poids), base SDXL pour SUPIR, SDPose, Pixal3D image
   unique, Hunyuan3D-2mv, tout ControlNet Qwen.
 
-## 7. Sources principales
+## 7. Choisir l'A-pose par la mesure (27/09)
+
+Cal ne valide plus l'A-pose (décision du 27/09) : `apose_pick.py` la
+note sur le relevé DWPose (`tools/remote/pose_measure.py`, 5 s pour dix
+images). Seuils réglés sur des images réelles de DGX2, toutes notées
+contre le plein pied validé d'`essai-atelier` [V] :
+
+| Image | Verdict | Pourquoi |
+|---|---|---|
+| A-pose cand-001, cand-002 (validées par Cal le 25/09) | recevables, 0,88 / 0,89 | bras 43–44°, tenue 0,87 / 0,92 |
+| pleins pieds naturels du même | refusés | bras à 2–5° (ou 28° pour l'ancien H3) |
+| plein pied de `maren-ostrova` (autre personne) | refusé | tenue 0,37 : torse 0,11, bras 0,12 |
+| vue 3/4 d'`essai-atelier` | refusée | nez décalé d'un tiers de carrure, carrure à 82 % |
+| vue de dos | refusée | épaules et hanches inversées par DWPose |
+| profil | refusé | carrure 0,08 |
+
+Pièges : DWPose voit des « yeux » sur une vue de dos (score 0,7) —
+l'inversion droite/gauche des épaules est le vrai signe ; le sommet du
+crâne s'estime au-dessus du nez à 0,75 × la distance cou-nez (1,1
+coupait des cadrages justes). La couleur se compare région par région
+(torse, cuisses, jambes, bras, tête), placées par les points des deux
+relevés, en histogrammes Lab — pas d'embedding : c'est ce qui sépare
+déjà 0,9 (même tenue) de 0,4 (autre personne).
+
+## 8. Sources principales
 
 - Viggle turbo : https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo
 - Workflow pose nomadoor : https://github.com/nomadoor/Comfy-with-ComfyUI/pull/139
