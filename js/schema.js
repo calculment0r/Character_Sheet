@@ -14,6 +14,7 @@ const SHEET_FIELDS = [
   { section: 'CORE', key: 'height', label: 'height' },
   { section: 'CORE', key: 'body_type', label: 'body type' },
   { section: 'CORE', key: 'ethnicity', label: 'ethnicity' },
+  { section: 'CORE', key: 'face_description', label: 'face & hair' },
   { section: 'CORE', key: 'role', label: 'role' },
   { section: 'CORE', key: 'archetype', label: 'archetype' },
   { section: 'PSYCHE', key: 'personality_traits', label: 'personality' },
@@ -41,7 +42,7 @@ TOOLS DISPONIBLES (rappel technique):
 - request_input(field, question, input_type, options?, ...) : affiche un widget interactif (chips, multi_chips, slider, color_palette, text) pour éviter à l'utilisateur d'avoir à taper. Après un appel à request_input, N'APPELLE PLUS AUCUN AUTRE TOOL dans la même réponse — attends la réponse.
 
 CHAMPS EXACTS À UTILISER (case-sensitive) :
-- CORE : character_name, alias, gender, age, height, body_type, ethnicity, role, archetype
+- CORE : character_name, alias, gender, age, height, body_type, ethnicity, face_description, role, archetype
 - PSYCHE : personality_traits, core_theme, emotional_range, behavior_notes, speech_style
 - OUTFIT : default_outfit_description, top_description, bottom_description, shoes_description, accessories
 - EXTRA : color_palette, props

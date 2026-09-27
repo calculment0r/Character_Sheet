@@ -25,6 +25,8 @@ LOCAL_CONFIG = REPO / "factory.local.json"
 # Une capacité = un modèle. `prep` et `bake` n'en chargent pas de gros.
 CAPABILITIES = {
     "h3":        ("stub", "comfyui", "python"),
+    "portrait":  ("stub", "comfyui"),
+    "brief":     ("stub", "ollama"),
     "prep":      ("comfyui", "builtin", "rembg"),
     "delight":   ("off", "hunyuan"),
     "trellis":   ("stub", "comfyui", "python"),
@@ -39,7 +41,8 @@ CAPABILITIES = {
 # le détourage intégré ne tient pas les fonds de studio que rend H3,
 # dégradé et ombre du sujet compris. Les autres capacités restent
 # factices tant que `./usine doctor` n'a pas trouvé leur modèle.
-DEFAULTS = {"h3": "comfyui", "prep": "comfyui", "delight": "off", "trellis": "stub",
+DEFAULTS = {"h3": "comfyui", "portrait": "comfyui", "brief": "ollama", "prep": "comfyui", "delight": "off",
+            "trellis": "stub",
             "hunyuan3d": "stub", "unirig": "stub", "kimodo": "stub", "sam3dbody": "stub"}
 
 _override: dict[str, str] = {}

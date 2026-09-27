@@ -14,10 +14,11 @@ import zlib
 from pathlib import Path
 
 from . import config, h3, imaging, prompts, views_qwen
-from .project import ChainError, Project, now
+from .project import ChainError, Project, apose as apose_of, now
 
 ORTHO = ("front", "left", "back", "right")
 TOLERANCE_DEG = 5.0
+VIEW_TRIES = 3   # graines essayées par vue quand l'angle mesuré s'écarte
 
 
 def _report(verbose: bool = True):
@@ -42,10 +43,20 @@ def _seed(seed: int | None) -> int:
 # ── visage ─────────────────────────────────────────────────────────
 
 def face(p: Project, *, prompt: str = "", refs: list[str] = (), variants: int = 4,
-         seed: int | None = None, report=None) -> list[dict]:
+         seed: int | None = None, engine: str | None = None, descriptions: list[str] | None = None,
+         report=None) -> list[dict]:
     """Une grille de variantes du portrait neutre. Avec --graine, les
     variantes partent de cette graine : c'est le verrouillage de graine
-    du §3, pour relancer en ne changeant que le prompt."""
+    du §3, pour relancer en ne changeant que le prompt.
+
+    Le moteur : H3 avec une photo source (il la normalise en gardant la
+    personne), sinon un modèle d'image (`portrait.py`, Z-Image Turbo par
+    défaut) — le §3 laisse le choix, et H3 rend mal un portrait fixe.
+    La description du visage vient du brief lu par le modèle de texte
+    (`face.prompt_en`), sinon des précisions tapées (`face.prompt`) ;
+    `descriptions` en donne une par variante, pour explorer."""
+    from . import portrait
+
     if p.face.get("locked"):
         raise ChainError("le visage est déjà verrouillé : plus de nouvelles variantes pour ce personnage")
     report = report or _report()
@@ -53,22 +64,37 @@ def face(p: Project, *, prompt: str = "", refs: list[str] = (), variants: int = 
     p.face["refs"] = list(dict.fromkeys(p.face["refs"] + imported))
     if prompt:
         p.face["prompt"] = prompt
-    sections = prompts.face(p.sheet, p.data["notes"], has_source=bool(p.face["refs"]), extra=p.face["prompt"],
-                            style=p.data["style"])
+    engine = engine or ("h3" if p.face["refs"] else config.setting("face_engine", "zimage"))
+    if engine not in portrait.ENGINES:
+        raise ChainError(f"moteur de visage inconnu : {engine} (possibles : {', '.join(portrait.ENGINES)})")
+    p.face["engine"] = engine
+    extras = [d for d in descriptions or [] if d] or [p.face.get("prompt_en") or p.face["prompt"]]
     base = _seed(seed)
     made = []
     for i in range(variants):
         s = base + i
         n = len(p.face["candidates"]) + 1
         dest = p.dir("face") / f"cand-{n:03d}.png"
-        print(f"  variante {i + 1}/{variants} · graine {s}")
+        print(f"  variante {i + 1}/{variants} · {portrait.ENGINES[engine]} · graine {s}")
         # Sans source, le factice varie avec la graine : ce sont bien des
         # candidats différents. Avec une source, l'identité est fixée.
         ident = identity_seed(p) + (0 if p.face["refs"] else n)
-        out = h3.still("face", sections=sections, refs=[p.path(r) for r in p.face["refs"][:1]], dest=dest,
-                       seed=s, report=report, extra={"identity_seed": ident})
-        entry = {"file": p.rel(dest), "seed": s, "backend": out.backend, "at": now()}
-        if out.backend == "stub":
+        extra = extras[i % len(extras)]
+        if engine == "h3":
+            sections = prompts.face(p.sheet, p.data["notes"], has_source=bool(p.face["refs"]), extra=extra,
+                                    style=p.data["style"])
+            out = h3.still("face", sections=sections, refs=[p.path(r) for r in p.face["refs"][:1]], dest=dest,
+                           seed=s, report=report, extra={"identity_seed": ident})
+            backend = out.backend
+        else:
+            text = portrait.text(p.sheet, extra, style=p.data["style"])
+            portrait.generate(engine, prompt=text, dest=dest, seed=s, report=report, identity_seed=ident)
+            backend = config.backend("portrait")
+            dest.with_suffix(".json").write_text(json.dumps(
+                {"kind": "face", "engine": engine, "backend": backend, "seed": s, "prompt": text},
+                ensure_ascii=False, indent=2), encoding="utf-8")
+        entry = {"file": p.rel(dest), "seed": s, "backend": backend, "engine": engine, "desc": extra, "at": now()}
+        if backend == "stub":
             entry["stub_identity"] = ident
         p.face["candidates"].append(entry)
         made.append(entry)
@@ -94,26 +120,49 @@ def costume_add(p: Project, name: str, *, prompt: str = "", refs: list[str] = ()
 
 
 def fullbody(p: Project, costume: str | None, *, variants: int = 2, seed: int | None = None,
-             prompt: str = "", report=None) -> list[dict]:
-    """Le plein pied habillé, le visage verrouillé comme référence (§4)."""
+             prompt: str = "", engine: str | None = None, report=None) -> list[dict]:
+    """Le plein pied habillé, le visage verrouillé comme référence (§4),
+    en pose naturelle : l'A-pose vient ensuite, par `apose`.
+
+    Par Qwen-Image 2.1 turbo en HD (`figure.py`, `qwen21.py`) : H3 le
+    rendait à 768 px, mains et matières comprises, trop pauvre pour une
+    image qui sert ensuite de référence à l'A-pose et aux vues."""
+    from . import figure
+
     locked = p.require_face()
     key, cos = p.costume(costume)
     if prompt:
         cos["prompt"] = prompt
+    engine = engine or config.setting("fullbody_engine", "qwen21")
+    if engine not in figure.ENGINES:
+        raise ChainError(f"moteur de plein pied inconnu : {engine} (possibles : {', '.join(figure.ENGINES)})")
     report = report or _report()
     refs = [p.path(locked)] + [p.path(r) for r in cos["refs"]]
-    sections = prompts.fullbody(p.sheet, p.data["notes"], garments=len(cos["refs"]), costume_prompt=cos["prompt"],
-                                style=p.data["style"])
+    if engine == "h3":
+        sections = prompts.fullbody(p.sheet, p.data["notes"], garments=len(cos["refs"]),
+                                    costume_prompt=cos["prompt"], style=p.data["style"])
+    else:
+        outfit = prompts.describe_outfit(p.sheet, cos["prompt"])
+        text = figure.text(outfit, garments=len(cos["refs"]), style=p.data["style"], tags=engine == "qwen21")
     base = _seed(seed)
     made = []
     for i in range(variants):
         s = base + i
         n = len(cos["fullbody"]["candidates"]) + 1
         dest = p.dir(f"costumes/{key}/fullbody") / f"cand-{n:03d}.png"
-        print(f"  variante {i + 1}/{variants} · graine {s}")
-        out = h3.still("fullbody", sections=sections, refs=refs, dest=dest, seed=s, report=report,
-                       extra={"identity_seed": identity_seed(p), "azimuth": 0.0})
-        entry = {"file": p.rel(dest), "seed": s, "backend": out.backend, "at": now()}
+        print(f"  variante {i + 1}/{variants} · {figure.ENGINES[engine]} · graine {s}")
+        if engine == "h3":
+            out = h3.still("fullbody", sections=sections, refs=refs, dest=dest, seed=s, report=report,
+                           extra={"identity_seed": identity_seed(p), "azimuth": 0.0})
+            backend = out.backend
+        else:
+            figure.generate(engine, prompt=text, refs=refs, dest=dest, seed=s, report=report,
+                            identity_seed=identity_seed(p))
+            backend = config.backend("portrait")
+            dest.with_suffix(".json").write_text(json.dumps(
+                {"kind": "fullbody", "engine": engine, "backend": backend, "seed": s, "prompt": text,
+                 "refs": [str(r) for r in refs]}, ensure_ascii=False, indent=2), encoding="utf-8")
+        entry = {"file": p.rel(dest), "seed": s, "backend": backend, "engine": engine, "at": now()}
         cos["fullbody"]["candidates"].append(entry)
         made.append(entry)
         p.save()
@@ -129,13 +178,70 @@ def fullbody_ok(p: Project, costume: str | None, candidate: str) -> str:
     return out
 
 
+# ── A-pose ─────────────────────────────────────────────────────────
+
+def apose(p: Project, costume: str | None, *, variants: int = 2, seed: int | None = None, report=None) -> list[dict]:
+    """Le plein pied validé remis en A-pose (`pose.py`) : un squelette
+    relevé sur lui par DWPose, bras à 45°, donné à Qwen-Image 2.1 turbo
+    avec le plein pied. Les vues et le mesh partent de là."""
+    from . import pose, qwen21
+    from . import stubs as sketches
+
+    p.require_face()
+    key, cos = p.costume(costume)
+    body = p.require_fullbody(cos)
+    report = report or _report()
+    state = apose_of(cos)
+    folder = p.dir(f"costumes/{key}/apose")
+    skel = pose.skeletons(p.path(body), folder / "skeleton.png", report=report)[0]
+    state["skeleton"] = p.rel(skel)
+    text = pose.text_apose(prompts.describe_outfit(p.sheet, cos["prompt"]), p.data["style"])
+    base = _seed(seed)
+    made = []
+    for i in range(variants):
+        s = base + i
+        dest = folder / f"cand-{len(state['candidates']) + 1:03d}.png"
+        print(f"  A-pose {i + 1}/{variants} · Qwen-Image 2.1 turbo · graine {s}")
+        qwen21.generate(prompt=text, refs=[p.path(body), skel], dest=dest, seed=s, size=pose.SIZE,
+                        resolution=pose.RESOLUTION, report=report,
+                        stub=lambda: sketches.mannequin(pose.SIZE, azimuth=0.0, seed=identity_seed(p)))
+        backend = config.backend("portrait")
+        dest.with_suffix(".json").write_text(json.dumps(
+            {"kind": "apose", "backend": backend, "seed": s, "prompt": text, "refs": [body, p.rel(skel)]},
+            ensure_ascii=False, indent=2), encoding="utf-8")
+        entry = {"file": p.rel(dest), "seed": s, "backend": backend, "engine": "qwen21", "at": now()}
+        state["candidates"].append(entry)
+        made.append(entry)
+        p.save()
+    return made
+
+
+def apose_ok(p: Project, costume: str | None, candidate: str) -> str:
+    key, _ = p.costume(costume)
+    out = p.validate_apose(key, candidate)
+    p.save()
+    return out
+
+
 # ── planche ────────────────────────────────────────────────────────
 
-def sheet(p: Project, costume: str | None, *, mask_face: bool = False, ab: bool = False,
-          seed: int | None = None, report=None) -> list[dict]:
-    """La planche en cinq frames (§5.2). Avec --ab, deux planches de
-    même graine, avec et sans disque sur le visage des plein pieds : le
-    §5.5 veut que l'astuce se tranche sur pièces, pas a priori."""
+def sheet(p: Project, costume: str | None, *, engine: str = "qwen21", variants: int = 1, mask_face: bool = False,
+          ab: bool = False, seed: int | None = None, report=None) -> list[dict]:
+    """La planche de référence.
+
+      qwen21  par défaut : trois cases — face et dos en pied en A-pose, gros
+              plan tête et épaules — par Qwen-Image 2.1 turbo, le visage en
+              <image1>, l'A-pose validée en <image2>, une mise en page faite
+              des squelettes en <image3> (`pose.py`). Elle se fait après
+              l'A-pose et sert à Cal comme au turnaround H3 de la fin ;
+      h3      l'ancienne planche H3 en cinq frames (§5.2). Avec --ab, deux
+              planches de même graine, avec et sans disque sur le visage.
+
+    Aucune n'ouvre ni ne ferme les vues (Cal, 25/09)."""
+    if engine == "qwen21":
+        return _sheet_qwen21(p, costume, variants=variants, seed=seed, report=report)
+    if engine != "h3":
+        raise ChainError(f"moteur de planche inconnu : {engine} (possibles : qwen21, h3)")
     locked = p.require_face()
     key, cos = p.costume(costume)
     body = p.require_fullbody(cos)
@@ -164,35 +270,75 @@ def sheet(p: Project, costume: str | None, *, mask_face: bool = False, ab: bool 
     return made
 
 
+def _sheet_qwen21(p: Project, costume: str | None, *, variants: int, seed: int | None, report) -> list[dict]:
+    from . import pose, qwen21
+    from . import stubs as sketches
+
+    locked = p.require_face()
+    key, cos = p.costume(costume)
+    p.require_fullbody(cos)
+    body = p.require_apose(cos)
+    report = report or _report()
+    sid = p.next_id("s", cos["sheets"])
+    folder = p.dir(f"costumes/{key}/sheets/{sid}")
+    skel = pose.skeletons(p.path(body), folder / "skeleton.png", [180], report=report)
+    layout = pose.sheet_layout(skel[0], skel[180], folder / "layout.png")
+    head = pose.head_only(p.path(locked), folder / "face.png")
+    text = pose.text_sheet(p.data["style"])
+    (folder / "prompt.txt").write_text(text, encoding="utf-8")
+    base = _seed(seed)
+    made = []
+    for i in range(variants):
+        s = base + i
+        if i:
+            sid = p.next_id("s", cos["sheets"])
+            p.dir(f"costumes/{key}/sheets/{sid}")
+        dest = p.path(f"costumes/{key}/sheets/{sid}/sheet.png")
+        print(f"  planche {sid} · Qwen-Image 2.1 turbo · graine {s}")
+        qwen21.generate(prompt=text, refs=[head, p.path(body), layout], dest=dest, seed=s, size=pose.SHEET_SIZE,
+                        resolution=pose.RESOLUTION, report=report,
+                        stub=lambda: sketches.mannequin(pose.SHEET_SIZE, azimuth=0.0, seed=identity_seed(p)))
+        entry = {"id": sid, "file": p.rel(dest), "engine": "qwen21", "mask_face": False, "seed": s,
+                 "backend": config.backend("portrait"), "layout": p.rel(layout), "at": now()}
+        cos["sheets"].append(entry)
+        made.append(entry)
+        p.save()
+    return made
+
+
 def sheet_ok(p: Project, costume: str | None, sheet_id: str) -> dict:
+    """Retenir une planche H3. Elle n'ouvre plus les vues (Cal, 25/09) :
+    les méthodes H3 des vues la prennent en référence si elle existe."""
     key, cos = p.costume(costume)
     chosen = next((s for s in cos["sheets"] if s["id"] == sheet_id), None)
     if chosen is None:
         raise ChainError(f"planche inconnue : {sheet_id} (existantes : {', '.join(s['id'] for s in cos['sheets'])})")
     cos["sheet"] = sheet_id
     cos["sheet_mask_face"] = chosen["mask_face"]
-    # De nouvelles références pour les vues : les anciennes ne valent plus.
-    cos["views"] = {"method": None, "raw": {}, "prepared": {}, "check": None, "delighted": False}
     p.save()
     return chosen
 
 
 # ── vues orthogonales ──────────────────────────────────────────────
 
-VIEW_METHODS = ("per_view", "orbit", *views_qwen.METHODS)
+VIEW_METHODS = ("qwen21-pose", "per_view", "orbit", *views_qwen.METHODS)
 
 
-def views(p: Project, costume: str | None, *, method: str = "per_view", names: list[str] | None = None,
+def views(p: Project, costume: str | None, *, method: str = "qwen21-pose", names: list[str] | None = None,
           threequarter: bool = True, seed: int | None = None, bench: bool = False, report=None) -> dict:
-    """Les vues orthogonales (§6.1), par l'une des méthodes :
+    """Les vues orthogonales (§6.1), depuis l'A-pose validée, par l'une
+    des méthodes :
 
-      per_view      une génération H3 par vue, visage, plein pied et planche
-                    en références — H3 y revient vers la face ;
+      qwen21-pose   par défaut : une édition Qwen-Image 2.1 turbo par vue,
+                    l'A-pose en <image1> et le squelette A-pose tourné à
+                    l'azimut de la vue en <image2> (`pose.py`) — profils,
+                    dos, même échelle et même ligne de sol tenus ; la face
+                    est l'A-pose elle-même ;
+      per_view      une génération H3 par vue — H3 y revient vers la face ;
       orbit         un plan H3 en orbite, frames choisies sur la silhouette ;
       qwen21-orbit, qwen-2511, qwen-2509
-                    le plein pied de face validé, tourné par un LoRA
-                    d'angle Qwen (`views_qwen.py`) ; la face est le plein
-                    pied lui-même.
+                    l'A-pose tournée par un LoRA d'angle Qwen
+                    (`views_qwen.py`, voir les réserves de `docs/ETUDES.md`).
 
     Avec `bench`, les vues vont dans `views/banc/<méthode>/`, avec leur
     planche contact, et le manifeste n'est pas touché : c'est le banc du
@@ -201,15 +347,82 @@ def views(p: Project, costume: str | None, *, method: str = "per_view", names: l
         raise ChainError(f"méthode de vues inconnue : {method} (possibles : {', '.join(VIEW_METHODS)})")
     locked = p.require_face()
     key, cos = p.costume(costume)
-    body = p.require_fullbody(cos)
-    plate = p.require_sheet(cos)
+    p.require_fullbody(cos)
+    body = p.require_apose(cos)
     report = report or _report()
     names = list(names or ORTHO) + (["threequarter"] if threequarter and not names else [])
-    refs = [p.path(locked), p.path(body), p.path(plate["file"])]
+    plate = next((x for x in cos["sheets"] if x["id"] == cos.get("sheet")), None)
+    refs = [p.path(locked), p.path(body)] + ([p.path(plate["file"])] if plate else [])
     folder = p.dir(f"costumes/{key}/views/" + (f"banc/{method}" if bench else "raw"))
     s = _seed(seed)
     raw: dict[str, dict] = {}
-    if method == "orbit":
+    if method == "qwen21-pose":
+        from . import pose, qwen21
+        from . import stubs as sketches
+
+        turns = {n: int(prompts.AZIMUTHS[n][0]) for n in names if n != "front"}
+        skel = pose.skeletons(p.path(body), folder / "skeleton.png", sorted(set(turns.values())), report=report)
+        # Mesurer puis choisir : chaque vue passe par SAM 3D Body dès qu'elle
+        # sort, et se relance sur une autre graine tant qu'elle s'écarte de
+        # l'angle voulu (Qwen tient les profils et le dos, pas toujours les
+        # 3/4 : essais du 25/09, `docs/ETUDES.md`). On garde la plus proche.
+        measure = config.backend("portrait") != "stub"
+        workdir = p.dir(f"costumes/{key}/views/.sam3d")
+        front_yaw = None
+        if measure:
+            from . import sam3d
+
+            report(0.05, "SAM 3D Body · face")
+            front_yaw = sam3d.yaw(p.path(body), workdir=workdir, name="front")
+        for n in names:
+            dest = folder / f"{n}.png"
+            if n == "front":
+                imaging.load(p.path(body)).save(dest)
+                raw[n] = {"file": p.rel(dest), "azimuth": 0.0, "azimuth_source": "A-pose validée", "seed": None,
+                          "backend": "reprise", "at": now(),
+                          **({"azimuth_measured": 0.0} if measure else {})}
+                continue
+            az = turns[n]
+            limit = TOLERANCE_DEG if n in ORTHO else 2 * TOLERANCE_DEG
+            text = pose.text_view(az, p.data["style"])
+            tries: list[dict] = []
+            for k in range(VIEW_TRIES if measure else 1):
+                seed_k = s + k
+                out = folder / (f"{n}.png" if k == 0 else f".{n}_{k}.png")
+                print(f"  vue {n} · {az}° · squelette · graine {seed_k}")
+                qwen21.generate(prompt=text, refs=[p.path(body), skel[az]], dest=out, seed=seed_k, size=pose.SIZE,
+                                resolution=pose.RESOLUTION, report=report,
+                                stub=lambda: sketches.mannequin(pose.SIZE, azimuth=float(az), seed=identity_seed(p)))
+                got = {"file": out, "seed": seed_k}
+                if measure:
+                    got["yaw"] = sam3d.yaw(out, workdir=workdir, name=f"{n}_{k}")
+                    got["azimuth"] = sam3d.azimuth(got["yaw"], front_yaw)
+                    got["error"] = angular_error(got["azimuth"], az)
+                    print(f"    mesuré {got['azimuth']:.1f}° (écart {got['error']:+.1f}°)")
+                tries.append(got)
+                if not measure or abs(got["error"]) <= limit:
+                    break
+            best = min(tries, key=lambda t: abs(t.get("error", 0.0)))
+            if best["file"] != dest:
+                best["file"].replace(dest)
+            for t in tries:
+                if t["file"] != dest and t["file"].exists():
+                    t["file"].unlink()
+            backend = config.backend("portrait")
+            entry = {"file": p.rel(dest), "azimuth": float(az), "azimuth_source": "demandé (squelette)",
+                     "seed": best["seed"], "backend": backend, "prompt": text, "at": now()}
+            if measure:
+                entry["azimuth_measured"] = best["azimuth"]
+                entry["azimuth_measure"] = {"engine": "sam3dbody", "yaw_raw": round(best["yaw"], 1),
+                                            "reference": "front", "tries": [
+                                                {"seed": t["seed"], "azimuth": t["azimuth"]} for t in tries],
+                                            "at": now()}
+            dest.with_suffix(".json").write_text(json.dumps(
+                {"kind": "view", "method": method, "azimuth": az, "backend": backend, "seed": best["seed"],
+                 "prompt": text, "refs": [body, p.rel(skel[az])],
+                 "measured": entry.get("azimuth_measure")}, ensure_ascii=False, indent=2), encoding="utf-8")
+            raw[n] = entry
+    elif method == "orbit":
         azimuths = {n: prompts.AZIMUTHS[n][0] for n in names}
         sections = prompts.orbit(p.sheet, p.data["notes"], costume_prompt=cos["prompt"], style=p.data["style"])
         print(f"  orbite · {len(names)} azimuts à extraire · graine {s}")

@@ -1,7 +1,10 @@
 # Character Factory
 
-Chaîne souveraine : prompt ou photo → visage validé → costumes → planche
-→ vues orthogonales → mesh PBR → rig SOMA → animation. **Tout tourne en
+Chaîne souveraine : prompt ou photo → visage validé → costume et plein
+pied en pose naturelle → A-pose par squelette → vues orthogonales → mesh
+PBR → rig SOMA → animation, et un turnaround H3 de présentation à la fin.
+Les études et essais qui fondent ces choix : `docs/ETUDES.md`, à lire
+avant de toucher à ces étages. **Tout tourne en
 local, sur la machine** — pas d'API pour l'instant, décision de Cal.
 
 Reprise sur la machine : `REPRISE.md` — **à lire en premier**
@@ -110,8 +113,10 @@ Ne pas les affaiblir sans une décision explicite de Cal.
 
 - Le visage ne se verrouille qu'une fois (`project.py`).
 - Aucun étage ne se lance avant que le précédent soit validé : plein
-  pied après le visage, planche après le plein pied, vues après la
-  planche (`project.py`, `chain.py`).
+  pied après le visage, A-pose après le plein pied, vues après l'A-pose
+  (`project.py`, `chain.py`). La planche H3 n'est plus un étage de
+  validation : décision de Cal du 25/09, H3 ne sert plus qu'au
+  turnaround de présentation.
 - Le contrôle d'alignement des vues refuse au-delà de ±5°, bouclage à
   360° compris, et le mesh multi-vues refuse des vues qui ne l'ont pas
   passé (`chain.py`).

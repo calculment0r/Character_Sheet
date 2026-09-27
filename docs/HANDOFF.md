@@ -11,7 +11,161 @@ Cadrage complet : [`BRIEF_CHARACTER_FACTORY.md`](./BRIEF_CHARACTER_FACTORY.md)
 
 ---
 
+## 00. REPRENDRE ICI — Qwen-Image 2.1 turbo pour tout valider (25/09, soir)
+
+**Lire ceci d'abord. Les sections suivantes décrivent le studio tel qu'il
+est, mais la chaîne d'images change selon les décisions ci-dessous.**
+
+### Les décisions de Cal (25/09, dites en session, à tenir)
+
+1. **Les images qu'on valide sortent de Qwen-Image 2.1**, qui génère et
+   édite : visage, plein pied, vues, en HD. Cal l'a installé exprès.
+2. **H3 ne sert plus qu'à la fin** : un turnaround de présentation, une
+   fois tout le personnage validé en HD. La planche H3 n'est plus un étage
+   de validation (règle « vues après la planche » à retirer du code et de
+   `CLAUDE.md` : décision explicite de Cal).
+3. **Qwen-Image 2.1 en INT8 turbo** : base INT8 de Comfy-Org + LoRA turbo
+   de Viggle v0.2.1 (6 pas). Installé sur DGX2 le 25/09, voir plus bas.
+4. Portraits en **gros plan**, sans vêtements (fait). Onglet Costume sans
+   bouton Enregistrer, rendu toujours visible (fait).
+5. Façon de travailler : **retrouver ce qui a déjà été décidé ou fourni
+   avant de choisir un modèle** — transcripts des sessions précédentes
+   (outils `search_session_transcripts`, `export_transcript`), mémoire
+   `C:/Users/calcu/.claude/projects/C--claude/memory`, workflows officiels
+   de ComfyUI sur DGX2 (`~/comfyui-env/lib/python3.12/site-packages/comfyui_workflow_templates_json/templates/`),
+   Hugging Face. Cal perd un temps fou quand on réinvente.
+
+### Ce qui est prêt et vérifié sur DGX2
+
+- Poids téléchargés (`~/ComfyUI/models`) :
+  `diffusion_models/qwen_image_2.1_int8_convrot.safetensors`,
+  `text_encoders/qwen3vl_8b_int8_convrot.safetensors`,
+  `loras/qwen_image_2.1_viggle_turbo_v0.2.1_r256_comfy.safetensors`
+  (conversion ComfyUI de t8star) et `loras/Qwen-Image-2.1-viggle-turbo-v0.2.1-6step-lora-r256.safetensors`
+  (Viggle brut). VAE `qwen_image_2.1_vae_bf16` déjà là.
+- **`factory/qwen21.py`** : le montage de t8star en nœuds natifs
+  (`LoraLoaderBypassModelOnly` force 1,0 — surtout pas un LoRA fusionné —,
+  `ManualSigmas` 6 pas décalés selon la résolution, euler, `BasicGuider`,
+  pas de négatif), taille libre (`EmptyLatentImage`), références
+  `<image1>…<image3>`.
+  `qwen21.generate(prompt=…, refs=[…], dest=…, seed=…, size=qwen21.FULLBODY)`.
+- **Essai réel** (visage verrouillé d'`essai-atelier` en `<image1>`, tenue
+  « veryday ») : 3 pleins pieds **1152 × 2048 en 28 s** (37 s le premier,
+  chargement compris), identité tenue, matières, mains et coupe justes.
+  Images : `dgx2:/tmp/qwen21_fb/fb_21..23.png` ; script
+  `tools/remote/qwen21_fullbody_try.py` (à lancer sur DGX2 avec le python
+  du dépôt). **Défaut** : bras le long du corps au lieu de l'A-pose — à
+  régler (formulation, ou une image de pose en `<image2>`), sinon les vues
+  et le rig en souffriront.
+- Référence : README de `Viggle/Qwen-Image-2.1-viggle-turbo` (règles des
+  6 pas ; édition entraînée à 1024² et 1536² d'aire → en 9:16, 768 × 1376
+  ou 1152 × 2048).
+
+### Fait le 25/09 au soir (session suivante) — lire `docs/ETUDES.md`
+
+- **Plein pied en pose naturelle** (`figure.py`), validé tel quel.
+- **Étage A-pose** (`pose.py`, `chain.apose`, `./usine pose` / `pose-ok`,
+  studio) : DWPose relève le plein pied validé, squelette A-pose, Qwen 2.1
+  turbo le rend avec le plein pied en `<image1>`. Essai réel : 4/4.
+- **Vues `qwen21-pose`** (défaut) : une édition par vue, le squelette
+  tourné à l'azimut. Essai réel : profils, dos, échelle et ligne de sol
+  justes ; les 3/4 tournent trop peu.
+- **La planche H3 ne conditionne plus rien** ; frise du studio :
+  Visage · Costume · A-pose · Vues · 3D · Rig. `chain_check` 45/45,
+  parcours de page vérifié dans Edge headless.
+
+### À faire, dans l'ordre
+
+1. ~~A-pose, planche et vues depuis le studio~~ : faits sur
+   `essai-atelier` (A-pose validée par Cal, planches s003/s004 à valider).
+2. ~~Mesure SAM 3D Body~~ : branchée et vérifiée, contrôle ±5° passé ;
+   les vues se mesurent et se relancent seules (`docs/ETUDES.md` §3).
+3. **Les 3/4** : encore une réussite sur deux par graine ; la boucle
+   mesurer-choisir compense. Si ça ne suffit pas : donner de la
+   profondeur au torse du squelette (épaules, hanches) et des pieds.
+4. **Mesh** d'`essai-atelier` (TRELLIS.2 multi-vues, vues mesurées) : au
+   feu vert de Cal.
+5. **Planche de référence** : branchée d'après le workflow Civitai trouvé
+   par Cal (`chain.sheet`, moteur `qwen21`, frise : … A-pose · Planche ·
+   Vues …, voir `docs/ETUDES.md` §5). A-pose réelle vérifiée depuis le
+   studio sur `essai-atelier`. Le workflow lui-même a été rejoué (zip de
+   Cal) : sa planche de garde-robe invente des accessoires, on ne la
+   reprend pas. Reste : le **turnaround H3** de fin de chaîne, nourri par
+   la planche validée.
+6. **Visage** par Qwen 2.1 turbo, à comparer à Z-Image devant Cal.
+7. `./usine doctor` : valider les gabarits `qwen21` à blanc.
+
+### État des machines et des personnages
+
+- Studio en route sur DGX2 (`http://192.168.10.247:8765/`). Redémarrage :
+  `pkill -f "[m] factory studio"; PYTHONUNBUFFERED=1 setsid nohup ./usine studio > studio.log 2>&1 < /dev/null &`
+  (écrire `[m]` : sinon `pkill` tue la session ssh qui le lance).
+- Personnages sur DGX2 : `essai-atelier` (celui de Cal : visage Z-Image
+  verrouillé, tenue « veryday », deux pleins pieds H3 à jeter), `kevin`
+  (portraits H3, rien de verrouillé), `ilse-varga`, `maren-ostrova`.
+- Parcours de page en Edge headless : `npm install playwright-core` dans le
+  dossier temporaire, `chromium.launch({ channel: 'msedge' })`, studio
+  lancé avec `FACTORY_H3=stub FACTORY_PORTRAIT=stub FACTORY_BRIEF=stub FACTORY_STUB_DELAY=1.5`.
+
+---
+
 ## 0. REPRENDRE ICI — le studio tourne sur DGX2 (état au 25/09/2026)
+
+**L'atelier (25/09, après-midi — retours de Cal sur Kévin)**. Cal a
+jugé le premier studio mauvais à l'usage : démarrer par le questionnaire
+de 21 champs est frustrant, les images H3 du visage sont laides, le
+détourage est crénelé. Ce qui a changé :
+
+- **Créer = un nom.** L'accueil n'a qu'un champ. Le nom se corrige d'un
+  clic dans l'en-tête (le dossier garde son slug).
+- **Une étape à la fois** : frise Visage · Costume · Planche · Vues · 3D ·
+  Rig ; l'atelier passe seul à l'étape suivante quand une étape est
+  validée.
+- **On décrit ce qu'on veut voir**, en français. `factory/brief.py` fait
+  lire le brief par le modèle de texte (Ollama `/api/chat`, sortie JSON
+  contrainte) : prompt d'image en anglais limité à ce que l'étage montre,
+  **quatre propositions distinctes** pour le visage (Z-Image varie peu
+  d'une graine à l'autre), et les champs de la fiche. Nouveau champ
+  `face_description`. « Autour » relance autour d'une proposition.
+- **Visage par un modèle d'image** (`factory/portrait.py`) : Z-Image Turbo
+  par défaut (8 s, 20 Go, cohabite avec le modèle de texte), FLUX.2 dev
+  (73 s, 75 Go, le plus fidèle), Qwen-Image 2.1 (40 s), H3 pour normaliser
+  une photo. Banc du 25/09 sur Kévin : tous très au-dessus de H3. Le
+  prompt du visage n'a plus ni rôle, ni archétype, ni notes : chez Kévin,
+  « skateur » + une note « casque porté en arrière » donnaient casque et
+  lunettes de ski.
+- **Le temps de calcul sert** : un travail et les modifications faites
+  pendant ce travail partagent le même `Project` en mémoire (`Studio.live`,
+  verrou dans `Project.save`) ; plus de refus « un travail tourne ». La
+  carte « En attendant » propose la tenue, des traits de caractère,
+  l'assistant (sauf pendant H3, qui prend 100 Go).
+- **Mémoire par famille** (`memory.FAMILY_GB`) : le modèle de texte n'est
+  déchargé que si la famille ne tient pas à côté.
+- **Détourage** : `imaging.with_mask` coupait le masque BiRefNet par des
+  blocs de 5 px (marches d'escalier) et le tranchait à 50 %. Il garde
+  maintenant le bord doux de BiRefNet (étiré : BiRefNet plafonne à 254),
+  et retire le fond des pixels de bord. SAM 3 n'est pas installé et ne
+  ferait pas mieux sur les bords : c'est de la segmentation, pas du
+  matting ; si les cheveux manquent de finesse, essayer BiRefNet HR
+  matting.
+- Essai réel sur DGX2 : « Essai atelier », brief lu en 42 s (chargement
+  compris), quatre visages Z-Image en 44 s, modèle de texte resté chargé.
+
+- **Onglet Costume (retour de Cal)** : le bouton de rendu est toujours
+  là, grisé tant qu'il n'y a pas de visage verrouillé, avec un bandeau qui
+  le dit et mène au visage ; pas de bouton « Enregistrer » — le texte de
+  la tenue se garde en quittant le champ, les images dès qu'elles sont
+  déposées ; une tenue vide est refusée. Un verrouillage ou une validation
+  rend l'atelier à l'étape suivante.
+- **Portraits en gros plan**, coupés au cou : un vêtement sur le visage de
+  référence passerait dans toutes les générations qui le prennent.
+
+**Reste à faire** : le costume par brief n'a pas encore tourné pour de
+vrai (plein pied H3 à partir d'un prompt écrit par le modèle) ; l'orbite
+et la suite passent encore par l'ancienne interface de bloc ; `doctor`
+ne valide pas encore les gabarits de portrait ; H3 garde son rendu dur
+pour le plein pied et la planche (piste : upscale/SUPIR, ou FLUX.2 Kontext
+pour le plein pied).
 
 **On ne travaille que sur DGX2** (Cal, 25/09). Le PC sert à écrire le
 code et à ouvrir la page ; tout calcule sur DGX2.

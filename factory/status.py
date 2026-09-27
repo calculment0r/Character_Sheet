@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .project import Project
+from .project import Project, apose
 
 
 def _fake(entry: dict | None) -> str:
@@ -19,7 +19,7 @@ def render(p: Project) -> str:
         lines.append(f"  {ref}  {name:18s} {text}")
 
     filled = sum(1 for v in p.sheet.values() if v)
-    row("ST-01", "Identité", f"{filled}/21 champs, {len(d['notes'])} note(s)")
+    row("ST-01", "Identité", f"{filled}/22 champs, {len(d['notes'])} note(s)")
 
     face = d["face"]
     if face.get("locked"):
@@ -45,15 +45,22 @@ def render(p: Project) -> str:
                           else f"./usine pleinpied {slug} --costume {key}")
             continue
 
-        sheet = next((s for s in cos["sheets"] if s["id"] == cos.get("sheet")), None)
-        if sheet:
-            row("ST-04", "Planche", f"{sheet['id']} validée{' (disque)' if sheet['mask_face'] else ''}"
-                                    f"{_fake(sheet)} · {len(cos['sheets'])} planche(s)")
+        ap = apose(cos)
+        if ap.get("validated"):
+            chosen = next((c for c in ap["candidates"] if c["file"] == ap.get("validated_from")), None)
+            row("ST-04", "A-pose", f"validée{_fake(chosen)} · {len(ap['candidates'])} candidat(s)")
         else:
-            row("ST-04", "Planche", f"{len(cos['sheets'])} planche(s), aucune validée")
-            nxt = nxt or (f"./usine planche-ok {slug} <id> --costume {key}" if cos["sheets"]
-                          else f"./usine planche {slug} --costume {key} --ab")
+            row("ST-04", "A-pose", f"{len(ap['candidates'])} candidat(s), aucune validée")
+            nxt = nxt or (f"./usine pose-ok {slug} <numéro> --costume {key}" if ap["candidates"]
+                          else f"./usine pose {slug} --costume {key}")
             continue
+
+        # La planche ne ferme pas les vues : elle se propose, sans bloquer.
+        sheet = next((s for s in cos["sheets"] if s["id"] == cos.get("sheet")), None)
+        row("ST-04b", "Planche", f"{sheet['id']} validée{_fake(sheet)}" if sheet
+            else f"{len(cos['sheets'])} planche(s), aucune validée")
+        if not sheet and not cos["views"]["raw"]:
+            nxt = nxt or f"./usine planche {slug} --costume {key}"
 
         v = cos["views"]
         chk = v.get("check")

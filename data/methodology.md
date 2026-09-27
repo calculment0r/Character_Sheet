@@ -38,7 +38,7 @@ Depuis ce pitch, extrapole immédiatement (via `update_character_sheet`) tout ce
 Ordre recommandé : `character_name` (chat libre, propose 3 idées si l'utilisateur bloque) → `alias` (chat libre, souvent skip) → `gender` (chips) → `age` (slider 0-100) → `role` (chips adaptées au genre du pitch) → `archetype` (chips du système Jungien : héros / anti-héros / mentor / trickster / ombre / innocent / explorateur / rebelle / créateur / dirigeant).
 
 ### Phase 3 — CORPS
-`body_type` (chips : mince / athlétique / musclé / rond / élancé / massif) → `height` (slider 140-210 cm) → `ethnicity` (chips avec les principales origines + allow_custom).
+`body_type` (chips : mince / athlétique / musclé / rond / élancé / massif) → `height` (slider 140-210 cm) → `ethnicity` (chips avec les principales origines + allow_custom) → `face_description` (chat libre : forme du visage, peau, yeux, cheveux, pilosité, marques — c'est ce que le studio dessine en premier ; rien sur les vêtements ni les accessoires, qui vont au costume).
 
 ### Phase 4 — PSYCHE
 Généralement en chat libre car descriptif :

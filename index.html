@@ -67,20 +67,19 @@
 
   <div class="console-top">
     <div class="hero">
-      <span class="ref">00_état</span>
+      <span class="ref">00_état · 27/09</span>
       <h2 class="etat-title">Où en est la chaîne</h2>
       <p>
-        Prompt ou photo, visage verrouillé, costumes, planche, vues orthogonales, mesh PBR, rig SOMA,
-        animation. Tout tourne désormais sur DGX2, et se mène à la main dans le <b>studio</b> : les
-        personnages en cartes, un bloc par étage. Les quatre premiers étages tournent sur de vraies
-        images, par H3 ; la 3D, le rig et l'animation sont câblés, pas encore lancés. Les images plus bas
-        sont celles d'un personnage de test, Maren Ostrova, costume « travail ».
+        Visage verrouillé, plein pied en pose naturelle, A-pose imposée par un squelette, planche de référence,
+        vues mesurées, mesh PBR. Tout tourne sur DGX2 et se mène dans le <b>studio</b>. Les images qu'on valide
+        sortent de Qwen-Image 2.1 turbo ; H3 ne servira plus qu'au turnaround de présentation, à la fin. Les
+        images plus bas sont celles d'<b>Essai atelier</b>, le personnage de Cal, rendues depuis le studio.
       </p>
     </div>
     <div class="statcard">
       <span class="ref">étages qui tournent</span>
-      <span class="n">04</span>
-      <span class="foot">sur 8 · sur de vraies images</span>
+      <span class="n">06</span>
+      <span class="foot">sur 9 · sur de vraies images</span>
       <span class="dots"></span>
     </div>
   </div>
@@ -88,14 +87,15 @@
   <section class="sect">
     <div class="sect-head"><span class="k">01</span><h2>Les étages</h2><span class="cnt">tourne · câblé · attend</span></div>
     <div class="stages">
-      <a class="slab t3" href="#visage"><span class="body"><span class="line"><span class="ref">01 · tourne</span><span class="nm">Visage</span></span><span class="sub">H3 Ref2VA · DGX2 · cinq frames, la plus nette gardée · portrait neutre verrouillé une fois</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
-      <a class="slab t3" href="#pleinpied"><span class="body"><span class="line"><span class="ref">02 · tourne</span><span class="nm">Costume · plein pied</span></span><span class="sub">H3 · A-pose, tête aux pieds · le visage verrouillé en référence</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
-      <a class="slab t2" href="#planche"><span class="body"><span class="line"><span class="ref">03 · tourne</span><span class="nm">Planche</span></span><span class="sub">H3 · cinq pleins pieds et trois gros plans · A/B avec et sans disque</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
-      <a class="slab t2" href="#vues"><span class="body"><span class="line"><span class="ref">04 · tourne</span><span class="nm">Vues orthogonales</span></span><span class="sub">orbite H3 · BiRefNet · frames choisies sur la silhouette · contrôle ±5° passé · banc Qwen câblé</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
-      <a class="slab lk" href="#attend"><span class="body"><span class="line"><span class="ref">05 · câblé</span><span class="nm">Mesh PBR</span></span><span class="sub">TRELLIS.2 multi-vues · DGX2 · gabarits validés à blanc, jamais lancé</span></span><span class="dots"></span><span class="go">à lancer</span></a>
-      <a class="slab lk" href="#attend"><span class="body"><span class="line"><span class="ref">06 · câblé</span><span class="nm">Rig SOMA 77</span></span><span class="sub">UniRig · DGX2, sans Blender · reconnu sur la topologie · jamais lancé</span></span><span class="dots"></span><span class="go">à lancer</span></a>
-      <a class="slab lk2" href="#attend"><span class="body"><span class="line"><span class="ref">07 · attend</span><span class="nm">Animation</span></span><span class="sub">Kimodo · DGX2 · attend la licence Llama-3 de Meta · vidéo → SOMA à trancher</span></span><span class="dots"></span><span class="go">bloqué</span></a>
-      <a class="slab lk2" href="#attend"><span class="body"><span class="line"><span class="ref">08 · factice</span><span class="nm">Timeline · cuisson</span></span><span class="sub">mixage par masques, NPZ et GLB animé · vérifié sur les moteurs factices</span></span><span class="dots"></span><span class="go">prêt</span></a>
+      <a class="slab t3" href="#visage"><span class="body"><span class="line"><span class="ref">01 · tourne</span><span class="nm">Visage</span></span><span class="sub">Z-Image Turbo · gros plan coupé au cou, sans vêtement · verrouillé une fois</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
+      <a class="slab t3" href="#pose"><span class="body"><span class="line"><span class="ref">02 · tourne</span><span class="nm">Costume · plein pied</span></span><span class="sub">Qwen-Image 2.1 turbo · 1152 × 2048 · pose naturelle, validée telle quelle</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
+      <a class="slab t3" href="#pose"><span class="body"><span class="line"><span class="ref">03 · tourne</span><span class="nm">A-pose</span></span><span class="sub">DWPose relève le plein pied, bras à 45° · Qwen 2.1 rend la même personne · 45 s</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
+      <a class="slab t3" href="#planche"><span class="body"><span class="line"><span class="ref">04 · tourne</span><span class="nm">Planche</span></span><span class="sub">Qwen 2.1 · face, dos, gros plan · mise en page en squelettes · 66 s</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
+      <a class="slab t3" href="#vues"><span class="body"><span class="line"><span class="ref">05 · tourne</span><span class="nm">Vues orthogonales</span></span><span class="sub">squelette tourné par vue · mesurées par SAM 3D Body, relancées si l'angle s'écarte · ±5° passé</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
+      <a class="slab t2" href="#mesh"><span class="body"><span class="line"><span class="ref">06 · tourne</span><span class="nm">Mesh PBR</span></span><span class="sub">TRELLIS.2 multi-vues · 4 min · premier passage réel le 27/09</span></span><span class="dots"></span><span class="go">voir ▾</span></a>
+      <a class="slab lk" href="#attend"><span class="body"><span class="line"><span class="ref">07 · câblé</span><span class="nm">Rig SOMA 77</span></span><span class="sub">UniRig · DGX2, sans Blender · reconnu sur la topologie · jamais lancé</span></span><span class="dots"></span><span class="go">à lancer</span></a>
+      <a class="slab lk2" href="#attend"><span class="body"><span class="line"><span class="ref">08 · attend</span><span class="nm">Animation</span></span><span class="sub">Kimodo · DGX2 · attend la licence Llama-3 de Meta</span></span><span class="dots"></span><span class="go">bloqué</span></a>
+      <a class="slab lk" href="#attend"><span class="body"><span class="line"><span class="ref">09 · à faire</span><span class="nm">Turnaround H3</span></span><span class="sub">la présentation d'un personnage validé, nourrie par sa planche</span></span><span class="dots"></span><span class="go">à faire</span></a>
     </div>
   </section>
 
@@ -103,91 +103,99 @@
     <div class="sect-head"><span class="k">01b</span><h2>Le studio</h2><span class="cnt">DGX2 · port 8765</span></div>
     <p class="prose">
       <b>Une application, plus une suite de commandes.</b> L'accueil montre les personnages en cartes ; un clic
-      ouvre le personnage, un bloc par étage, l'étape suivante en orange. La fiche d'identité se remplit par la
-      conversation, avec qwen3-vl 32B sur DGX2 — au banc, le seul des modèles de la machine qui range la fiche
-      par les outils à chaque tour. Un calcul à la fois : avant chaque travail, le studio décharge le modèle de
-      texte et vide le ComfyUI qui ne sert pas ; avant une conversation, il rend la place à son tour. Premier
-      calcul par le studio : deux visages H3 en 52 s, modèle chargé compris.
+      ouvre le personnage, une étape à la fois : Visage · Costume · A-pose · Planche · Vues · 3D · Rig. L'étape
+      suivante est en orange, et l'atelier y passe seul quand une étape est validée. Pendant un calcul, on
+      continue : la tenue, des traits de caractère, la fiche.
     </p>
     <div class="fig-grid">
       <figure class="fig">
         <img src="./etat/05_studio_accueil.jpg" alt="l'accueil du studio : les personnages en cartes" width="1440" height="900" loading="lazy">
-        <figcaption><span class="lbl">l'accueil</span>Une carte par personnage : le visage verrouillé ou le dernier candidat, huit crans d'avancement, l'étape suivante.</figcaption>
+        <figcaption><span class="lbl">l'accueil</span>Une carte par personnage : le visage verrouillé, l'avancement, l'étape suivante.</figcaption>
       </figure>
       <figure class="fig">
-        <img src="./etat/05_studio_personnage.jpg" alt="la page d'un personnage : l'étage visage et ses candidats" width="1440" height="900" loading="lazy">
-        <figcaption><span class="lbl">un personnage</span>Ilse Varga, créée par le studio : deux portraits H3 rendus sur DGX2, à verrouiller. À droite, la file de travaux et la fiche.</figcaption>
+        <img src="./etat/05_studio_personnage.jpg" alt="la page d'un personnage" width="1440" height="900" loading="lazy">
+        <figcaption><span class="lbl">un personnage</span>Un bloc par étape ; à droite, la file de travaux et la fiche.</figcaption>
       </figure>
     </div>
   </section>
 
-  <section class="sect" id="visage">
-    <div class="sect-head"><span class="k">02</span><h2>Visage</h2><span class="cnt">H3 · 42 s</span></div>
+  <section class="sect" id="pose">
+    <div class="sect-head" id="visage"><span class="k">02</span><h2>Visage, plein pied, A-pose</h2><span class="cnt">Z-Image · Qwen 2.1 · DWPose</span></div>
+    <p class="prose">
+      <b>Le plein pied se valide en pose naturelle</b>, puis on le remet en A-pose, celle que veulent le mesh et
+      le rig. Écrire l'A-pose dans le prompt ne tient pas : DWPose relève le squelette du plein pied, le script
+      redresse les bras à 45° en gardant les longueurs, et Qwen 2.1 reçoit le plein pied et le squelette comme
+      deux images de référence, sans ControlNet. Visage, tenue et mains restent ceux du plein pied.
+    </p>
     <div class="fig-grid">
       <figure class="fig">
-        <img src="./etat/01_visage.jpg" alt="portrait neutre de Maren Ostrova, fond gris" width="512" height="512" loading="lazy">
-        <figcaption><span class="lbl">le visage verrouillé</span>Portrait neutre : bouche fermée, regard caméra, lumière égale, fond uni. C'est lui qui fait autorité sur l'identité dans toutes les générations suivantes.</figcaption>
+        <img src="./etat/10_visage.jpg" alt="le visage verrouillé d'Essai atelier" width="512" height="512" loading="lazy">
+        <figcaption><span class="lbl">le visage verrouillé</span>Gros plan coupé au cou : c'est lui qui donne l'identité à toute la suite.</figcaption>
       </figure>
       <figure class="fig">
-        <img src="./etat/02_pleinpied.jpg" alt="deux variantes de plein pied en A-pose" width="660" height="362" loading="lazy" id="pleinpied">
-        <figcaption><span class="lbl">plein pied · deux variantes</span>A-pose, de la tête aux pieds, costume décrit sans image de référence. Écart relevé : paumes vers l'avant au lieu de vers les cuisses.</figcaption>
+        <img src="./etat/11_pleinpied_apose.jpg" alt="plein pied naturel, squelette A-pose, A-pose rendue" width="1400" height="672" loading="lazy">
+        <figcaption><span class="lbl">plein pied · squelette · A-pose</span>Le plein pied validé, le squelette tiré de lui, et l'A-pose validée par Cal.</figcaption>
       </figure>
     </div>
   </section>
 
   <section class="sect" id="planche">
-    <div class="sect-head"><span class="k">03</span><h2>Planche</h2><span class="cnt">H3 · 65 s</span></div>
+    <div class="sect-head"><span class="k">03</span><h2>Planche</h2><span class="cnt">Qwen 2.1 · 66 s</span></div>
+    <p class="prose">
+      D'après le workflow Civitai « Character Reference Sheet Generator » trouvé par Cal : identité, tenue et mise
+      en page données à part. Le visage verrouillé coupé au col, l'A-pose pour la tenue exacte, une mise en page
+      faite des squelettes. Le workflow rejoué tel quel inventait harnais et holster, et prenait sept minutes.
+    </p>
     <div class="fig-grid">
       <figure class="fig wide">
-        <img src="./etat/03_planche.jpg" alt="planche : cinq pleins pieds et trois gros plans du visage" width="1344" height="768" loading="lazy">
-        <figcaption><span class="lbl">planche validée · s001</span>Face, profil gauche, dos, profil droit, trois quarts, puis les gros plans. La mise en page donne à H3 les bons angles — ce qu'il ne fait pas quand on lui demande une vue seule.</figcaption>
-      </figure>
-      <figure class="fig wide">
-        <img src="./etat/03_planche_ab.jpg" alt="A/B : planche sans et avec disque sur le visage" width="1280" height="666" loading="lazy">
-        <figcaption><span class="lbl">A/B du disque · même graine</span>Sans disque à gauche, avec disque à droite. À trancher sur pièces (§5.5).</figcaption>
+        <img src="./etat/12_planche.jpg" alt="planche : face et dos en A-pose, gros plan tête et épaules" width="1344" height="762" loading="lazy">
+        <figcaption><span class="lbl">planche · s003</span>Face et dos en A-pose, gros plan : même personne, même tenue, capuche et zip compris.</figcaption>
       </figure>
     </div>
   </section>
 
   <section class="sect" id="vues">
-    <div class="sect-head"><span class="k">04</span><h2>Vues orthogonales</h2><span class="cnt">orbite · 124 frames · 7 min</span></div>
+    <div class="sect-head"><span class="k">04</span><h2>Vues orthogonales</h2><span class="cnt">mesurées · ±5° passé</span></div>
     <p class="prose">
-      <b>Une génération par vue ne tient pas les angles</b> : H3 revient vers la pose de face du plein pied,
-      le « profil » demandé à 90° sort vers 55°. <b>L'orbite, elle, fait un vrai tour</b>, identité et costume
-      tenus — mais la caméra ne tourne pas à vitesse constante. Les frames se choisissent donc sur la
-      largeur de la silhouette détourée par BiRefNet : face au départ, profils aux deux creux, dos au sommet
-      entre eux, trois quarts sur l'envergure des bras.
+      <b>Une édition par vue, guidée par le squelette A-pose tourné à son angle</b> : profils, dos, même échelle
+      et même ligne de sol. Chaque vue est <b>mesurée par SAM 3D Body</b> dès qu'elle sort et relancée sur une
+      autre graine si l'angle s'écarte ; le contrôle ±5° porte sur ces mesures. Le 3/4 reste le plus capricieux :
+      une réussite sur deux, que la boucle rattrape.
     </p>
     <div class="fig-grid">
       <figure class="fig wide">
-        <img src="./etat/04_par_vue_contre_orbite.jpg" alt="profils gauche et droit : génération par vue contre orbite" width="1554" height="672" loading="lazy">
-        <figcaption><span class="lbl">par vue contre orbite</span>Les deux premiers : « profils » demandés un par un, restés de trois quarts. Les deux derniers : frames de l'orbite choisies sur la silhouette, vrais profils.</figcaption>
-      </figure>
-      <figure class="fig wide">
-        <img src="./etat/04_orbite_frames.jpg" alt="une frame sur huit de l'orbite" width="1536" height="672" loading="lazy">
-        <figcaption><span class="lbl">l'orbite · une frame sur huit</span>Départ lent : profil gauche vers la frame 48, dos vers 78, profil droit vers 97, retour de face à 123.</figcaption>
-      </figure>
-      <figure class="fig wide">
-        <img src="./etat/04_vues_preparees.jpg" alt="cinq vues préparées, même échelle, pieds alignés" width="1660" height="362" loading="lazy">
-        <figcaption><span class="lbl">vues préparées · ce qui part en 3D</span>Détourées, recentrées, même échelle, pieds sur la même ligne. Contrôle ±5° passé sur les angles estimés (précision ±2 à ±6°).</figcaption>
+        <img src="./etat/13_vues_mesurees.jpg" alt="face, 3/4, profil gauche, dos, profil droit avec leurs angles mesurés" width="1600" height="450" loading="lazy">
+        <figcaption><span class="lbl">vues · angles mesurés</span>Profil gauche 93,6°, dos 180,6°, profil droit 268,6°, 3/4 36° (tolérance ±10°).</figcaption>
       </figure>
     </div>
+  </section>
+
+  <section class="sect" id="mesh">
+    <div class="sect-head"><span class="k">05</span><h2>Mesh PBR</h2><span class="cnt">TRELLIS.2 · 4 min</span></div>
     <p class="prose">
-      <b>Au banc, câblé et pas encore lancé</b> : trois LoRA d'angle de caméra qui tournent le plein pied
-      validé — Qwen-Image 2.1 + viewpoint-orbit, Qwen-Image-Edit 2511 + Multiple-Angles (fal),
-      Qwen-Image-Edit 2509 + Multiple-angles (dx8152). Tous trois ont appris sur des objets : c'est au banc
-      de dire lequel tient un corps en pied.
+      <b>Premier mesh réel</b>, TRELLIS.2 multi-vues sur les quatre vues mesurées : 446 000 sommets, 1,75 m,
+      albédo, rugosité, métal et normales. La forme tient : capuche, cordons, poches, ourlets, bandes des
+      baskets. À reprendre : le visage, sombre et flou ; le zip, devenu doré ; des points blancs sur le pantalon.
     </p>
+    <div class="fig-grid">
+      <figure class="fig wide">
+        <img src="./etat/14_mesh.jpg" alt="le mesh d'Essai atelier dans le viewer, sous quatre angles" width="1600" height="444" loading="lazy">
+        <figcaption><span class="lbl">dans le viewer</span>Quatre angles, à côté de la silhouette de repère de 1,75 m.</figcaption>
+      </figure>
+      <figure class="fig">
+        <img src="./etat/14_mesh_zoom.jpg" alt="gros plans du mesh : corps, dos, visage, jambes" width="700" height="700" loading="lazy">
+        <figcaption><span class="lbl">de près</span>Le visage et la texture sont le point faible de ce premier passage.</figcaption>
+      </figure>
+    </div>
   </section>
 
   <section class="sect" id="attend">
-    <div class="sect-head"><span class="k">05</span><h2>Ce qui attend</h2><span class="cnt">décisions de Cal</span></div>
+    <div class="sect-head"><span class="k">06</span><h2>Ce qui attend</h2><span class="cnt">décisions de Cal</span></div>
     <ul class="todo">
-      <li><span class="lbl">feu vert</span><b>Premier calcul de la 3D</b> : TRELLIS.2 sur les vues préparées (DGX2), puis UniRig sur le mesh. Et le banc des trois LoRA Qwen.</li>
-      <li><span class="lbl">licence</span><b>Llama-3-8B-Instruct</b> : Kimodo en a besoin comme encodeur de texte ; dépôt Meta à accès restreint, à accepter sur Hugging Face.</li>
-      <li><span class="lbl">choix</span><b>Hunyuan3D 2.1</b> : son nœud ne se charge pas sur DGX2 (numpy 2.5) ; le réparer touche l'environnement ComfyUI partagé.</li>
-      <li><span class="lbl">choix</span><b>Méthode des vues par défaut</b> : l'orbite plutôt que la génération par vue, ou le LoRA Qwen qui gagnera le banc.</li>
-      <li><span class="lbl">choix</span><b>Disque sur le visage</b> de la planche : voir l'A/B plus haut.</li>
+      <li><span class="lbl">valider</span><b>Une planche</b> d'Essai atelier (s003 ou s004), dans le studio.</li>
+      <li><span class="lbl">juger</span><b>Le premier mesh</b> : texture du visage, zip, points blancs, à reprendre avant le rig.</li>
+      <li><span class="lbl">feu vert</span><b>Le rig</b> : UniRig sur le mesh, jamais lancé.</li>
+      <li><span class="lbl">licence</span><b>Llama-3-8B-Instruct</b> : Kimodo en a besoin comme encodeur de texte ; à accepter sur Hugging Face.</li>
     </ul>
   </section>
 

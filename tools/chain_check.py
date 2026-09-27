@@ -120,7 +120,7 @@ def comfy_route(tmp: Path, ident: Path) -> None:
                 break
             except OSError:
                 subprocess.run([sys.executable, "-c", "import time; time.sleep(0.1)"])
-        os.environ.update(FACTORY_H3="comfyui", FACTORY_COMFYUI_URL=f"http://127.0.0.1:{port}",
+        os.environ.update(FACTORY_H3="comfyui", FACTORY_FACE_ENGINE="h3", FACTORY_FULLBODY_ENGINE="h3", FACTORY_COMFYUI_URL=f"http://127.0.0.1:{port}",
                           FACTORY_COMFYUI_URL_H3=f"http://127.0.0.1:{port}",
                           FACTORY_WORKFLOWS=str(tmp / "workflows"), FACTORY_PROJECTS=str(tmp / "comfy"))
         out = usine("gabarit", str(REPO / "tools/fixtures/h3_export_api.json"))
@@ -132,9 +132,11 @@ def comfy_route(tmp: Path, ident: Path) -> None:
         usine("costume", "test-pilote", "veste")
         usine("pleinpied", "test-pilote", "--variantes", "1")
         usine("pleinpied-ok", "test-pilote", "1")
-        usine("planche", "test-pilote")
+        usine("planche", "test-pilote", "--moteur-planche", "h3")
         usine("planche-ok", "test-pilote", "s001")
-        usine("vues", "test-pilote", "--sans-34")
+        usine("pose", "test-pilote", "--variantes", "1")
+        usine("pose-ok", "test-pilote", "1")
+        usine("vues", "test-pilote", "--sans-34", "--methode", "per_view")
         root = tmp / "comfy" / "test-pilote"
         meta = json.loads((root / "costumes/veste/views/raw/left.json").read_text(encoding="utf-8"))
         check("H3 par ComfyUI : cinq frames rendues, la plus nette gardée",
@@ -169,7 +171,7 @@ def studio_route(tmp: Path) -> None:
 
     port, llm_port = free_port(), free_port()
     env = {**os.environ, "FACTORY_PROJECTS": str(tmp / "studio"), "FACTORY_LLM_URL": f"http://127.0.0.1:{llm_port}",
-           "FACTORY_LLM_MODEL": "modele-du-studio", "PYTHONIOENCODING": "utf-8"}
+           "FACTORY_LLM_MODEL": "modele-du-studio", "PYTHONIOENCODING": "utf-8", "FACTORY_STUB_DELAY": "0.5"}
     procs = [subprocess.Popen([sys.executable, str(REPO / "tools/mock_llm.py"), str(llm_port)],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
              subprocess.Popen([sys.executable, "-m", "factory", "studio", "--hote", "127.0.0.1", "--port", str(port)],
@@ -232,6 +234,28 @@ def studio_route(tmp: Path) -> None:
               faces["status"] == "done" and len(faces["result"]["made"]) == 2 and locked["status"] == "done"
               and again["status"] == "http" and "déjà verrouillé" in again["error"]["error"]["message"])
 
+        # Nom d'abord, puis un brief : la fiche se remplit du visuel, et une
+        # tenue écrite pendant le rendu n'est pas écrasée par le calcul.
+        code, made = js("/api/characters", {"name": "Kévin Essai"})
+        kid = made.get("slug")
+        code, queued = js(f"/api/characters/{kid}/actions/face", {"brief": "vingt ans, coupe courte", "variants": 4})
+        empty, _ = js(f"/api/characters/{kid}/actions/costume_add", {"brief": "  "})
+        code, added = js(f"/api/characters/{kid}/actions/costume_add", {"brief": "hoodie bleu, baggy blanc"})
+        for _ in range(600):
+            if js(f"/api/jobs/{queued['job']['id']}")[1]["status"] not in ("queued", "running"):
+                break
+            time.sleep(0.05)
+        _, k = js(f"/api/characters/{kid}")
+        kc = k["character"]
+        check("studio : créé par son nom, le brief remplit la fiche, portrait en gros plan, tenue écrite pendant le "
+              "rendu gardée, tenue vide refusée",
+              kc["identity"].get("face_description") == "vingt ans, coupe courte" and len(kc["face"]["variations"]) == 4
+              and len({c["desc"] for c in kc["face"]["candidates"]}) == 4 and "tenue-1" in kc["costumes"]
+              and kc["costumes"]["tenue-1"]["brief"] == "hoodie bleu, baggy blanc" and code == 200 and empty == 409
+              and "Tight close-up" in json.loads((tmp / "studio" / kid / "face" / "cand-001.json").read_text(
+                  encoding="utf-8"))["prompt"],
+              f"{len(kc['face']['candidates'])} propositions, tenues {list(kc['costumes'])}")
+
         buf = io.BytesIO()
         Image.new("RGB", (64, 96), (120, 90, 60)).save(buf, "PNG")
         code, _, raw = call("/api/uploads", raw=buf.getvalue())
@@ -240,8 +264,10 @@ def studio_route(tmp: Path) -> None:
         steps = [run(slug, "costume_add", name="Voyage", prompt="long manteau de cuir", refs=[upload]),
                  run(slug, "fullbody", costume="voyage", variants=2),
                  run(slug, "fullbody_ok", costume="voyage", candidate="1"),
-                 run(slug, "sheet", costume="voyage", ab=True),
-                 run(slug, "sheet_ok", costume="voyage", id="s002"),
+                 run(slug, "apose", costume="voyage", variants=2),
+                 run(slug, "apose_ok", costume="voyage", candidate="2"),
+                 run(slug, "sheet", costume="voyage", variants=1),
+                 run(slug, "sheet_ok", costume="voyage", id="s001"),
                  run(slug, "views", costume="voyage", method="orbit"),
                  run(slug, "prep", costume="voyage"),
                  run(slug, "check", costume="voyage"),
@@ -253,8 +279,8 @@ def studio_route(tmp: Path) -> None:
         cos = detail["character"]["costumes"]["voyage"]
         failed = [(i, s.get("error")) for i, s in enumerate(steps) if s["status"] != "done"]
         check("studio : du costume au rig accepté, un travail par étage, la file vide ensuite",
-              not failed and bad == 409 and len(cos["refs"]) == 1 and cos["sheet"] == "s002"
-              and all(stages[k] == "done" for k in ("face", "costumes", "fullbody", "sheet", "views", "mesh", "rig"))
+              not failed and bad == 409 and len(cos["refs"]) == 1 and cos["apose"]["validated"]
+              and all(stages[k] == "done" for k in ("face", "costumes", "fullbody", "pose", "sheet", "views", "mesh", "rig"))
               and detail["summary"]["next"] is None, str(failed or stages))
 
         code, ctype, img = call(f"/files/{slug}/{detail['character']['face']['locked']}")
@@ -445,7 +471,7 @@ def native_template() -> None:
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="usine-check-"))
     os.environ["FACTORY_PROJECTS"] = str(tmp)
-    for cap in ("H3", "TRELLIS", "HUNYUAN3D", "UNIRIG", "KIMODO", "SAM3DBODY"):
+    for cap in ("H3", "PORTRAIT", "BRIEF", "TRELLIS", "HUNYUAN3D", "UNIRIG", "KIMODO", "SAM3DBODY"):
         os.environ[f"FACTORY_{cap}"] = "stub"
     os.environ["FACTORY_PREP"] = "builtin"
     os.environ["FACTORY_DELIGHT"] = "off"
@@ -473,17 +499,38 @@ def main() -> int:
     usine("planche", "test-pilote", expect=2)
     check("pas de planche sans plein pied validé", True)
     usine("pleinpied-ok", "test-pilote", "1")
-    usine("planche", "test-pilote", "--ab", "--graine", "3")
+    usine("planche", "test-pilote", "--moteur-planche", "h3", "--ab", "--graine", "3")
     sheets = manifest()["costumes"]["veste"]["sheets"]
     check("A/B du disque : deux planches, même graine",
           len(sheets) == 2 and sheets[0]["seed"] == sheets[1]["seed"] and sheets[1]["mask_face"])
-    usine("vues", "test-pilote", expect=2)
-    check("pas de vues sans planche validée", True)
     usine("planche-ok", "test-pilote", "s002")
+    usine("vues", "test-pilote", expect=2)
+    check("pas de vues sans A-pose validée, planche ou pas", True)
+    usine("pose", "test-pilote", "--variantes", "2", "--graine", "5")
+    ap = manifest()["costumes"]["veste"]["apose"]
+    sent = json.loads((root / "costumes/veste/apose/cand-001.json").read_text(encoding="utf-8"))
+    check("A-pose : deux propositions, le plein pied validé en <image1> et le squelette en <image2>",
+          len(ap["candidates"]) == 2 and (root / ap["skeleton"]).exists()
+          and sent["refs"] == ["costumes/veste/fullbody.png", "costumes/veste/apose/skeleton.png"]
+          and "<image2>" in sent["prompt"])
+    usine("pose-ok", "test-pilote", "2")
+    usine("planche", "test-pilote", "--variantes", "2", "--graine", "9")
+    cos = manifest()["costumes"]["veste"]
+    made = [s for s in cos["sheets"] if s.get("engine") == "qwen21"]
+    from PIL import Image
+    layout = Image.open(root / made[0]["layout"])
+    check("planche Qwen : deux planches trois cases après l'A-pose, mise en page en squelettes 1920 × 1088",
+          len(made) == 2 and layout.size == (1920, 1088) and (root / made[0]["file"]).exists()
+          and "<image3>" in (root / "costumes/veste/sheets" / made[0]["id"] / "prompt.txt").read_text(encoding="utf-8"))
+    usine("planche-ok", "test-pilote", made[1]["id"])
 
     usine("vues", "test-pilote")
     raw = manifest()["costumes"]["veste"]["views"]["raw"]
-    check("quatre vues orthogonales et le 3/4", set(raw) == {"front", "left", "back", "right", "threequarter"})
+    left = json.loads((root / "costumes/veste/views/raw/left.json").read_text(encoding="utf-8"))
+    check("quatre vues orthogonales et le 3/4, chacune guidée par le squelette tourné à son angle",
+          set(raw) == {"front", "left", "back", "right", "threequarter"}
+          and left["refs"] == ["costumes/veste/apose.png", "costumes/veste/views/raw/skeleton_090.png"]
+          and raw["front"]["azimuth_source"] == "A-pose validée")
     usine("mesh", "test-pilote", expect=2)
     check("pas de mesh sans contrôle d'alignement", True)
     usine("prep", "test-pilote")

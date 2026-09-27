@@ -1,5 +1,9 @@
 # REPRISE — Character Factory, session locale
 
+> **25/09 au soir : lire d'abord `docs/HANDOFF.md` § 00** (Qwen-Image 2.1 turbo pour les images de
+> validation, H3 seulement pour le turnaround final). Le reste de ce fichier date du 24/09.
+
+
 Brief de reprise pour une session Claude Code lancée **sur la machine de
 Cal (le DGX)**. Il se suffit à lui-même : il dit où est le code, ce que
 Cal a décidé, ce qui existe, ce qui est vérifié, ce qu'il faut
