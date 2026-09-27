@@ -267,6 +267,58 @@ Deux usages, deux méthodes [V, pratique publiée ; I, choix] :
   `api_google_nano_banana_create_turnaround_sheet`) passent par l'API
   Gemini : pas en local.
 
+### 5 bis. La planche de présentation — faite (27/09)
+
+Le livrable qu'on montre (Cal, 27/09 : « une planche hyper belle de
+notre character dans des positions naturelles, des expressions etc. »).
+`./usine presentation <perso>` ou l'action `presentation` du studio ;
+`factory/presentation.py`, `presentation_sheet.py`, `upscale.py`. Elle
+n'attend que le visage verrouillé et le plein pied validé. Essai réel
+sur une copie d'`essai-atelier` [V] :
+
+- **Expressions** : six éditions Qwen 2.1 **turbo** du visage coupé au
+  col, 1024², encodeur 1056, l'expression décrite par ses muscles (prompt
+  dans `EXPRESSIONS`). Nettes, pas timides : le mode base n'a pas été
+  nécessaire. ~23 s l'une.
+- **Identité** : FaceNet VGGFace2 + MTCNN (`tools/remote/face_identity.py`,
+  `facenet-pytorch` du python de ComfyUI, sur le CPU). Étalonnage : même
+  visage retouché 0,95-0,97, 3/4 0,85, autre visage du même type
+  0,54-0,67. Expressions : neutre 0,954, joie 0,915, tristesse 0,925,
+  malice 0,909, surprise 0,838, colère 0,59-0,70 sur trois graines pour
+  un visage juste à l'œil — une colère déplace ce que FaceNet lit, d'où
+  un seuil par expression (0,80 ; colère 0,65 ; surprise 0,75), relance
+  jusqu'à trois graines, la meilleure gardée.
+- **Poses naturelles** : `tools/remote/natural_skeleton.py` pose en 3D les
+  os relevés par DWPose sur le plein pied (directions, IK à deux os pour
+  les mains sur la hanche, dans les poches, sur les bras ; tête en
+  cylindre ; caméra à hauteur des yeux avec un peu de perspective), cinq
+  poses dans `data/natural_poses.json`. Qwen turbo, le plein pied en
+  `<image1>`, le squelette en `<image2>`, 1152 × 2048. 5 sur 5 justes du
+  premier coup (bras croisés, marche, main à la hanche, de dos regard
+  par-dessus l'épaule, mains dans les poches), tenue intacte ; identité
+  0,85 (de dos) à 0,95. ~55-60 s l'une.
+- **Piège** : Qwen garde la taille du personnage de `<image1>`, pas celle
+  du squelette (squelette agrandi de 11 % → personnage à sa taille
+  d'origine). Les squelettes se posent donc à l'échelle et sur le sol du
+  plein pied ; sur la planche, l'échelle commune vient de la taille du
+  visage (médiane des rapports visage de la pose / visage du plein pied).
+- **Détails** : recadrages du plein pied lus sur son squelette (col,
+  poche, main, chaussures), ×4 par **SeedVR2 7B INT8** natif ComfyUI
+  (poids `Comfy-Org/SeedVR2` téléchargés le 27/09 : `seedvr2_3b_int8_convrot`,
+  `seedvr2_7b_int8_convrot`, `seedvr2_ema_vae_fp16`), montage du gabarit
+  `utility_seedvr2_*_int8_upscale_image`, couleurs recalées en lab.
+  12-67 s (le premier charge 8 Go). Secours RealESRGAN ×2, puis Lanczos.
+- **Composition** : 3840 × 2160, Pillow, jetons de `tokens.css` (--paper*
+  pour la variante claire), Venus Rising, Azeret Mono, Chakra Petch
+  (OFL, ajoutées à `assets/fonts`). Deux fonds essayés : le **clair**
+  (gris studio) est le défaut — les détails et les photos y sont chez
+  eux ; le sombre fait ressortir les poses mais les détails y font des
+  carrés clairs. `--theme sombre` ou `both`.
+
+Pas faits : turnaround (les vues existent mais sont en A-pose, que Cal
+ne veut pas voir), pose assise, choix de la prise par un humain (la
+machine garde la meilleure ; `--refaire <case>` relance une case).
+
 ## 6. Inventaire DGX2 utile (25/09)
 
 - Prêts : Qwen 2.1 INT8 + turbo Viggle, Qwen-Edit 2509/2511 fp8 et leurs
@@ -274,7 +326,7 @@ Deux usages, deux méthodes [V, pratique publiée ; I, choix] :
   multi-vues, TRELLIS.2, Hunyuan3D 2.1.
 - `TextEncodeQwenImage21` et `QwenImage21Cache` n'existent que sur
   ComfyUI `:8188`.
-- Absents : SeedVR2 (poids), base SDXL pour SUPIR, SDPose, Pixal3D image
+- Absents : base SDXL pour SUPIR, SDPose, Pixal3D image
   unique, Hunyuan3D-2mv, tout ControlNet Qwen.
 
 ## 7. Choisir l'A-pose par la mesure (27/09)

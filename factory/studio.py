@@ -360,6 +360,19 @@ def a_sheet_ok(p: Project, q: dict, report):
     return {"sheet": chain.sheet_ok(p, _costume(p, q), str(q.get("id", "")))["id"]}
 
 
+def a_presentation(p: Project, q: dict, report):
+    """La planche de présentation. `redo` : les cases à refaire (liste ou
+    texte séparé par des virgules) ; sans, celles qui manquent."""
+    redo = q.get("redo") or []
+    if isinstance(redo, str):
+        redo = redo.split(",")
+    theme = q.get("theme") if q.get("theme") in ("clair", "sombre", "both") else None
+    st = chain.presentation(p, _costume(p, q), redo=[str(r) for r in redo if str(r).strip()] or None,
+                            seed=_seed(q), theme=theme, report=report)
+    return {"sheet": st["sheet"], "variants": st["variants"],
+            "panels": {g: [e["id"] for e in v] for g, v in st["panels"].items()}}
+
+
 def a_views(p: Project, q: dict, report):
     names = [n for n in (q.get("names") or []) if n in (*chain.ORTHO, "threequarter")] or None
     raw = chain.views(p, _costume(p, q), method=q.get("method") or "qwen21-pose", names=names, seed=_seed(q),
@@ -465,6 +478,7 @@ ACTIONS = {
     "sheet":        (a_sheet, "planche",
                      lambda q, p=None: ("h3", "h3") if q.get("engine") == "h3" else ("qwen21", "portrait")),
     "sheet_ok":     (a_sheet_ok, "planche validée", None),
+    "presentation": (a_presentation, "planche de présentation", ("qwen21", "portrait")),
     "views":        (a_views, "vues orthogonales", _gpu_views),
     "prep":         (a_prep, "préparation des vues", ("birefnet", "prep")),
     "check":        (a_check, "contrôle d'alignement",

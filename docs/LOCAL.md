@@ -151,6 +151,7 @@ Identité), puis **Exporter l'identité .json**.
 ./usine costume vera-solen veste --ref blouson.png --ref bottes.png
 ./usine pleinpied vera-solen --variantes 2
 ./usine pleinpied-ok vera-solen 1
+./usine presentation vera-solen                # la planche qu'on montre : expressions, poses, détails, palette
 ./usine planche vera-solen --ab                  # avec et sans disque, même graine
 ./usine planche-ok vera-solen s002
 ./usine vues vera-solen                          # 0°, 90°, 180°, 270° et le 3/4
@@ -193,6 +194,7 @@ Les règles dures du brief sont des refus, pas des conseils :
 | `visage` | `--graine N` | verrouillage de graine : relancer en ne changeant que le prompt |
 | `visage` | `--ref photo.jpg` | partir d'une photo, passe de normalisation |
 | `planche` | `--ab` | deux planches même graine, avec et sans disque sur le visage (§5.5) |
+| `presentation` | `--refaire joie,marche` | ne refaire que ces cases (ou `expressions`, `poses`, `details`, `all`, `sheet`) ; `--theme sombre` ou `both` |
 | `vues` | `--orbite` | un plan en orbite redécoupé, au lieu d'une génération par vue |
 | `prep` | `--delight` | passe de delight, si un moteur est réglé |
 | `controle` | `--angle left=93` | un angle relevé à la main l'emporte sur l'angle demandé |
