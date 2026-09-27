@@ -346,7 +346,20 @@ réglé dans `factory.local.json`. `chain_check` : 32/32 sous Windows.
   Blender** : `bpy` n'existe pas pour linux-aarch64, et il ne sert qu'à
   l'import et à l'export ; `tools/remote/unirig_entry.py` fait l'import
   en numpy/trimesh et reporte les poids sur les sommets d'entrée par le
-  `reskin()` d'UniRig. Jamais exécuté.
+  `reskin()` d'UniRig. **Exécuté le 27/09** sur `essai-atelier` (copie du
+  projet) : 52 os, 22 reconnus sur SOMA sans correction, bind à 41°, les
+  cinq poses justes (`python3 tools/rig_poses.py <rigged.glb> <dossier>`).
+  ~30 s ; 5,5 Go de RAM et 5,6 Go de GPU sur 50 000 faces, 8 Go de RAM sur
+  les 691 000 faces de la v001. Corrigé en route : la chaîne lance un modèle
+  « distant » sans ssh quand l'hôte est la machine même (DGX2 ne s'ouvre
+  pas de session ssh sur lui-même) ; les poids de `reskin()` sautaient d'un
+  sommet à l'autre (le torse se piquait dès qu'un os tournait) : lissage le
+  long des arêtes (~2 cm) et coupe à quatre influences sans saut. **Les
+  v002 et v003 du mesh ont une seconde paire de bras**, derrière les
+  vrais, invisible de face : rigger la v001. Réglages pour le studio, dans
+  `factory.local.json` puis redémarrage : `"backends": {…, "unirig":
+  "python"}`, `"remote_unirig": "dgx2"`, `"python_unirig":
+  "/home/dgx/UniRig/.venv/bin/python"`, `"cwd_unirig": "/home/dgx/UniRig"`.
 - **Écart au brief §10.3** : le modèle UniRig publié nomme ses os
   `bone_0…` sans sens, en nombre variable ; une table de noms fixe ne
   peut pas marcher. `rig_unirig.match_soma` reconnaît le squelette sur

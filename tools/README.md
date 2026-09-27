@@ -15,6 +15,19 @@ python3 tools/chain_check.py      # numpy et Pillow suffisent
 
 Rend 0 si tout passe. À lancer après toute modification de `factory/`.
 
+## `rig_poses.py` — les poses de contrôle d'un vrai rig, vues et chiffrées
+
+Rejoue le skinning d'un `rigged.glb` comme `chain_check.py` (bind et
+chaque clip `control/…`), rend chaque pose de face et de profil avec le
+squelette par-dessus, une planche, le bind teint par articulation
+dominante, et `poses.json` : mains, tête, hanches, pieds, étirement des
+arêtes. Rendu logiciel, sans GPU.
+
+```sh
+python3 tools/rig_poses.py projects/<perso>/costumes/<tenue>/rig/v001/rigged.glb /tmp/poses
+python3 tools/rig_poses.py <model.glb> /tmp/mesh --mesh     # un mesh seul, de face et de profil
+```
+
 ## `mock_comfy.py` — un faux ComfyUI
 
 Parle les routes dont la chaîne se sert (`/upload/image`, `/prompt`,

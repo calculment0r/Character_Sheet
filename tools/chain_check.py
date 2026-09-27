@@ -387,6 +387,48 @@ def unirig_to_soma() -> None:
     check("UniRig → SOMA : os anonymes reconnus sur la topologie, face remise à +Z, doigts versés sur la main",
           ok, " | ".join(report))
 
+    # Deux sommets voisins où le 4e et le 5e os échangent leur rang : couper
+    # net ferait sauter les poids de 0,125 ; la coupe continue, de ~2ε.
+    eps = 1e-3
+    a = np.array([[0.3, 0.25, 0.2, 0.125 + eps, 0.125 - eps]])
+    b = np.array([[0.3, 0.25, 0.2, 0.125 - eps, 0.125 + eps]])
+
+    def dense4(row):
+        top, w = rig_unirig.top_k_continuous(row, 4)
+        out = np.zeros(row.shape[1])
+        out[top[0]] = w[0]
+        return out
+
+    jump = float(np.abs(dense4(a) - dense4(b)).sum())
+    check("UniRig : quatre influences sans saut quand deux os échangent leur rang", jump < 0.02,
+          f"écart {jump:.4f}")
+
+
+def remote_local() -> None:
+    """Un modèle « distant » sur la machine même : DGX2 ne sait pas s'ouvrir
+    de session ssh sur lui-même, la chaîne lance alors le script sans ssh,
+    avec la même mise en place (dossier de travail, entrées, sorties)."""
+    if os.name != "posix":
+        return
+    from factory import remote
+
+    with tempfile.TemporaryDirectory() as t:
+        tmp = Path(t)
+        script = tmp / "echo_entry.py"
+        script.write_text("import sys, shutil\nshutil.copy(sys.argv[1], sys.argv[2])\n", encoding="utf-8")
+        src = tmp / "source.txt"
+        src.write_text("rig", encoding="utf-8")
+        os.environ.update(FACTORY_REMOTE_UNIRIG="local", FACTORY_PYTHON_UNIRIG=sys.executable,
+                          FACTORY_CWD_UNIRIG=t)
+        try:
+            got = remote.run("unirig", script, args=["{job}/in.txt", "{job}/out.txt"], inputs={"in.txt": src},
+                             outputs=["out.txt"], workdir=tmp / "back")
+        finally:
+            for k in ("FACTORY_REMOTE_UNIRIG", "FACTORY_PYTHON_UNIRIG", "FACTORY_CWD_UNIRIG"):
+                os.environ.pop(k, None)
+        check("modèle lancé sur la machine même, sans ssh : entrées posées, sortie rapatriée",
+              got["out.txt"].read_text(encoding="utf-8") == "rig" and remote.is_local("local"))
+
 
 def qwen_views() -> None:
     """Les trois montages de vues par LoRA d'angle Qwen : chacun se remplit
@@ -609,6 +651,7 @@ def main() -> int:
     sam3d_yaw()
     dry_validation()
     unirig_to_soma()
+    remote_local()
     qwen_views()
 
     failed = [r for r in results if not r[1]]

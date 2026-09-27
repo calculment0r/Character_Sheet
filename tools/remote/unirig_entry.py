@@ -3,7 +3,8 @@
 """
 unirig_entry.py -- prediction UniRig (squelette + poids de skinning) SANS Blender.
 
-Brouillon : pas encore execute. A copier sur DGX2 puis lancer depuis ~/UniRig :
+Execute pour de vrai le 27/09/2026 sur DGX2 (essai-atelier, mesh TRELLIS.2 de 446 000 sommets :
+52 os, ~30 s, ~8 Go de RAM au plus). La chaine le lance par factory/remote.py ; a la main :
 
     cd ~/UniRig && ~/UniRig/.venv/bin/python unirig_entry.py --mesh mesh.npz --out rig.npz
 
@@ -19,8 +20,9 @@ Sortie rig.npz (lisible sans allow_pickle)
     joint_names      (J,)   str      'bone_0'..'bone_{J-1}' avec la classe articulationxl
     parents          (J,)   int32    -1 pour la racine ; toujours parents[i] < i (racine = 0)
     joint_positions  (J,3)  float32  tetes d'os, MEME repere et unites que les vertices d'entree
-    skin_joints      (V,k)  int32    indices dans joint_names (k = --topk, 4 par defaut)
-    skin_weights     (V,k)  float32  normalises (somme 1 par sommet), indexes sur les vertices d'entree
+    skin_joints      (V,k)  int32    indices dans joint_names (k = --topk, 8 par defaut)
+    skin_weights     (V,k)  float32  normalises (somme 1 par sommet), indexes sur les vertices d'entree ;
+                                     lisses le long des aretes (--smooth), coupes a k sans saut
     joint_tails      (J,3)  float32  queues d'os UniRig (meme repere) -- extra
     meta_json        ()     str      metadonnees (seed, classe, matrices de normalisation...) -- extra
 
@@ -45,8 +47,11 @@ Conventions UniRig (lues dans le code, commit 6793c66) et ce que fait ce script
      diffusion le long des aretes, seuil 0.03). ICI : reskin() est appele directement sur les
      sommets d'entree fusionnes par position (pleine resolution, pas la version decimee), puis
      le resultat est recopie sur les sommets dupliques (coutures UV) via l'index de fusion.
-     Les poids sont donc indexes exactement sur les vertices d'entree ; puis top-k + normalisation
-     (UniRig garde aussi 4 influences : group_per_vertex=4 dans merge.py / skin.py).
+     Les poids sont donc indexes exactement sur les vertices d'entree. Deux ajouts, vus sur le
+     premier vrai mesh ou le torse se piquait de pointes des qu'un os tournait : un lissage
+     laplacien le long des aretes (~2 cm, smooth_weights) contre le bruit de la mediane de
+     reskin(), et un top-k continu (on retire le (k+1)-ieme poids) au lieu d'une coupe nette.
+     On garde 8 influences : la chaine les somme par articulation SOMA et recoupe a 4 ensuite.
   6. Pas de Blender : l'etape extract (bpy) est remplacee par 1-2, les writers FBX (bpy) et
      src/inference/merge.py (bpy) ne sont pas utilises.
   7. flash_attn : si le module compile est importable, on garde la config d'origine
@@ -111,7 +116,11 @@ def parse_args():
                         "entraine sur Articulation-XL2.0)")
     p.add_argument("--faces-target", type=int, default=50000,
                    help="decimation si plus de faces (defaut extract.sh : 50000)")
-    p.add_argument("--topk", type=int, default=4, help="influences gardees par sommet")
+    p.add_argument("--topk", type=int, default=8,
+                   help="influences gardees par sommet (la chaine recoupe a 4 apres le report sur SOMA)")
+    p.add_argument("--smooth", type=float, default=0.02,
+                   help="rayon du lissage des poids le long des aretes, en unites du mesh "
+                        "(metres ; 0 : aucun)")
     p.add_argument("--attn", choices=["auto", "flash", "sdpa"], default="auto")
     p.add_argument("--voxel-backend", choices=["auto", "pyrender", "open3d"], default="auto",
                    help="voxelisation du voxel_skin (auto : pyrender/EGL puis repli open3d)")
@@ -284,6 +293,37 @@ def merge_positions(V, decimals=8):
     key = np.round(np.asarray(V, dtype=np.float64), decimals)
     _, first, inverse = np.unique(key, axis=0, return_index=True, return_inverse=True)
     return np.asarray(V, dtype=np.float64)[first], inverse.reshape(-1)
+
+
+def smooth_weights(V, F, W, radius, max_iter=150):
+    """Lissage laplacien des poids le long des aretes du maillage (fusionne), sur ~`radius`
+    metres. reskin() prend la mediane des 7 echantillons les plus proches parmi 32768 : sur un
+    maillage dense, deux sommets voisins tombent sur des echantillons differents et leurs poids
+    sautent (p99 0,15 par arete de 2 mm sur le premier vrai mesh) -- le mesh se pique de pointes
+    des qu'un os tourne. On moyenne avec les voisins, un pas de marche aleatoire a la fois ;
+    l'etalement grandit comme la racine du nombre de pas, d'ou n ~ 2 (radius / arete)^2. Le
+    long des aretes seulement : rien ne passe d'une piece a une autre qui ne la touche pas.
+    Les lignes restent normalisees (moyennes de lignes normalisees)."""
+    import scipy.sparse as sp
+    e = np.vstack([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]])
+    e = e[e[:, 0] != e[:, 1]]
+    ell = float(np.median(np.linalg.norm(V[e[:, 0]] - V[e[:, 1]], axis=1)))
+    if radius <= 0 or ell <= 0:
+        return W, 0, ell
+    n = int(min(max_iter, max(1, round(2.0 * (radius / ell) ** 2))))
+    n_v = V.shape[0]
+    A = sp.coo_matrix((np.ones(2 * len(e), np.float32), (np.r_[e[:, 0], e[:, 1]], np.r_[e[:, 1], e[:, 0]])),
+                      shape=(n_v, n_v)).tocsr()
+    A.data[:] = 1.0                                      # aretes en double -> une seule
+    deg = np.asarray(A.sum(axis=1)).ravel()
+    # pas paresseux : moitie soi, moitie la moyenne des voisins (les sommets isoles restent)
+    P = sp.diags(np.where(deg > 0, 0.5, 1.0).astype(np.float32)) + \
+        sp.diags((0.5 / np.maximum(deg, 1)).astype(np.float32)) @ A
+    P = P.tocsr()
+    X = W.astype(np.float32)
+    for _ in range(n):
+        X = P @ X
+    return X.astype(np.float64), n, ell
 
 
 def seed_all(seed):
@@ -608,12 +648,22 @@ def main():
         skin_m[bad] = 0.0
         skin_m[np.where(bad)[0], d.argmin(axis=1)] = 1.0
         log(f"reskin : {int(bad.sum())} sommets sans poids -> joint le plus proche")
+    t_s = time.time()
+    skin_m, n_smooth, edge_len = smooth_weights(V_m, F_m, skin_m, args.smooth)
+    log(f"lissage des poids : {n_smooth} pas sur ~{args.smooth * 100:.1f} cm "
+        f"(arete mediane {edge_len * 1000:.1f} mm), {time.time() - t_s:.1f} s")
     skin_full = skin_m[inv]  # (V_in, J)
 
+    # top-k sans saut : on retire le (k+1)-ieme poids aux k premiers (voir
+    # rig_unirig.top_k_continuous) ; la coupe finale a 4 se fait apres le report sur SOMA.
     k = max(1, min(args.topk, J))
-    idx = np.argsort(-skin_full, axis=1, kind="stable")[:, :k]
+    order = np.argsort(-skin_full, axis=1, kind="stable")
+    idx = order[:, :k]
     w = np.take_along_axis(skin_full, idx, axis=1)
-    w = w / np.maximum(w.sum(axis=1, keepdims=True), 1e-12)
+    if J > k:
+        w = np.maximum(w - np.take_along_axis(skin_full, order[:, k:k + 1], axis=1), 0.0)
+    s = w.sum(axis=1, keepdims=True)
+    w = np.where(s > 1e-12, w / np.maximum(s, 1e-12), np.eye(1, k))
 
     # ---- 5. joints -> repere d'entree
     T1_inv = np.linalg.inv(T1)
@@ -641,6 +691,7 @@ def main():
         "T2_norm_skeleton_to_norm_skin": T2.tolist(),
         "reskin": RESKIN_KWARGS,
         "skin_transfer": "reskin() UniRig sur sommets d'entree fusionnes par position",
+        "smooth": {"radius": args.smooth, "steps": n_smooth, "median_edge": edge_len},
         "seconds": round(time.time() - t0, 2),
     }
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)

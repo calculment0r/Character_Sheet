@@ -289,13 +289,29 @@ def unirig_owner(parents: np.ndarray, table: dict[int, str], spec: dict) -> np.n
     return owner
 
 
+def top_k_continuous(dense: np.ndarray, k: int = 4) -> tuple[np.ndarray, np.ndarray]:
+    """Les k influences les plus fortes, sans saut d'un sommet à l'autre.
+
+    Couper net au k-ième fait sauter les poids là où deux os échangent
+    leur rang : sur le premier vrai mesh, le haut du torse (bassin,
+    colonne, thorax, épaule, bras) se piquait de pointes dès qu'un bras
+    bougeait. On retire aux k premiers le poids du (k+1)-ième : un os qui
+    sort de la liste y arrive à zéro, et le reste se renormalise."""
+    order = np.argsort(-dense, axis=1)
+    top = order[:, :k]
+    w = np.take_along_axis(dense, top, axis=1)
+    if dense.shape[1] > k:
+        w = np.maximum(w - np.take_along_axis(dense, order[:, k:k + 1], axis=1), 0.0)
+    s = w.sum(axis=1, keepdims=True)
+    w = np.where(s > 1e-9, w / np.maximum(s, 1e-9), np.eye(1, k))   # à égalité parfaite : le premier
+    return top, w
+
+
 def to_soma_weights(joints: np.ndarray, weights: np.ndarray, owner: np.ndarray, k: int = 4):
     """Poids UniRig (V, n) → SOMA (V, 4) : on somme par articulation SOMA,
-    on garde les quatre plus fortes, on renormalise."""
+    on garde les quatre plus fortes (`top_k_continuous`)."""
     v = joints.shape[0]
     dense = np.zeros((v, int(owner.max()) + 1))
     np.add.at(dense, (np.repeat(np.arange(v), joints.shape[1]), owner[joints].ravel()), weights.ravel())
-    top = np.argsort(-dense, axis=1)[:, :k]
-    w = np.take_along_axis(dense, top, axis=1)
-    w /= np.maximum(w.sum(axis=1, keepdims=True), 1e-9)
+    top, w = top_k_continuous(dense, k)
     return top.astype(np.uint16), w.astype(np.float32)
