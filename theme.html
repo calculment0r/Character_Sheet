@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="./assets/rack.css">
 <link rel="stylesheet" href="./assets/factory.css">
 <link rel="stylesheet" href="./assets/studio.css">
+<link rel="stylesheet" href="./assets/coulisses.css">
 
 <style>
 /* Mise en page propre au catalogue, rien qui touche au thème. */
@@ -490,6 +491,24 @@
         <div class="job error"><div class="top"><span class="nm">mesh 3D · travail</span><span class="st error">échec</span></div>
           <div class="msg">refusé : les vues n'ont pas passé le contrôle d'alignement</div></div>
       </div>
+    </div>
+
+    <h3>Coulisses — personnage, version, essais d'angle · .cz-who, .cz-ver, .cz-meta, .cz-tries, .cz-folds</h3>
+    <div class="demo cz-page">
+      <div style="display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));align-items:start">
+        <a class="cz-who on" href="./coulisses.html"><img src="./etat/10_visage.jpg" alt="">
+          <span class="txt"><span class="nm">Maren Ostrova</span><span class="ref">maren-ostrova</span>
+            <span class="ticks"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="partial"></i><i></i><i></i><i></i></span></span></a>
+        <div class="cz-ver sel">
+          <div class="cz-ver-head"><span class="id">v2</span><span class="lbl">trellis2 · comfyui · multi-vues</span><span class="sp"></span><button class="tb ghost sm">Viewer</button></div>
+          <dl class="kv"><dt>sommets</dt><dd>25 012</dd><dt>triangles</dt><dd>50 000</dd><dt>verdict</dt><dd class="ok">accepté</dd></dl>
+          <div class="cz-folds"><details class="read"><summary>mesh.json</summary><pre class="cz-pre">{ "engine": "trellis2" }</pre></details><details class="read"><summary>entrée du manifeste</summary><pre class="cz-pre"></pre></details></div>
+        </div>
+        <div class="cand"><img src="./etat/11_pleinpied_apose.jpg" alt=""><span class="mark ok">validé</span>
+          <div class="cz-meta"><div><b>profil gauche</b> · left.png</div><div><span class="dim">demandé</span> 90,0°</div><div><span class="dim">mesuré</span> <span class="ok">93,1°</span></div></div>
+          <div class="cz-meta"><div class="cz-tries"><span class="no">101 → 112,4° (+22,4°)</span><span class="ok kept">102 → 93,1° (+3,1°)</span></div></div></div>
+      </div>
+      <p class="lbl">graines relancées : vert tenue, orange écartée, filet acier gardée</p>
     </div>
 
     <h3>Boîte modale — .scrim / .modal</h3>

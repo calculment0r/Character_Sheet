@@ -1,0 +1,130 @@
+/* ============================================================
+   CHARACTER FACTORY — les coulisses
+   La page de Cal : tout ce que la chaîne a produit pour un
+   personnage, dans l'ordre des étages, avec les graines, les
+   prompts, les mesures, les fichiers et les travaux. Elle reprend
+   les composants du studio (.box, .cand, .table, .job, .kv) ;
+   seuls la mise en page et quelques blocs de lecture sont ici.
+   Que des jetons ; des filets en box-shadow, jamais de bordure.
+   ============================================================ */
+
+/* ── deux colonnes : les personnages, puis le détail ────── */
+.cz {
+  max-width: 1600px; margin: 0 auto; padding: var(--s5) var(--s6) 72px;
+  display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: var(--s5); align-items: start;
+}
+@media (max-width: 900px) { .cz { grid-template-columns: minmax(0, 1fr); padding: var(--s4) 16px 60px; } }
+@media (max-width: 640px) { .cz-page .hdr { padding: 11px 16px; gap: var(--s3); } }
+
+.cz-side { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+@media (max-width: 900px) { .cz-side { position: static; } }
+.cz-side .cz-list { display: flex; flex-direction: column; gap: 5px; }
+.cz-side .cz-pick { display: none; }
+@media (max-width: 900px) {
+  .cz-side .cz-list { display: none; }
+  .cz-side .cz-pick { display: flex; }
+}
+.cz-who {
+  display: flex; gap: var(--s3); align-items: center; padding: 8px var(--s3); min-width: 0;
+  background: var(--panel); border-radius: var(--r3); text-decoration: none; color: inherit;
+  transition: filter .12s;
+}
+.cz-who:hover { filter: brightness(1.12); }
+.cz-who.on { background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line-cy); }
+.cz-who img, .cz-who .ph {
+  width: 38px; height: 38px; flex: none; border-radius: var(--r1); object-fit: cover; background: var(--panel2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--f-disp); font-size: 13px; color: var(--panel3);
+}
+.cz-who .txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.cz-who .nm { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cz-who .ref { font-family: var(--f-mono); font-size: 8px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cz-main { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
+
+/* ── la tête d'un personnage ────────────────────────────── */
+.cz-head .perso-head { grid-template-columns: 96px minmax(0, 1fr) auto; }
+@media (max-width: 720px) { .cz-head .perso-head { grid-template-columns: 64px minmax(0, 1fr); } }
+
+/* ── sommaire : des sauts vers chaque bloc ──────────────── */
+.cz-jump { display: flex; flex-wrap: wrap; gap: 5px; }
+.cz-main .box { scroll-margin-top: 76px; }
+
+/* ── lecture machine : une ligne par fait ───────────────── */
+.cz-meta {
+  display: flex; flex-direction: column; gap: 3px; padding: 7px var(--s3) 9px;
+  font-family: var(--f-mono); font-size: 9px; letter-spacing: .06em; line-height: 1.5; color: var(--ink2);
+  overflow-wrap: anywhere;
+}
+.cz-meta b { font-weight: 500; color: var(--ink); letter-spacing: .14em; text-transform: uppercase; }
+.cz-meta .dim { color: var(--ink3); }
+.cz-meta .ok { color: var(--grn2); }
+.cz-meta .no { color: var(--or); }
+.cz-meta .prose { font-family: var(--f-ui); font-size: 11px; letter-spacing: 0; line-height: 1.5; color: var(--ink2); }
+.cz-page .cand img { object-fit: contain; }
+.cz-page .cands.tall { grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr)); }
+/* autant de crans que d'étages, sur une ligne */
+.cz-page .ticks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.cz-page .cand .read { padding: 0 var(--s3) 9px; }
+
+/* des paires clé/valeur qui passent à la ligne */
+.cz-page .kv { grid-template-columns: minmax(90px, max-content) minmax(0, 1fr); }
+.cz-page .kv dd { overflow-wrap: anywhere; white-space: pre-wrap; }
+.cz-page .kv dd.ok { color: var(--grn2); }
+.cz-page .kv dd.no { color: var(--or); }
+.cz-page .kv dd.prose { font-family: var(--f-ui); font-size: 12px; letter-spacing: 0; line-height: 1.55; }
+
+/* ── texte brut : JSON, prompts, journaux ───────────────── */
+.cz-pre {
+  margin: 6px 0 0; max-height: 420px; overflow: auto; padding: var(--s2) var(--s3);
+  background: var(--panel2); border-radius: var(--r1); box-shadow: inset 0 0 0 1px var(--line);
+  font-family: var(--f-mono); font-size: 9.5px; line-height: 1.6; color: var(--ink2);
+  white-space: pre-wrap; word-break: break-word;
+}
+.cz-pre.tall { max-height: 70vh; }
+.cz-pre:empty::before { content: "…"; color: var(--ink3); }
+
+/* ── grilles d'images de toutes tailles ─────────────────── */
+.cz-grid { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
+.cz-grid.sm { grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr)); }
+.cz-grid.sm .cand img { --ar: 1 / 1; }
+.cz-grid .cand img { --ar: auto; aspect-ratio: auto; max-height: 520px; }
+
+/* ── une version (planche, mesh, rig) ───────────────────── */
+.cz-ver {
+  display: flex; flex-direction: column; gap: var(--s3); padding: var(--s3) var(--s4) var(--s4);
+  background: var(--panel2); border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--line); min-width: 0;
+}
+.cz-ver.sel { box-shadow: inset 0 0 0 2px var(--grn2); }
+.cz-ver-head { display: flex; gap: var(--s3); align-items: baseline; flex-wrap: wrap; }
+.cz-ver-head .id { font-family: var(--f-disp); font-size: 14px; letter-spacing: .06em; text-transform: uppercase; }
+.cz-ver-head .sp { flex: 1; }
+.cz-ver .cand { background: var(--panel3); }
+
+/* ── essais d'angle : une puce par graine ───────────────── */
+.cz-tries { display: flex; flex-wrap: wrap; gap: 4px; }
+.cz-tries span {
+  padding: 2px 6px; border-radius: var(--r1); background: var(--panel3);
+  font-family: var(--f-mono); font-size: 9px; letter-spacing: .04em; color: var(--ink2); white-space: nowrap;
+}
+.cz-tries span.ok { box-shadow: inset 0 0 0 1px var(--line-gr); color: var(--grn2); }
+.cz-tries span.no { color: var(--or); }
+.cz-tries span.kept { box-shadow: inset 0 0 0 1px var(--line-cy); }
+
+/* ── fichiers d'un dossier ──────────────────────────────── */
+.cz-dir summary { display: flex; gap: var(--s3); align-items: baseline; }
+.cz-dir summary .n { color: var(--ink3); }
+.cz-page .table td.path { overflow-wrap: anywhere; min-width: 160px; }
+.cz-page .table td.num, .cz-page .table th.num { text-align: right; white-space: nowrap; }
+.cz-page .table td a { color: var(--cy); text-decoration: none; }
+.cz-page .table td a:hover { text-decoration: underline; }
+.cz-page .table td.wrap { white-space: normal; overflow-wrap: anywhere; font-family: var(--f-ui); font-size: 11px; letter-spacing: 0; }
+
+/* ── des blocs repliés côte à côte ; ouvert, un bloc prend la ligne ── */
+.cz-folds { display: flex; flex-wrap: wrap; gap: 4px var(--s5); align-items: baseline; }
+.cz-folds > details[open] { flex-basis: 100%; order: 1; }
+
+/* ── travaux : les paramètres et le résultat, en clair ──── */
+.cz-page .job .when { font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .1em; color: var(--ink3); }
+.cz-page .job .read summary { margin-top: 2px; }

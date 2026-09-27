@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CHARACTER FACTORY · STUDIO</title>
-<meta name="description" content="Le studio : les personnages en cartes, et toute la chaîne à la main, du visage au rig.">
+<title>CHARACTER FACTORY · COULISSES</title>
+<meta name="description" content="Les coulisses de la chaîne : chaque candidat, chaque graine, chaque prompt, chaque mesure, les travaux et leurs journaux — pour vérifier ce qui se passe derrière le studio.">
+<meta name="robots" content="noindex">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23e0674a'/%3E%3Crect x='12' y='12' width='8' height='8' rx='2' fill='%23170c08'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,26 +14,27 @@
 <link rel="stylesheet" href="./assets/rack.css">
 <link rel="stylesheet" href="./assets/factory.css">
 <link rel="stylesheet" href="./assets/studio.css">
+<link rel="stylesheet" href="./assets/coulisses.css">
 </head>
-<body>
+<body class="cz-page">
 
 <header class="hdr">
   <a class="logo" href="#/" title="les personnages">
     <span class="sq"><i></i></span>
     <span>
       <b>Character Factory</b>
-      <small>studio · dgx2</small>
+      <small>coulisses · dgx2</small>
     </span>
   </a>
   <span class="sp"></span>
   <span class="pill" id="sys-pill" title=""><i></i><span id="sys-text">démarrage</span></span>
-  <a class="tb ghost sm" href="./viewer.html" target="_blank" rel="noopener">Viewer 3D</a>
-  <a class="tb ghost sm" href="./theme.html" target="_blank" rel="noopener">Thème</a>
-  <a class="tb ghost sm" href="./coulisses.html" target="_blank" rel="noopener" title="tout ce qui se passe derrière, pour Cal"
-     onclick="this.href='./coulisses.html'+location.hash.replace(/^#\/p\//,'#/')">Coulisses</a>
+  <a class="tb ghost sm" id="to-studio" href="./studio.html">Studio</a>
 </header>
 
-<main class="studio" id="app"></main>
+<div class="cz" id="app">
+  <nav class="cz-side" id="side" aria-label="personnages"></nav>
+  <main class="cz-main" id="main"><p class="hint">chargement…</p></main>
+</div>
 
 <div class="scrim lightbox" id="lightbox" hidden>
   <div>
@@ -43,6 +45,6 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./js/studio.js"></script>
+<script type="module" src="./js/coulisses.js"></script>
 </body>
 </html>

@@ -291,6 +291,17 @@ def studio_route(tmp: Path) -> None:
               code == 200 and ctype == "image/png" and img[:4] == b"\x89PNG" and outside == [404] * 4
               and page == 200 and b"studio.js" in html, str(outside))
 
+        code, listing = js(f"/api/characters/{slug}/tree")
+        paths = {f["path"] for f in listing.get("files", [])} if code == 200 else set()
+        refused = [call(p)[0] for p in ("/api/characters/.uploads/tree", "/api/characters/..%2F..%2Ffactory/tree",
+                                         "/api/characters/inconnu/tree")]
+        cz, _, cz_html = call("/coulisses.html")
+        check("studio : les coulisses — le dossier listé avec tailles et dates, rien hors d'un personnage",
+              code == 200 and "project.json" in paths and detail["character"]["face"]["locked"] in paths
+              and any(p.endswith("/mesh.json") for p in paths)
+              and all({"size", "mtime"} <= set(f) for f in listing["files"]) and refused == [404] * 3
+              and cz == 200 and b"coulisses.js" in cz_html, f"{len(paths)} fichiers, refus {refused}")
+
         _, models = js("/v1/models")
         _, reply = js("/v1/chat/completions", {"model": "local-model", "messages": [{"role": "user", "content": "x"}]})
         seen = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{llm_port}/__seen").read())
