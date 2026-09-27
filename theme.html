@@ -127,6 +127,7 @@
       <div class="sw"><div class="fill" style="background:var(--or)"></div><div class="txt"><code>--or</code><small>#e0674a</small><em>orange : l'action, la voie B, l'alerte. Jamais décoratif.</em></div></div>
       <div class="sw"><div class="fill" style="background:var(--grn)"></div><div class="txt"><code>--grn</code><small>#2f6b4a</small><em>vert sourd : un état engagé, une option retenue</em></div></div>
       <div class="sw"><div class="fill" style="background:var(--grn2)"></div><div class="txt"><code>--grn2</code><small>#3d8a60</small><em>vert clair : la progression qui avance</em></div></div>
+      <div class="sw"><div class="fill" style="background:var(--amb)"></div><div class="txt"><code>--amb</code><small>#d6a24a</small><em>ambre : ce qui attend Cal — une question de l'atelier, un choix en suspens. Jamais un bouton.</em></div></div>
     </div>
 
     <h3>Rampe des dalles de la console</h3>
@@ -140,9 +141,9 @@
 
     <h3>Traits et encres inversées</h3>
     <div class="row">
-      <span class="lbl">--line</span><span class="lbl">--line-cy</span><span class="lbl">--line-or</span><span class="lbl">--line-gr</span>
+      <span class="lbl">--line</span><span class="lbl">--line-cy</span><span class="lbl">--line-or</span><span class="lbl">--line-gr</span><span class="lbl">--line-amb</span><span class="lbl">--amb-bg</span>
       <span class="sp" style="flex:1"></span>
-      <span class="lbl">--on-or</span><span class="lbl">--on-cy</span><span class="lbl">--on-grn</span><span class="lbl">--on-light</span><span class="lbl">--veil</span>
+      <span class="lbl">--on-or</span><span class="lbl">--on-cy</span><span class="lbl">--on-grn</span><span class="lbl">--on-light</span><span class="lbl">--veil</span><span class="lbl">--veil-0</span><span class="lbl">--scrim</span>
     </div>
     <p style="margin-top:10px">
       Les séparations se font par un <b style="color:var(--ink)">filet</b> ou par un décalage de fond, jamais par une bordure épaisse.
@@ -439,11 +440,157 @@
       </div>
     </div>
 
-    <h3>Studio — carte de personnage · .card, .ticks</h3>
+    <h3>Studio — casting : affiche · .poster, .poster.new</h3>
+    <div class="demo">
+      <div class="posters" style="grid-template-columns:repeat(auto-fill,minmax(210px,240px))">
+        <form class="poster new" onsubmit="return false">
+          <span class="kicker">nouveau personnage</span>
+          <span class="new-q">Comment s'appelle-t-il ?</span>
+          <input class="fld" placeholder="un nom, même provisoire">
+          <button class="tb go" type="submit">Créer ▸</button>
+          <span class="hint">Le nom se change ensuite d'un clic.</span>
+        </form>
+        <article class="poster">
+          <a class="poster-img" href="./studio.html"><img class="p1" src="./etat/10_visage.jpg" alt=""><span class="poster-veil"></span>
+            <span class="poster-badge ok">habillé</span>
+            <span class="poster-name"><span class="nm">Maren Ostrova</span><span class="line">mécanicienne de bord</span></span></a>
+          <div class="poster-acts"><button class="play"><i></i><span>sa voix</span></button><span class="sp" style="flex:1"></span>
+            <a class="tb ghost sm" href="./studio.html">Parler</a></div>
+        </article>
+        <article class="poster">
+          <a class="poster-img" href="./studio.html"><span class="ph">VS</span><span class="poster-veil"></span>
+            <span class="poster-badge amb">visage à choisir</span>
+            <span class="poster-name"><span class="nm">Vera Solen</span><span class="line">pilote de fret orbital</span></span></a>
+          <div class="poster-acts"><span class="lbl">pas encore de voix</span></div>
+        </article>
+      </div>
+      <p class="lbl">le grand portrait, le nom en venus, une ligne de caractère ; au survol, le plein pied remplace le visage</p>
+    </div>
+
+    <h3>Studio — ce qui attend · .waits-panel, .att</h3>
+    <div class="demo">
+      <aside class="waits-panel" style="max-width:420px">
+        <div class="panel-head"><h2>Ce qui attend</h2><span class="lbl">2</span></div>
+        <ul class="waits-list">
+          <li><a class="wait-it amb" href="./studio.html"><span class="ph">MO</span><span><b>Maren Ostrova</b> 1 question de l'atelier</span></a></li>
+          <li><a class="wait-it" href="./studio.html"><span class="ph">VS</span><span><b>Vera Solen</b> attend que tu choisisses son visage</span></a></li>
+        </ul>
+      </aside>
+      <article class="att">
+        <span class="att-k">ce qui attend · vues</span>
+        <h3>Le profil gauche ne tient pas l'angle</h3>
+        <p>Deux essais à 71° puis 74° au lieu de 90°. L'atelier peut réessayer, ou garder le meilleur des deux.</p>
+        <div class="att-row"><button class="tb ghost sm rec">Réessayer<i>recommandé</i></button>
+          <button class="tb ghost sm">Garder le meilleur</button><span class="sp" style="flex:1"></span>
+          <a class="lbl" href="./coulisses.html">voir dans les coulisses</a></div>
+      </article>
+      <p class="lbl">l'ambre dit « ça t'attend » : la technique ne remonte que quand elle a échoué deux fois</p>
+    </div>
+
+    <h3>Studio — un personnage : tête, puce de l'atelier, volets · .p-head, .atelier, .vols</h3>
+    <div class="demo">
+      <div class="p-head">
+        <a class="tb ghost sm" href="./studio.html">◂ Casting</a>
+        <div class="p-id"><img class="p-face" src="./etat/10_visage.jpg" alt="">
+          <div class="p-who"><h1 class="p-name">Maren Ostrova</h1><span class="p-line">mécanicienne de bord · la vétérane</span></div></div>
+        <span class="sp" style="flex:1"></span>
+        <a class="atelier run" href="./coulisses.html"><i></i>atelier · 3D en cours</a>
+        <a class="tb" href="./studio.html">Parler ▸</a>
+      </div>
+      <nav class="vols">
+        <a class="vol" href="#"><span>Identité</span><i class="dot done"></i></a>
+        <a class="vol" href="#"><span>Visage</span><i class="dot done"></i></a>
+        <a class="vol on" href="#"><span>Garde-robe</span><i class="dot wait"></i></a>
+        <a class="vol" href="#"><span>Voix</span><i class="dot run"></i></a>
+        <a class="vol" href="#"><span>Planche</span></a>
+      </nav>
+      <div class="row">
+        <span class="atelier"><i></i>atelier · au repos</span>
+        <span class="atelier ok"><i></i>atelier · riggé</span>
+        <span class="atelier amb"><i></i>atelier · 1 en attente</span>
+      </div>
+      <p class="lbl">pas de frise d'étages : une seule puce mono pour l'arrière-plan, qui mène aux coulisses · point vert fait, ambre attend ton choix, acier en cours</p>
+    </div>
+
+    <h3>Studio — les propositions et la décision · .props, .prop, .slot, .strip, .decide</h3>
+    <div class="demo">
+      <div class="props" style="grid-template-columns:repeat(4,minmax(0,160px))">
+        <div class="prop"><img src="./etat/10_visage.jpg" alt=""><span class="prop-n">n° 1</span><button class="prop-zoom">+</button></div>
+        <div class="prop sel"><img src="./etat/10_visage.jpg" alt=""><span class="prop-n">n° 2</span><span class="prop-mark">choisi</span></div>
+        <div class="prop slot on"><span class="slot-in"><span class="lbl">en cours</span><span class="slot-bar"><i style="width:46%"></i></span></span></div>
+        <div class="prop slot"><span class="slot-in"><span class="lbl">ensuite</span></span></div>
+      </div>
+      <div class="around"><span class="lbl">autour du n° 2</span><div class="chips-row">
+        <button class="chip">plus âgé</button><button class="chip">plus dur</button><button class="chip">autre coiffure</button>
+        <button class="tb ghost sm">Trois comme lui</button></div></div>
+      <div class="strip-wrap"><span class="lbl">propositions précédentes · 3</span><div class="strip">
+        <button class="strip-it"><img src="./etat/10_visage.jpg" alt=""></button>
+        <button class="strip-it sel"><img src="./etat/10_visage.jpg" alt=""></button>
+        <button class="strip-it"><img src="./etat/10_visage.jpg" alt=""></button></div></div>
+      <div class="decide" style="position:static"><img class="decide-thumb" src="./etat/10_visage.jpg" alt="">
+        <span class="decide-txt">le n° 2, c'est lui ?</span><span class="sp" style="flex:1"></span><button class="tb go">C'est lui ▸</button></div>
+      <p class="lbl">un clic choisit (filet vert), la barre du bas pose la question avec le seul bouton orange ; elle colle au bas de l'écran · une case vide respire tant que son image calcule</p>
+    </div>
+
+    <h3>Studio — un choix fait, une attente utile · .hero-pick, .waiting, .notice, .soon</h3>
+    <div class="demo">
+      <div class="hero-pick" style="grid-template-columns:minmax(0,200px) minmax(0,1fr)">
+        <img class="hero-img-sq" src="./etat/10_visage.jpg" alt="">
+        <div class="hero-txt"><span class="kicker">son visage</span><h2 class="big">C'est lui.</h2>
+          <p class="prose">Ce visage fait autorité sur tout le reste et ne change plus.</p>
+          <div class="row-start"><button class="tb ghost">Lui trouver une voix ▸</button></div></div>
+      </div>
+      <section class="panel waiting"><div class="panel-head"><h2>En attendant</h2><span class="lbl">ses visages · 38 %</span></div>
+        <p>Pendant que ça calcule : trois traits de caractère. Un clic suffit, c'est gardé.</p>
+        <div class="chips-row"><button class="chip chip-selected">têtu</button><button class="chip">loyal</button><button class="chip">ironique</button></div></section>
+      <div class="notice"><p><b>Le dernier rendu n'a pas abouti.</b> ComfyUI ne répond pas.</p><a class="lbl" href="./coulisses.html">détails dans les coulisses</a></div>
+      <p class="lbl">l'attente sert : la carte « en attendant » propose ce qui manque au personnage (traits, tenue, voix)</p>
+    </div>
+
+    <h3>Studio — la voix · .vc, .player, .play, .wave, .line-it</h3>
+    <div class="demo">
+      <div class="voices" style="max-width:640px">
+        <div class="vc"><span class="vc-n">voix n° 1</span><span class="player"><button class="play"><i></i></button><span class="wave"><i></i></span></span>
+          <span class="vc-text">« Je m'appelle Yann. La mer, je la connais mieux que les gens. »</span></div>
+        <div class="vc sel"><span class="vc-n">voix n° 2 · choisie</span><span class="player"><button class="play on"><i></i></button><span class="wave"><i style="width:40%"></i></span></span>
+          <span class="vc-text">« Je m'appelle Yann. La mer, je la connais mieux que les gens. »</span></div>
+      </div>
+      <div class="line-it"><p>« Qui t'a dit que j'avais peur ? » <span class="lbl">sec, sans lever les yeux</span></p>
+        <div class="takes"><span class="take"><span class="player"><button class="play"><i></i></button><span class="wave"><i></i></span><span class="lbl">prise 1</span></span><button class="tb ghost sm">Garder</button></span>
+          <span class="take kept"><span class="player"><button class="play"><i></i></button><span class="wave"><i></i></span><span class="lbl">prise 2</span></span><span class="lbl ok">gardée</span></span></div></div>
+      <p class="lbl">une voix se choisit comme un visage ; un seul lecteur pour toute la page, le bouton de lecture est carré</p>
+    </div>
+
+    <h3>Studio — la planche · .pl-grid, .pl-cell</h3>
+    <div class="demo">
+      <div class="pl-row"><span class="lbl">Expressions</span><div class="pl-grid sq" style="grid-template-columns:repeat(4,90px)">
+        <button class="pl-cell sq"><img src="./etat/10_visage.jpg" alt=""></button>
+        <button class="pl-cell sq"><img src="./etat/10_visage.jpg" alt=""></button>
+        <div class="prop slot pl-cell sq on"><span class="slot-in"><span class="lbl">en cours</span><span class="slot-bar"><i style="width:30%"></i></span></span></div>
+        <div class="prop slot pl-cell sq"><span class="slot-in"><span class="lbl">ensuite</span></span></div></div></div>
+      <p class="lbl">la planche se remplit case par case ; composée, elle s'exporte</p>
+    </div>
+
+    <h3>Studio — la Scène · .scene-talk, .bub</h3>
+    <div class="demo">
+      <section class="scene-talk" style="max-width:560px">
+        <div class="scene-log" style="flex:none">
+          <div class="bub me"><span class="who">toi</span><div class="txt">Qui es-tu ?</div></div>
+          <div class="bub them"><span class="who">Yann Kerbrat</span><div class="txt">Je m'appelle comme on m'appelle au port. Le reste, faut le mériter.</div></div>
+          <div class="bub note">il répond par écrit : la voix n'est pas encore branchée</div>
+          <div class="bub them"><span class="who">Yann Kerbrat</span><div class="thinking"><span></span><span></span><span></span></div></div>
+        </div>
+        <form class="scene-compose" onsubmit="return false"><textarea class="fld" rows="2" placeholder="Dis-lui quelque chose…"></textarea>
+          <div class="compose-row"><button type="button" class="tb ghost mic">Micro</button><span class="sp" style="flex:1"></span><button class="tb ghost">Dire ▸</button></div></form>
+      </section>
+      <p class="lbl">deux modes : conversation, et faire dire (texte + direction de jeu, trois prises)</p>
+    </div>
+
+    <h3>Coulisses — carte de personnage · .card, .ticks</h3>
     <div class="demo">
       <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(220px,260px))">
         <a class="card" href="./studio.html">
-          <div class="card-img"><img src="./etat/01_visage.jpg" alt=""><span class="badge lock">visage verrouillé</span></div>
+          <div class="card-img"><img src="./etat/10_visage.jpg" alt=""><span class="badge lock">visage verrouillé</span></div>
           <div class="card-body">
             <span class="ref">maren-ostrova · photoreal</span>
             <span class="nm">Maren Ostrova</span>
@@ -461,7 +608,7 @@
       <p class="lbl">huit crans, un par étage : vert fait, acier commencé, sourd à faire</p>
     </div>
 
-    <h3>Studio — un étage · .box, .cands, .cand</h3>
+    <h3>Coulisses — un étage · .box, .cands, .cand</h3>
     <div class="demo">
       <section class="box next">
         <div class="box-head"><span class="sec">ST-02</span><h2>Visage</h2><span class="state partial">2 candidat(s)</span></div>
@@ -474,15 +621,15 @@
           </div>
           <div class="box-sub">Candidats</div>
           <div class="cands" style="grid-template-columns:repeat(auto-fill,minmax(150px,170px))">
-            <div class="cand sel"><img src="./etat/01_visage.jpg" alt=""><span class="mark ok">validé</span><div class="cap"><span class="lbl">n° 2</span></div></div>
-            <div class="cand"><img src="./etat/01_visage.jpg" alt=""><span class="mark stub">factice</span><div class="cap"><span class="lbl">n° 1</span><button class="tb ghost sm">Verrouiller</button></div></div>
+            <div class="cand sel"><img src="./etat/10_visage.jpg" alt=""><span class="mark ok">validé</span><div class="cap"><span class="lbl">n° 2</span></div></div>
+            <div class="cand"><img src="./etat/10_visage.jpg" alt=""><span class="mark stub">factice</span><div class="cap"><span class="lbl">n° 1</span><button class="tb ghost sm">Verrouiller</button></div></div>
           </div>
         </div>
       </section>
       <p class="lbl">le filet orange marque l'étage suivant ; les choix (verrouiller, valider) restent fantômes, un par candidat</p>
     </div>
 
-    <h3>Studio — file de travaux · .job</h3>
+    <h3>Coulisses — file de travaux · .job</h3>
     <div class="demo" style="max-width:360px">
       <div class="jobs">
         <div class="job running"><div class="top"><span class="nm">vues orthogonales · travail</span><span class="st running">en cours</span></div>

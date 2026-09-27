@@ -167,12 +167,13 @@ async function callDgx({ system, messages, tools, signal }) {
       method: 'POST',
       headers,
       signal,
+      // Sans outil (la Scène : le personnage répond, rien à ranger), ni
+      // `tools` ni `tool_choice` : certains serveurs refusent une liste vide.
       body: JSON.stringify({
         model: cfg.read('dgxModel'),
         max_tokens: MAX_TOKENS,
         messages: toOpenAIMessages(system, messages),
-        tools: toOpenAITools(tools),
-        tool_choice: 'auto',
+        ...(tools && tools.length ? { tools: toOpenAITools(tools), tool_choice: 'auto' } : {}),
       }),
     });
   } catch (e) {
@@ -205,7 +206,7 @@ async function callAnthropic({ system, messages, tools, signal }) {
         model: cfg.read('anthropicModel'),
         max_tokens: MAX_TOKENS,
         system,
-        tools,
+        ...(tools && tools.length ? { tools } : {}),
         messages,
       }),
     });

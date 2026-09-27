@@ -218,6 +218,18 @@ def read_face_brief(p: Project, q: dict, llm, say) -> None:
     say(f"visage : {got['prompt']}")
 
 
+# Les puces de direction d'« Autour de celui-ci » : la page n'envoie
+# qu'une clé, jamais de prompt ; la phrase anglaise reste ici.
+DIRECTIONS = {
+    "older": "noticeably older, with the marks of age on the face",
+    "younger": "noticeably younger",
+    "harder": "a harder, more severe face with sharper features",
+    "softer": "a softer, gentler face",
+    "hair": "a clearly different hairstyle",
+    "smile": "a warmer, more open expression",
+}
+
+
 def a_face(p: Project, q: dict, report):
     if "prompt" in q:
         p.face["prompt"] = str(q["prompt"]).strip()
@@ -231,6 +243,9 @@ def a_face(p: Project, q: dict, report):
             raise ChainError(f"candidat n° {i} inexistant")
         base_cand = cands[i - 1]
         descs = [base_cand.get("desc") or p.face.get("prompt_en") or p.face["prompt"]]
+        direction = DIRECTIONS.get(str(q.get("direction") or ""))
+        if direction:
+            descs = [f"{descs[0]}, {direction}"]
         engine = q.get("engine") or base_cand.get("engine") or engine
     elif "brief" in q:
         descs = p.face.get("variations") or [p.face.get("prompt_en") or ""]
@@ -595,10 +610,15 @@ def summary(p: Project) -> dict:
         ("ST-08", "rig", "Rig", state(any_(lambda c: any(r["verdict"] == "accepted" for r in c["rigs"])),
                                       any_(lambda c: c["rigs"]))),
     ]
+    # L'affiche du casting : la planche de présentation, sinon le plein
+    # pied validé, sinon le visage.
+    poster = next((c["presentation"]["sheet"] for c in costumes if (c.get("presentation") or {}).get("sheet")), None) \
+        or next((c["fullbody"]["validated"] for c in costumes if c["fullbody"].get("validated")), None)
     return {
         "slug": d["slug"], "name": d["name"], "style": d["style"], "created_at": d.get("created_at"),
         "role": sheet.get("role", ""), "archetype": sheet.get("archetype", ""),
         "thumb": files_url(d["slug"], thumb), "locked": bool(face.get("locked")),
+        "poster": files_url(d["slug"], poster), "voice": files_url(d["slug"], _voice_file(d.get("voice"))),
         "identity": {"filled": filled, "total": SHEET_FIELDS, "notes": len(d["notes"])},
         "costumes": len(costumes),
         "stages": [{"ref": r, "id": i, "label": lab, "state": st} for r, i, lab, st in stages],
@@ -643,6 +663,19 @@ def tree(root: Path) -> dict:
         if truncated:
             break
     return {"files": files, "truncated": truncated}
+
+
+def _voice_file(voice) -> str | None:
+    """Le fichier de la voix choisie : `locked` est un chemin, ou le numéro
+    d'une proposition."""
+    if not isinstance(voice, dict) or not voice.get("locked"):
+        return None
+    locked = voice["locked"]
+    if str(locked).isdigit():
+        cands = voice.get("candidates") or []
+        i = int(locked)
+        return cands[i - 1].get("file") if 1 <= i <= len(cands) else None
+    return str(locked)
 
 
 def backends() -> dict:
