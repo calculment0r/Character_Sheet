@@ -211,7 +211,64 @@ def cmd_page(args) -> None:
 def cmd_studio(args) -> None:
     from .studio import serve
 
-    serve(host=args.hote, port=args.port)
+    serve(host=args.hote, port=args.port, https_port=args.https)
+
+
+def cmd_voix(args) -> None:
+    from . import voice
+
+    p = _p(args)
+    if args.description:
+        voice.set_description(p, args.description)
+    elif not voice.state(p)["description"] or args.redecrire:
+        got = voice.draft_description(p)
+        voice.set_description(p, got["description"], got["resume"], got["registre"])
+    p.save()
+    print(f"voix décrite : {voice.state(p)['description']}")
+    made = voice.design(p, n=args.variantes, seed=args.graine if args.graine is not None else 1)
+    print(f"{len(made)} voix sous {p.path('voice')}")
+    print(f"  choisir : ./usine voix-ok {p.data['slug']} <numéro>")
+
+
+def cmd_voix_ok(args) -> None:
+    from . import voice
+
+    p = _p(args)
+    print(f"voix verrouillée : {p.path(voice.lock(p, args.candidat))}")
+    print(f"  jouer : ./usine replique {p.data['slug']} \"…\"")
+
+
+def cmd_voix_libre(args) -> None:
+    from . import voice
+
+    p = _p(args)
+    old = voice.unlock(p)
+    print(f"voix libérée (référence archivée : {old})" if old else "aucune voix verrouillée")
+
+
+def cmd_replique(args) -> None:
+    from . import voice
+
+    p = _p(args)
+    e = voice.line(p, args.texte, direction=args.jeu or "", context=args.situation or "", takes=args.prises,
+                   seed=args.graine if args.graine is not None else 1)
+    print(f"réplique {e['id']} : {e['play_state']}")
+    for i, t in enumerate(e["takes"], 1):
+        print(f"  prise {i} : {p.path(t['file'])}  similarité {t['similarity']}")
+    print(f"  garder : ./usine replique-ok {p.data['slug']} {e['id']} <prise>")
+
+
+def cmd_replique_ok(args) -> None:
+    from . import voice
+
+    p = _p(args)
+    print(f"prise gardée : {p.path(voice.keep(p, args.ligne, args.prise))}")
+
+
+def cmd_voix_serveur(args) -> None:
+    from .voice_server import serve
+
+    serve(host=args.hote, port=args.port, https_port=args.https or None, stub=args.factice)
 
 
 def cmd_gabarit(args) -> None:
@@ -364,6 +421,41 @@ def build() -> argparse.ArgumentParser:
     sp = cmd("studio", cmd_studio, "le studio : les personnages en cartes, toute la chaîne dans une page")
     sp.add_argument("--port", type=int, default=8765)
     sp.add_argument("--hote", default="0.0.0.0", help="adresse d'écoute (défaut : tout le réseau local)")
+    sp.add_argument("--https", type=int, metavar="PORT",
+                    help="le même studio en HTTPS sur ce port (certificat auto-signé) : le micro l'exige")
+
+    sp = cmd("voix", cmd_voix, "audition : des voix conçues depuis la fiche (Qwen3-TTS VoiceDesign)")
+    perso(sp)
+    sp.add_argument("--description", help="la voix décrite (en anglais de préférence) ; sinon le modèle l'écrit")
+    sp.add_argument("--redecrire", action="store_true", help="faire réécrire la description par le modèle")
+    sp.add_argument("--variantes", type=int, default=4)
+    sp.add_argument("--graine", type=int)
+
+    sp = cmd("voix-ok", cmd_voix_ok, "verrouiller une voix — une seule fois, comme le visage")
+    perso(sp)
+    sp.add_argument("candidat")
+
+    cmd("voix-libre", cmd_voix_libre, "libérer la voix verrouillée (la référence part aux archives)").add_argument(
+        "perso", help="nom ou dossier du personnage")
+
+    sp = cmd("replique", cmd_replique, "une réplique jouée : état de jeu, plusieurs prises mesurées")
+    perso(sp)
+    sp.add_argument("texte")
+    sp.add_argument("--jeu", help="la direction d'acteur ; sinon le modèle de texte l'écrit")
+    sp.add_argument("--situation", help="le contexte de la réplique, pour l'état de jeu")
+    sp.add_argument("--prises", type=int, default=3)
+    sp.add_argument("--graine", type=int)
+
+    sp = cmd("replique-ok", cmd_replique_ok, "garder une prise")
+    perso(sp)
+    sp.add_argument("ligne", help="identifiant de la réplique, ex. l001")
+    sp.add_argument("prise", help="numéro de la prise")
+
+    sp = cmd("voix-serveur", cmd_voix_serveur, "le service vocal : voix, clonage, conversation en direct (DGX1)")
+    sp.add_argument("--port", type=int, default=8770)
+    sp.add_argument("--https", type=int, default=8771, metavar="PORT", help="port HTTPS (0 : aucun)")
+    sp.add_argument("--hote", default="0.0.0.0")
+    sp.add_argument("--factice", action="store_true", help="moteurs factices : sans modèle ni GPU, pour la page")
 
     sp = cmd("gabarit", cmd_gabarit, "adopter un workflow ComfyUI exporté au format API comme gabarit H3")
     sp.add_argument("fichier", help="le workflow exporté (Workflow → Export (API))")

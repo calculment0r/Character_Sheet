@@ -52,6 +52,7 @@ import queue
 import re
 import sys
 import threading
+import time
 import traceback
 import urllib.error
 import urllib.parse
@@ -62,10 +63,12 @@ from types import SimpleNamespace
 
 from . import autopilot, chain, config, h3, memory
 from .project import IDENTITY_SCHEMA, ChainError, Project, apose, list_projects, now
+from .project import voice as voice_state
 
 PORT = 8765
 STATIC_DIRS = ("js", "assets", "data", "docs/img", "etat")
-STATIC_PAGES = ("studio.html", "console.html", "viewer.html", "theme.html", "index.html", "coulisses.html")
+STATIC_PAGES = ("studio.html", "console.html", "viewer.html", "theme.html", "index.html", "coulisses.html",
+                "voix.html")
 UPLOAD_NAME = re.compile(r"^[0-9a-f]{32}\.(png|jpg|webp)$")
 MAX_UPLOAD = 40 * 1024 * 1024
 SHEET_FIELDS = 22
@@ -458,6 +461,78 @@ def a_rig_ok(p: Project, q: dict, report):
     return {}
 
 
+# ── la voix (voice.py ; contrat : docs/VOIX.md) ────────────────────
+
+def read_voice_brief(p: Project, q: dict, llm, say) -> None:
+    """Avant l'audition : la description donnée, sinon celle déjà écrite,
+    sinon le modèle de texte l'écrit depuis la fiche (`redraft` force)."""
+    from . import voice
+
+    v = voice.state(p)
+    if str(q.get("description") or "").strip():
+        voice.set_description(p, str(q["description"]))
+        v["description_fr"] = str(q.get("description_fr") or "").strip()
+    elif not v["description"] or q.get("redraft"):
+        say("le modèle de texte décrit la voix depuis la fiche")
+        if _voice_llm_is_local():
+            llm()
+        got = voice.draft_description(p)
+        voice.set_description(p, got["description"], got["resume"], got["registre"])
+        say(f"voix : {got['resume'] or got['description']}")
+    p.save()
+
+
+def _voice_llm_is_local() -> bool:
+    """Le modèle de texte de la voix vit-il dans l'Ollama du studio ? Alors
+    il faut lui faire de la place comme au modèle de l'étage Identité."""
+    from . import voice_chat
+
+    return not voice_chat.llm_is_stub() and voice_chat.llm_url() == memory.ollama_url()
+
+
+def a_voice_design(p: Project, q: dict, report):
+    from . import voice
+
+    made = voice.design(p, n=_int(q.get("n", q.get("variants")), 4, 1, 8), text=str(q.get("text") or "") or None,
+                        seed=_seed(q), report=report)
+    return {"made": made, "description": voice.state(p)["description"]}
+
+
+def a_voice_lock(p: Project, q: dict, report):
+    from . import voice
+
+    return {"locked": voice.lock(p, str(q.get("candidate", "")))}
+
+
+def a_voice_unlock(p: Project, q: dict, report):
+    from . import voice
+
+    return {"unlocked": voice.unlock(p)}
+
+
+def a_line(p: Project, q: dict, report):
+    from . import voice
+
+    entry = voice.line(p, str(q.get("text") or ""), direction=str(q.get("direction") or ""),
+                       context=str(q.get("context") or ""), takes=_int(q.get("takes"), 3, 1, 8), seed=_seed(q),
+                       clone=q.get("clone", True) is not False, line_id=str(q.get("line") or "") or None,
+                       report=report)
+    return {"line": entry["id"], "takes": [t["file"] for t in entry["takes"]], "play_state": entry["play_state"]}
+
+
+def make_room_for_voice_llm(p: Project, q: dict, llm, say) -> None:
+    """Avant une réplique sans direction : l'état de jeu passe par le
+    modèle de texte ; s'il vit dans l'Ollama du studio, on lui fait place."""
+    if _voice_llm_is_local() and not str(q.get("direction") or "").strip() and not q.get("line"):
+        llm()
+
+
+def a_line_keep(p: Project, q: dict, report):
+    from . import voice
+
+    return {"kept": voice.keep(p, str(q.get("line") or ""), str(q.get("take") or ""))}
+
+
 def _gpu_views(q: dict, p: Project | None = None):
     method = q.get("method") or "qwen21-pose"
     if method == "qwen21-pose":
@@ -504,11 +579,20 @@ ACTIONS = {
     "autopilot":    (a_autopilot, "autopilote", _gpu_autopilot),
     "autopilot_stop": (a_autopilot_stop, "autopilote en pause", None),
     "attention":    (a_attention, "réponse à ce qui attend", None),
+    # La voix calcule sur le service vocal (DGX1) : ses travaux ont leur
+    # propre file, ils ne font pas attendre les images.
+    "voice_design": (a_voice_design, "audition de la voix", ("voice", None), read_voice_brief),
+    "voice_lock":   (a_voice_lock, "voix verrouillée", None),
+    "voice_unlock": (a_voice_unlock, "voix libérée", None),
+    "line":         (a_line, "réplique jouée", ("voice", None), make_room_for_voice_llm),
+    "line_keep":    (a_line_keep, "prise gardée", None),
 }
 
 # Les étages techniques : lancés à la main, ils mettent l'autopilote du
 # costume en pause, pour ne pas se battre avec lui (panneau de débogage).
 MANUAL_TECH = ("apose", "views", "prep", "check", "mesh", "rig", "rig_ok")
+
+VOICE_ACTIONS = ("voice_design", "line")
 
 # Le moteur de chaque capacité, pour savoir si un travail touche au GPU.
 _ENGINE = {"h3": "h3", "views": "h3", "prep": "prep", "trellis": "trellis", "sam3dbody": "sam3dbody",
@@ -525,6 +609,8 @@ def _on_gpu(family: str, cap: str | None) -> bool:
     en factice (essais sur le PC), on ne décharge rien."""
     if family == "unirig":
         return config.backend("unirig") != "stub"
+    if family == "voice":
+        return False            # le service vocal calcule sur sa machine
     if family == "qwen":
         return True
     return config.backend(_ENGINE.get(cap, cap)) not in ("stub", "builtin", "rembg")
@@ -598,6 +684,7 @@ def summary(p: Project) -> dict:
     stages = [
         ("ST-01", "identity", "Identité", state(filled >= SHEET_FIELDS, filled > 0)),
         ("ST-02", "face", "Visage", state(bool(face.get("locked")), bool(face["candidates"]))),
+        ("ST-02v", "voice", "Voix", state(bool(voice_state(d).get("locked")), bool(voice_state(d)["candidates"]))),
         ("ST-03", "costumes", "Costumes", state(bool(costumes), False)),
         ("ST-04", "fullbody", "Plein pied", state(any_(lambda c: c["fullbody"].get("validated")),
                                                   any_(lambda c: c["fullbody"]["candidates"]))),
@@ -687,22 +774,33 @@ def backends() -> dict:
 class Studio:
     def __init__(self) -> None:
         self.jobs: list[Job] = []
-        # File à priorités : (priorité, ordre d'arrivée, travail). Les étapes
-        # de l'autopilote passent après tout travail demandé par Cal.
+        # Deux files, un ouvrier chacune. Le GPU de la machine : un travail à
+        # la fois (règle de la mémoire), par priorités (priorité, ordre
+        # d'arrivée, travail) — les étapes de l'autopilote passent après tout
+        # travail demandé par Cal. La voix calcule sur le service vocal : une
+        # audition ne fait pas attendre une image.
         self.queue: queue.PriorityQueue = queue.PriorityQueue()
+        self.voice_queue: queue.PriorityQueue = queue.PriorityQueue()
         self._order = itertools.count()
         self._runs = itertools.count(1)
-        self.running: Job | None = None
+        self.slots: dict[str, Job | None] = {"gpu": None, "voix": None}
         # Le personnage d'un calcul en cours : les choix faits pendant ce
         # calcul (verrouiller, écrire le costume, corriger la fiche) passent
-        # par ce même objet, sinon le calcul écraserait le manifeste.
+        # par ce même objet, sinon le calcul écraserait le manifeste. Deux
+        # calculs du même personnage (une image, une voix) le partagent.
         self.live: dict[str, Project] = {}
+        self._live_count: dict[str, int] = {}
         self.memory = memory.Manager()
         self.lock = threading.Lock()
-        threading.Thread(target=self._worker, name="ouvrier", daemon=True).start()
+        for lane in self.slots:
+            threading.Thread(target=self._worker, args=(lane,), name=f"ouvrier-{lane}", daemon=True).start()
         # Un studio relancé reprend les autopilotes qui tournaient.
         for slug, key in autopilot.pending(list_projects()):
             self.kick(slug, key)
+
+    @property
+    def running(self) -> Job | None:
+        return self.slots["gpu"]
 
     # la file
 
@@ -713,7 +811,8 @@ class Studio:
             # On garde les 200 derniers, jamais un travail encore en file.
             old = [j for j in self.jobs[:-200] if j.status == "queued"]
             self.jobs[:] = old + self.jobs[-200:]
-        self.queue.put((priority, next(self._order), job))
+        lane = self.voice_queue if action in VOICE_ACTIONS else self.queue
+        lane.put((priority, next(self._order), job))
         return job
 
     def kick(self, slug: str, costume: str) -> Job:
@@ -743,10 +842,24 @@ class Studio:
             print(f"  autopilote {job.slug} : pas de suite ({exc})")
 
     def busy(self, slug: str) -> bool:
-        return self.running is not None and self.running.slug == slug
+        return any(j is not None and j.slug == slug for j in self.slots.values())
 
     def project(self, slug: str) -> Project:
         return self.live.get(slug) or Project.open(slug)
+
+    def _hold(self, slug: str) -> Project:
+        with self.lock:
+            if slug not in self.live:
+                self.live[slug] = Project.open(slug)
+            self._live_count[slug] = self._live_count.get(slug, 0) + 1
+            return self.live[slug]
+
+    def _release(self, slug: str) -> None:
+        with self.lock:
+            self._live_count[slug] = self._live_count.get(slug, 1) - 1
+            if self._live_count[slug] <= 0:
+                self._live_count.pop(slug, None)
+                self.live.pop(slug, None)
 
     def find(self, job_id: str) -> Job | None:
         return next((j for j in self.jobs if j.id == job_id), None)
@@ -768,16 +881,19 @@ class Studio:
             return "interruption demandée à ComfyUI"
         return "annulation demandée : l'étage s'arrêtera à sa prochaine étape"
 
-    def _worker(self) -> None:
+    def _worker(self, lane: str) -> None:
         while True:
-            _, _, job = self.queue.get()
+            _, _, job = (self.voice_queue if lane == "voix" else self.queue).get()
             if job.status != "queued":
                 continue
-            self.running = job
+            self.slots[lane] = job
             _local.job = job
             job.status, job.started, job.message = "running", now(), "démarrage"
             job.run_order = next(self._runs)
+            held = False
             try:
+                self._hold(job.slug)
+                held = True
                 self._run(job)
                 job.status, job.progress = "done", 1.0
                 job.message = "fini"
@@ -794,14 +910,15 @@ class Studio:
                 if job.error:
                     job.message = job.error
                 _local.job = None
-                self.live.pop(job.slug, None)
-                self.running = None
+                if held:
+                    self._release(job.slug)
+                self.slots[lane] = None
                 if job.action == "autopilot":
                     self._continue(job)
 
     def _run(self, job: Job) -> None:
         fn, _, _, *pre = ACTIONS[job.action]
-        p = self.live[job.slug] = Project.open(job.slug)
+        p = self.live[job.slug]
         if pre:
             pre[0](p, job.params, lambda: self.memory.before_llm(say=job.say), job.say)
         spot = where(job.action, job.params, p)
@@ -872,8 +989,36 @@ class Studio:
                       for url in memory.comfy_instances()},
             "backends": backends(),
             "running": self.running.public() if self.running else None,
+            "voice_running": self.slots["voix"].public() if self.slots["voix"] else None,
             "queued": sum(1 for j in self.jobs if j.status == "queued"),
         }
+
+    def voice_config(self, slug: str = "") -> dict:
+        """Où la page trouve la conversation en direct. Le micro exige un
+        contexte sûr (HTTPS, ou localhost) : la page vérifie
+        `window.isSecureContext` et, sinon, renvoie vers `https_url`."""
+        from . import voice_chat, voice_engine
+
+        backend = config.backend("voice")
+        base = voice_engine.service_url()
+        https = config.setting("voice_https_url", "").rstrip("/")
+        health = voice_engine.RemoteEngine(base).health() if backend == "remote" or config.setting("voice_url") \
+            else {"ok": False, "error": "aucun service vocal réglé (voice_url)"}
+        tail = "/ws/chat" + (f"?slug={urllib.parse.quote(slug)}" if slug else "")
+        ws = re.sub(r"^http", "ws", base) + tail
+        out = {"engine": backend, "available": bool(health.get("ok")), "ws_url": ws,
+               "wss_url": re.sub(r"^https", "wss", https) + tail if https else None,
+               "https_url": f"{https}/voix.html" if https else None,
+               "service": base, "health": health,
+               "llm": {"url": voice_chat.llm_url(), "model": voice_chat.llm_model(),
+                       "stub": voice_chat.llm_is_stub()}}
+        if not out["available"]:
+            out["reason"] = (f"service vocal injoignable ({base}) : {health.get('error', '?')} — la conversation "
+                             f"écrite marche quand même (POST …/chat), sans voix si le moteur n'est pas là"
+                             if backend == "remote" else
+                             "moteur de voix factice et aucun service vocal : conversation écrite seulement, "
+                             "voix en voyelles synthétiques (`./usine voix-serveur --factice` pour le direct)")
+        return out
 
 
 def _round(v):
@@ -1042,6 +1187,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         head = parts[0] if parts else ""
         if head == "system" and method == "GET":
             return self._json(s.system())
+        if parts == ["voice", "config"] and method == "GET":
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            return self._json(s.voice_config((q.get("slug") or [""])[0]))
+        if head == "characters" and len(parts) in (3, 4) and parts[2] == "chat" and method == "POST":
+            if len(parts) == 4 and parts[3] != "stream":
+                return self._error(404, "route inconnue")
+            return self._chat(parts[1], stream=len(parts) == 4)
         if head == "uploads" and method == "POST":
             return self._json(self._upload())
         if head == "attention" and method == "GET":
@@ -1088,6 +1240,89 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if len(parts) == 4 and parts[2] == "actions" and method == "POST":
                 return self._json(s.act(slug, parts[3], self._payload()))
         self._error(404, "route inconnue")
+
+    # conversation écrite avec le personnage, réponse dite de sa voix
+
+    def _chat(self, slug: str, stream: bool) -> None:
+        from . import voice, voice_chat
+
+        body = self._payload()
+        p = self.studio.project(slug)
+        messages = voice.chat_messages(p, body.get("message"), body.get("history"))
+        if _voice_llm_is_local():
+            self.studio.memory.before_chat(busy=self.studio.running is not None, say=print)
+        cid = f"{now().replace(':', '').replace('-', '')[:15]}-{uuid.uuid4().hex[:6]}"
+        seed = voice.state(p).get("locked_seed") or 1
+        t0 = time.monotonic()
+        if not stream:
+            reply = voice_chat.complete(messages)
+            t_text = time.monotonic() - t0
+            # La réponse écrite vaut même si la voix manque : l'erreur est dite à côté.
+            try:
+                rel, audio_error = voice.say(p, reply, seed, cid), None
+            except ChainError as exc:
+                rel, audio_error = None, str(exc)
+            return self._json({"reply": reply, "audio": files_url(slug, rel), "audio_error": audio_error,
+                               "timings": {"text_s": round(t_text, 2), "total_s": round(time.monotonic() - t0, 2)}})
+        self._sse(p, slug, messages, cid, seed, t0)
+
+    def _sse(self, p: Project, slug: str, messages: list[dict], cid: str, seed: int, t0: float) -> None:
+        """Le flux : le texte au fil de l'eau (`delta`), chaque morceau dit
+        dès qu'il est prêt (`audio`), puis `done`. La voix travaille dans
+        un autre fil que la lecture du modèle : le texte n'attend pas."""
+        from . import voice, voice_chat
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        out_lock = threading.Lock()
+        timings: dict[str, float] = {}
+
+        def send(event: dict) -> None:
+            with out_lock:
+                self.wfile.write(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
+                self.wfile.flush()
+
+        chunks: queue.Queue[str | None] = queue.Queue()
+        audio: list[str] = []
+
+        def speak() -> None:
+            k = 0
+            while (piece := chunks.get()) is not None:
+                try:
+                    rel = voice.say(p, piece, seed + k, f"{cid}-{k:02d}")
+                except ChainError as exc:
+                    send({"type": "error", "message": str(exc)})
+                    rel = None
+                if rel:
+                    timings.setdefault("first_audio_s", round(time.monotonic() - t0, 2))
+                    audio.append(files_url(slug, rel))
+                    send({"type": "audio", "index": k, "text": piece, "url": audio[-1]})
+                k += 1
+
+        worker = threading.Thread(target=speak, daemon=True)
+        worker.start()
+        chunker = voice_chat.Chunker()
+        reply = ""
+        try:
+            for delta in voice_chat.stream(messages):
+                timings.setdefault("first_token_s", round(time.monotonic() - t0, 2))
+                reply += delta
+                send({"type": "delta", "text": delta})
+                for piece in chunker.feed(delta):
+                    chunks.put(piece)
+            for piece in chunker.flush():
+                chunks.put(piece)
+        except ChainError as exc:
+            send({"type": "error", "message": str(exc)})
+        finally:
+            chunks.put(None)
+            worker.join()
+        timings["total_s"] = round(time.monotonic() - t0, 2)
+        send({"type": "done", "reply": reply.strip(), "audio": audio, "timings": timings})
 
     def _upload(self) -> dict:
         from PIL import Image, UnidentifiedImageError
@@ -1171,12 +1406,24 @@ def _text_only(conversation) -> list[dict]:
     return out
 
 
-def serve(*, host: str = "0.0.0.0", port: int = PORT) -> None:
+def serve(*, host: str = "0.0.0.0", port: int = PORT, https_port: int | None = None) -> None:
     sys.stdout = _Router(sys.stdout)
     handler = type("StudioHandler", (Handler,), {"studio": Studio()})
     server = http.server.ThreadingHTTPServer((host, port), handler)
     server.daemon_threads = True
     print(f"studio : http://{host if host != '0.0.0.0' else '<cette machine>'}:{port}/")
+    if https_port:
+        # Le même studio en HTTPS (certificat auto-signé) : le micro de la
+        # conversation vocale n'est prêté qu'à une page en contexte sûr.
+        from .tls import server_context
+
+        secure = http.server.ThreadingHTTPServer((host, https_port), handler)
+        secure.daemon_threads = True
+        # Poignée de main dans le fil de la requête, pas dans celui qui accepte.
+        secure.socket = server_context().wrap_socket(secure.socket, server_side=True,
+                                                     do_handshake_on_connect=False)
+        threading.Thread(target=secure.serve_forever, name="studio-https", daemon=True).start()
+        print(f"  en HTTPS : https://<cette machine>:{https_port}/ (certificat auto-signé : l'accepter une fois)")
     print(f"  personnages : {config.projects_root()}")
     print(f"  modèle de texte : {llm_model()} ({memory.ollama_url()})")
     for url in memory.comfy_instances():

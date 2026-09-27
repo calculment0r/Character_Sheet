@@ -125,6 +125,7 @@ def studio_route(tmp: Path) -> None:
              subprocess.Popen([sys.executable, "-m", "factory", "studio", "--hote", "127.0.0.1", "--port", str(port)],
                               cwd=REPO, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)]
     base = f"http://127.0.0.1:{port}"
+    os.environ["FACTORY_VOICE_LOG"] = str(tmp / "voix-mesures.jsonl")
 
     def call(path: str, body=None, method: str | None = None, raw: bytes | None = None):
         data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
@@ -139,6 +140,8 @@ def studio_route(tmp: Path) -> None:
     def js(path: str, body=None, method: str | None = None):
         code, _, raw = call(path, body, method)
         return code, json.loads(raw or b"null")
+
+    js.base = base
 
     def run(slug: str, action: str, **params) -> dict:
         code, out = js(f"/api/characters/{slug}/actions/{action}", params)
@@ -303,6 +306,8 @@ def studio_route(tmp: Path) -> None:
               and all({"size", "mtime"} <= set(f) for f in listing["files"]) and refused == [404] * 3
               and cz == 200 and b"coulisses.js" in cz_html, f"{len(paths)} fichiers, refus {refused}")
 
+        voice_route(tmp, slug, js, call, run)
+
         _, models = js("/v1/models")
         _, reply = js("/v1/chat/completions", {"model": "local-model", "messages": [{"role": "user", "content": "x"}]})
         seen = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{llm_port}/__seen").read())
@@ -405,6 +410,193 @@ def autopilot_route(root: Path) -> None:
     check("autopilote : relancé par Cal, le mesh passe et le rig suit",
           out.get("autopilot") == "ville" and r["state"] == "done"
           and p.data["costumes"]["ville"]["rigs"][-1]["verdict"] == "accepted")
+
+
+def voice_route(tmp: Path, slug: str, js, call, run) -> None:
+    """L'étage Voix par l'API du studio, moteurs factices : audition,
+    verrou unique, prises mesurées, conversation écrite (entière et en
+    flux), et la conversation en direct par le service vocal factice si
+    FastAPI est là."""
+    import urllib.request
+
+    root = tmp / "studio" / slug
+    early = run(slug, "line", text="Tu n'as rien vu.")
+    design = run(slug, "voice_design", n=2, seed=7)
+    _, c = js(f"/api/characters/{slug}")
+    v = c["character"]["voice"]
+    side = json.loads((root / "voice" / "cand-001.json").read_text(encoding="utf-8"))
+    check("voix : pas de réplique sans voix verrouillée ; deux candidates décrites depuis la fiche, WAV et fiche à côté",
+          early["status"] == "error" and "verrouillée" in (early.get("error") or "")
+          and design["status"] == "done" and len(v["candidates"]) == 2 and v["description"]
+          and (root / "voice" / "cand-002.wav").read_bytes()[:4] == b"RIFF"
+          and side["seed"] == 7 and side["text"] and side["description"] == v["description"],
+          str(design.get("error") or v["description"]))
+
+    locked = run(slug, "voice_lock", candidate="2")
+    again = run(slug, "voice_lock", candidate="1")
+    card = (root / "voice" / "card.yaml").read_text(encoding="utf-8")
+    check("voix : verrouillée une seule fois, au format du Voice Lab (ref_neutral.wav/.txt, card.yaml, consentement)",
+          locked["status"] == "done" and again["status"] == "http" and "déjà verrouillée" in again["error"]["error"]["message"]
+          and (root / "voice" / "ref_neutral.wav").is_file() and (root / "voice" / "consentement.txt").is_file()
+          and (root / "voice" / "ref_neutral.txt").read_text(encoding="utf-8").strip() == side["text"].strip()
+          and "seed_figee: 8" in card and "langue: fr" in card, str(again))
+
+    line = run(slug, "line", text="Tu n'as rien vu, compris ?", takes=3)
+    _, c = js(f"/api/characters/{slug}")
+    ln = c["character"]["voice"]["lines"][-1]
+    kept = run(slug, "line_keep", line=ln["id"], take="2")
+    _, c = js(f"/api/characters/{slug}")
+    ln = c["character"]["voice"]["lines"][-1]
+    check("voix : réplique jouée, état de jeu écrit, les trois prises « jeu » les plus proches de la référence "
+          "gardées sur neuf essais au plus, plus une "
+          "prise « voix » clonée, une gardée",
+          line["status"] == "done" and ln["play_state"] and len(ln["takes"]) == 4 and ln["takes"][-1]["kind"] == "voix"
+          and 3 <= len(ln["attempts"]) <= 9
+          and sorted(ln["attempts"], reverse=True)[:3] == [t["similarity"] for t in ln["takes"][:3]]
+          and all(isinstance(t["similarity"], float) for t in ln["takes"])
+          and (root / ln["takes"][2]["file"]).is_file() and kept["status"] == "done" and ln["kept"] == ln["takes"][1]["file"],
+          str(line.get("error") or [t["similarity"] for t in ln["takes"]]))
+
+    code, reply = js(f"/api/characters/{slug}/chat", {"message": "Tu viens d'où ?",
+                                                     "history": [{"role": "user", "content": "salut"},
+                                                                 {"role": "assistant", "content": "salut."}]})
+    audio_code, ctype, wav = call(reply.get("audio") or "/x")
+    from factory.voice_engine import StubEngine
+
+    sim = StubEngine().similarity(wav, (root / "voice" / "ref_neutral.wav").read_bytes()) if audio_code == 200 else 0
+    check("voix : conversation écrite, réponse dite de la voix verrouillée (clone factice ≈ la référence)",
+          code == 200 and "Tu viens d'où" in reply["reply"] and audio_code == 200 and wav[:4] == b"RIFF" and sim > 0.9,
+          f"similarité {sim}")
+
+    req = urllib.request.Request(f"{js.base}/api/characters/{slug}/chat/stream", method="POST",
+                                 data=json.dumps({"message": "Et demain ?"}).encode(),
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=60) as res:
+        ctype = res.headers.get("Content-Type", "")
+        events = [json.loads(line[6:]) for line in res.read().decode("utf-8").splitlines() if line.startswith("data: ")]
+    kinds = [e["type"] for e in events]
+    done = events[-1] if events else {}
+    check("voix : conversation en flux — texte au fil de l'eau, morceaux dits dès qu'ils sont prêts, puis la fin",
+          ctype.startswith("text/event-stream") and "delta" in kinds and "audio" in kinds and kinds[-1] == "done"
+          and kinds.index("audio") < len(kinds) - 1 and done.get("audio") and done["timings"].get("first_audio_s") is not None,
+          f"{kinds.count('delta')} deltas, {kinds.count('audio')} morceaux")
+
+    _, cfg = js("/api/voice/config")
+    unl = run(slug, "voice_unlock")
+    relock = run(slug, "voice_lock", candidate="1")
+    _, c = js(f"/api/characters/{slug}")
+    stages = {s["id"]: s["state"] for s in c["summary"]["stages"]}
+    check("voix : configuration du direct dite (factice : indisponible, avec la raison), libérée puis reverrouillée",
+          cfg["engine"] == "stub" and cfg["available"] is False and cfg.get("reason") and cfg["ws_url"].startswith("ws")
+          and unl["status"] == "done" and relock["status"] == "done" and stages.get("voice") == "done"
+          and any((root / "voice" / "archive").glob("*-ref_neutral.wav")), str(cfg.get("reason")))
+
+    live_chat(tmp, js.base, slug)
+
+
+def live_chat(tmp: Path, studio: str, slug: str) -> None:
+    """La conversation en direct contre le service vocal factice : un tour
+    écrit, puis un tour « dit » (du bruit puis du silence) par la WebSocket."""
+    import asyncio
+    import importlib.util
+    import socket
+    import time
+    import urllib.request
+
+    if not all(importlib.util.find_spec(m) for m in ("fastapi", "uvicorn", "websockets")):
+        print("  (conversation en direct non vérifiée : fastapi, uvicorn ou websockets absents ici)")
+        return
+    import numpy as np
+    import websockets
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    env = {**os.environ, "FACTORY_VOICE_STUDIO_URL": studio, "PYTHONIOENCODING": "utf-8"}
+    proc = subprocess.Popen([sys.executable, "-m", "factory.voice_server", "--factice", "--port", str(port),
+                             "--https", "0", "--hote", "127.0.0.1"], cwd=REPO, env=env,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=1)
+                break
+            except OSError:
+                time.sleep(0.1)
+
+        async def talk():
+            seen, audio = [], 0
+            async with websockets.connect(f"ws://127.0.0.1:{port}/ws/chat?slug={slug}", max_size=None) as ws:
+                async def until(kind):
+                    nonlocal audio
+                    while True:
+                        m = await asyncio.wait_for(ws.recv(), 20)
+                        if isinstance(m, bytes):
+                            audio += len(m)
+                            continue
+                        m = json.loads(m)
+                        seen.append(m["type"])
+                        if m["type"] == kind:
+                            return m
+                await until("pret")
+                await ws.send(json.dumps({"type": "texte", "message": "Bonjour"}))
+                first = await until("fin")
+                await ws.send(json.dumps({"type": "micro", "on": True}))
+                await until("ecoute")
+                rng = np.random.default_rng(0)
+                speech = (rng.normal(0, 0.2, 24000) * 32767).astype("<i2")
+                for block in np.split(np.concatenate([speech, np.zeros(36000, "<i2")]), 30):
+                    await ws.send(block.tobytes())
+                turn = await until("tour")
+                second = await until("fin")
+            return seen, audio, first, turn, second
+
+        seen, audio, first, turn, second = asyncio.run(talk())
+        check("voix : conversation en direct (service factice) — tour écrit puis tour dit, réponse en PCM, mesures",
+              "audio" in seen and audio > 1000 and turn["source"] == "voix"
+              and first["mesures"].get("premier_son_ms") is not None and second["texte"],
+              f"{audio} octets de PCM, 1er son {first['mesures'].get('premier_son_ms')} ms")
+
+        async def push_to_talk():
+            # Le protocole de js/parler.js : des morceaux webm, puis {"type":"end"}.
+            async with websockets.connect(f"ws://127.0.0.1:{port}/ws/chat", max_size=None) as ws:
+                orphan = json.loads(await asyncio.wait_for(ws.recv(), 20))
+            got = []
+            async with websockets.connect(f"ws://127.0.0.1:{port}/ws/chat?slug={slug}", max_size=None) as ws:
+                await ws.send(b"\x1a\x45\xdf\xa3" + b"\0" * 400)
+                await ws.send(b"\0" * 400)
+                await ws.send(json.dumps({"type": "end"}))
+                while True:
+                    m = await asyncio.wait_for(ws.recv(), 20)
+                    got.append(m if isinstance(m, bytes) else json.loads(m))
+                    if isinstance(m, bytes):
+                        return orphan, got
+
+        orphan, got = asyncio.run(push_to_talk())
+        kinds = [g["type"] if isinstance(g, dict) else "wav" for g in got]
+        heard = next((g for g in got if isinstance(g, dict) and g["type"] == "transcript"), {})
+        check("voix : appuyer pour parler (protocole de js/parler.js) — transcription, réponse, WAV jouable ; "
+              "sans personnage, refus dit",
+              orphan["type"] == "erreur" and "slug" in orphan["message"] and heard.get("text")
+              and kinds[-2:] == ["reply", "wav"] and got[-1][:4] == b"RIFF", str(kinds))
+    finally:
+        proc.terminate()
+
+
+def speech_chunks() -> None:
+    from factory.voice_chat import Chunker, speakable
+
+    ch = Chunker()
+    text = ("Ouais, c'est ça. *il se gratte la nuque* Je sais pas trop, franchement, mais on peut essayer ce soir "
+            "si tu veux. (rire) Et après, on verra bien ce qui se passe, d'accord ?")
+    pieces = []
+    for word in text.split(" "):
+        pieces += ch.feed(word + " ")
+    pieces += ch.flush()
+    said = [speakable(p) for p in pieces]
+    check("voix : premier morceau court pour partir vite, la suite en phrases, didascalies jamais dites",
+          len(said) >= 2 and len(said[0]) <= 40 and not any("*" in s or "gratte" in s or "rire" in s for s in said)
+          and "".join(said).count("essayer") == 1, " | ".join(said))
 
 
 def orbit_selection() -> None:
@@ -618,7 +810,7 @@ def native_template() -> None:
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="usine-check-"))
     os.environ["FACTORY_PROJECTS"] = str(tmp)
-    for cap in ("H3", "PORTRAIT", "BRIEF", "TRELLIS", "HUNYUAN3D", "UNIRIG", "KIMODO", "SAM3DBODY"):
+    for cap in ("H3", "PORTRAIT", "BRIEF", "TRELLIS", "HUNYUAN3D", "UNIRIG", "KIMODO", "SAM3DBODY", "VOICE"):
         os.environ[f"FACTORY_{cap}"] = "stub"
     os.environ["FACTORY_PREP"] = "builtin"
     os.environ["FACTORY_DELIGHT"] = "off"
@@ -792,6 +984,7 @@ def main() -> int:
     unirig_to_soma()
     remote_local()
     qwen_views()
+    speech_chunks()
 
     failed = [r for r in results if not r[1]]
     print(f"\n{len(results) - len(failed)}/{len(results)} vérifications passées\n")

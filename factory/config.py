@@ -34,6 +34,8 @@ CAPABILITIES = {
     "unirig":    ("stub", "python"),
     "kimodo":    ("stub", "python"),
     "sam3dbody": ("stub", "python"),
+    # la voix : le service vocal (voice_server.py, DGX1 par défaut) ou le factice
+    "voice":     ("stub", "remote"),
 }
 
 # H3 tourne déjà dans ComfyUI sur la machine (confirmé par Cal) : c'est
@@ -43,7 +45,8 @@ CAPABILITIES = {
 # factices tant que `./usine doctor` n'a pas trouvé leur modèle.
 DEFAULTS = {"h3": "comfyui", "portrait": "comfyui", "brief": "ollama", "prep": "comfyui", "delight": "off",
             "trellis": "stub",
-            "hunyuan3d": "stub", "unirig": "stub", "kimodo": "stub", "sam3dbody": "stub"}
+            "hunyuan3d": "stub", "unirig": "stub", "kimodo": "stub", "sam3dbody": "stub",
+            "voice": "stub"}
 
 _override: dict[str, str] = {}
 

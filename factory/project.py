@@ -103,6 +103,7 @@ class Project:
                     raise ChainError(f"{manifest} n'est pas un manifeste de la Factory")
                 for cos in data.get("costumes", {}).values():
                     apose(cos)
+                voice(data)
                 return cls(folder.resolve(), data)
         raise ChainError(f"aucun personnage « {ref} » — `./usine nouveau` pour en créer un, "
                          f"`./usine liste` pour voir ceux qui existent")
@@ -298,6 +299,21 @@ class Project:
 
     def next_id(self, prefix: str, existing: list[dict]) -> str:
         return f"{prefix}{len(existing) + 1:03d}"
+
+
+VOICE_DEFAULT = (("description", ""), ("description_fr", ""), ("register", ""), ("candidates", list),
+                 ("locked", None), ("locked_text", None), ("locked_at", None), ("locked_from", None),
+                 ("locked_seed", None), ("lines", list))
+
+
+def voice(data: dict) -> dict:
+    """L'état Voix d'un personnage (absent des manifestes d'avant le 27/09) :
+    voir `voice.py`."""
+    v = data.setdefault("voice", {})
+    for k, default in VOICE_DEFAULT:
+        if k not in v:
+            v[k] = default() if callable(default) else default
+    return v
 
 
 def apose(cos: dict) -> dict:
