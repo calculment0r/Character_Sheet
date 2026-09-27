@@ -11,6 +11,7 @@ Le serveur tourne sur la machine qui calcule (DGX2), sur le réseau
 local, sans rien d'autre que la bibliothèque standard :
 
   /                            studio.html (accueil ; #/p/<slug> : un personnage)
+  /coulisses.html#/<slug>      les coulisses : tout ce que la chaîne a produit, pour Cal
   /v1/models, /v1/chat/completions
                                relais vers le modèle de texte d'Ollama
                                (`llm_url`, `llm_model`) : la console de
@@ -18,6 +19,7 @@ local, sans rien d'autre que la bibliothèque standard :
   /api/system                  mémoire, modèle de texte, ComfyUI, travail en cours
   /api/characters              GET la liste, POST une création
   /api/characters/<slug>       GET le détail ; PUT …/identity ; POST …/actions/<action>
+  /api/characters/<slug>/tree  GET les fichiers du dossier (chemin, taille, date), en lecture
   /api/uploads                 POST une image de référence (corps brut)
   /api/jobs[/<id>]             la file de travaux ; POST …/<id>/cancel
   /files/<slug>/<chemin>       les fichiers d'un personnage
@@ -35,6 +37,7 @@ import http.server
 import io
 import json
 import mimetypes
+import os
 import queue
 import re
 import sys
@@ -52,11 +55,12 @@ from .project import IDENTITY_SCHEMA, ChainError, Project, apose, list_projects,
 
 PORT = 8765
 STATIC_DIRS = ("js", "assets", "data", "docs/img", "etat")
-STATIC_PAGES = ("studio.html", "console.html", "viewer.html", "theme.html", "index.html")
+STATIC_PAGES = ("studio.html", "console.html", "viewer.html", "theme.html", "index.html", "coulisses.html")
 UPLOAD_NAME = re.compile(r"^[0-9a-f]{32}\.(png|jpg|webp)$")
 MAX_UPLOAD = 40 * 1024 * 1024
 SHEET_FIELDS = 22
 LOG_LINES = 400
+TREE_MAX = 5000
 
 mimetypes.add_type("text/javascript", ".js")
 mimetypes.add_type("text/javascript", ".mjs")
@@ -513,6 +517,42 @@ def summary(p: Project) -> dict:
     }
 
 
+def project_root(slug: str) -> Path | None:
+    """Le dossier d'un personnage, s'il en est un : jamais hors du
+    dossier des projets, jamais `.uploads`."""
+    if not slug or slug.startswith(".") or "/" in slug or "\\" in slug:
+        return None
+    root = (config.projects_root() / slug).resolve()
+    return root if (root / "project.json").is_file() else None
+
+
+def tree(root: Path) -> dict:
+    """Tous les fichiers d'un personnage, dossiers cachés compris (les
+    essais de SAM 3D Body, les détourages) : les coulisses les montrent.
+    Rien ne sort du dossier : les liens symboliques ne sont pas suivis."""
+    from datetime import datetime, timezone
+
+    files, truncated = [], False
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if not (Path(dirpath) / d).is_symlink())
+        for name in sorted(filenames):
+            path = Path(dirpath) / name
+            if path.is_symlink() or name.startswith(".project."):
+                continue
+            try:
+                st = path.stat()
+            except OSError:
+                continue
+            files.append({"path": path.relative_to(root).as_posix(), "size": st.st_size,
+                          "mtime": datetime.fromtimestamp(st.st_mtime, timezone.utc).isoformat(timespec="seconds")})
+            if len(files) >= TREE_MAX:
+                truncated = True
+                break
+        if truncated:
+            break
+    return {"files": files, "truncated": truncated}
+
+
 def backends() -> dict:
     return {cap: config.backend(cap) for cap in config.CAPABILITIES}
 
@@ -771,10 +811,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def _project_file(self, rest: str, versioned: bool = False) -> None:
         slug, _, rel = rest.partition("/")
-        root = (config.projects_root() / slug).resolve()
-        target = (root / rel).resolve()
-        if not slug or slug.startswith(".") or not (root / "project.json").is_file() \
-                or not target.is_relative_to(root):
+        root = project_root(slug)
+        target = (root / rel).resolve() if root else None
+        if target is None or not target.is_relative_to(root):
             return self._error(404, "introuvable")
         # Une URL versionnée (?v=<date>) ne change jamais de contenu.
         self._file(target, "max-age=31536000, immutable" if versioned else "no-cache")
@@ -839,6 +878,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._json({"character": p.data, "summary": summary(p), "busy": s.busy(slug),
                                    "face_engines": ENGINES,
                                    "backends": backends(), "view_methods": list(chain.VIEW_METHODS)})
+            if len(parts) == 3 and parts[2] == "tree" and method == "GET":
+                root = project_root(slug)
+                if root is None:
+                    return self._error(404, "personnage inconnu")
+                return self._json({"slug": slug, **tree(root)})
             if len(parts) == 3 and parts[2] == "identity" and method == "PUT":
                 return self._json(self._identity(slug))
             if len(parts) == 4 and parts[2] == "actions" and method == "POST":
