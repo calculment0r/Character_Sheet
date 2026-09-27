@@ -624,7 +624,8 @@ def mesh(p: Project, costume: str | None, *, engine: str | None = None, single_v
     out_dir = p.dir(f"costumes/{key}/mesh/v{version:03d}")
     views = {n: p.path(v["prepared"][n]["file"]) for n in ORTHO if n in v["prepared"]}
     res = mesh_mod.generate(engine, views=views, out_dir=out_dir, seed=_seed(seed), style=p.data["style"],
-                            single_view=single, texture=texture, height_m=height_m(p.sheet), report=report)
+                            single_view=single, texture=texture, height_m=height_m(p.sheet),
+                            albedo_views=albedo_views(p, key, v, report) if texture else None, report=report)
     entry = {"version": version, "engine": engine, "backend": res["backend"], "dir": p.rel(out_dir),
              "glb": p.rel(res["glb"]), "maps": {k: p.rel(path) for k, path in res["maps"].items()},
              "stats": res["stats"], "single_view": single_view,
@@ -632,6 +633,26 @@ def mesh(p: Project, costume: str | None, *, engine: str | None = None, single_v
     cos["meshes"].append(entry)
     p.save()
     return entry
+
+
+def albedo_views(p: Project, key: str, v: dict, report) -> dict:
+    """Les vues qui repeignent l'albedo du mesh : face et dos bruts, en
+    pleine résolution (le visage y fait ~180 px de haut, contre ~110 dans
+    la vue préparée), détourés, à leur azimut mesuré s'il l'a été. Les
+    profils n'y entrent pas : leurs bras ne sont pas ceux de la face."""
+    from .texproject import TRUSTED
+
+    out = {}
+    for n in TRUSTED:
+        if n not in v["raw"]:
+            continue
+        e = v["raw"][n]
+        report(0.02, f"détourage de la vue {n} pour l'albedo")
+        img = imaging.matte(imaging.load(p.path(e["file"])), config.backend("prep"),
+                            workdir=p.dir(f"costumes/{key}/views/.matte"))
+        measured = e.get("azimuth_measured")
+        out[n] = (img, float(measured if measured is not None else prompts.AZIMUTHS[n][0]))
+    return out
 
 
 def _contact(p: Project, rel: str, items: list[tuple[str, Path]], cell: int = 320, cols: int = 4) -> None:

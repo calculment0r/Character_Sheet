@@ -34,7 +34,11 @@ LICENSE_NOTE = {
 
 def generate(engine: str, *, views: dict[str, Path], out_dir: Path, seed: int, style: str = "photoreal",
              single_view: Path | None = None, texture: bool = True, height_m: float = 1.75,
+             albedo_views: dict[str, tuple[Image.Image, float]] | None = None,
              report=lambda p, m: None) -> dict:
+    """`albedo_views` : nom → (vue détourée en pleine résolution, azimut
+    mesuré). Si elles sont là, l'albedo du mesh est repris d'elles
+    (`texproject`) ; le GLB aux couleurs des voxels reste à côté."""
     if engine not in ENGINES:
         raise ValueError(f"moteur 3D inconnu : {engine} (possibles : {', '.join(ENGINES)})")
     backend = config.backend(ENGINES[engine])
@@ -61,6 +65,9 @@ def generate(engine: str, *, views: dict[str, Path], out_dir: Path, seed: int, s
         mesh_hunyuan.generate(views=views, single_view=single_view, dest=glb_path, seed=seed,
                               texture=texture, report=report)
 
+    if albedo_views and config.setting("mesh_albedo", "views") == "views":
+        extra["albedo"] = project_albedo(glb_path, albedo_views, out_dir, report=report)
+
     report(0.9, "canaux PBR")
     maps = extract_maps(glb_path, out_dir)
     stats = glb_stats(glb_path)
@@ -68,6 +75,25 @@ def generate(engine: str, *, views: dict[str, Path], out_dir: Path, seed: int, s
             "single_view": bool(single_view), "stats": stats, "maps": sorted(maps), **extra}
     (out_dir / "mesh.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"glb": glb_path, "maps": maps, "stats": stats, "backend": backend}
+
+
+def project_albedo(glb_path: Path, albedo_views: dict[str, tuple[Image.Image, float]], out_dir: Path,
+                   report=lambda p, m: None) -> dict:
+    """Repeint l'albedo depuis les vues ; garde `model_voxels.glb` et les
+    vues détourées utilisées, pour comparer et refaire."""
+    from . import texproject
+
+    keep = out_dir / "model_voxels.glb"
+    glb_path.replace(keep)
+    folder = out_dir / "albedo_views"
+    folder.mkdir(exist_ok=True)
+    views = []
+    for name, (img, azimuth) in albedo_views.items():
+        img.save(folder / f"{name}.png")
+        views.append(texproject.View(name, img, azimuth, trusted=name in texproject.TRUSTED))
+    report(0.82, f"albedo repris des vues {', '.join(albedo_views)}")
+    return texproject.project_views(keep, glb_path, views,
+                                    report=lambda p, m: report(0.82 + 0.07 * p, m))
 
 
 def _stub(dest: Path, *, seed: int) -> None:

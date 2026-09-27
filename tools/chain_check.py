@@ -606,6 +606,19 @@ def main() -> int:
           [m["engine"] for m in meshes] == ["trellis2", "hunyuan3d-2.1"] and meshes[1]["parent_version"] == 1)
     check("canaux PBR rangés à part",
           all((v1 / f"{c}.png").exists() for c in ("albedo", "metallic", "roughness", "normal")))
+    albedo = json.loads((v1 / "mesh.json").read_text(encoding="utf-8")).get("albedo") or {}
+    check("albedo repris de la face et du dos, couleurs des voxels gardées à côté",
+          (v1 / "model_voxels.glb").exists() and set(albedo.get("fit_iou", {})) == {"front", "back"}
+          and albedo.get("from_views", 0) > 0.1, json.dumps(albedo.get("fit_iou")) + f" · {albedo.get('from_views')}")
+    from factory import comfy as comfy_mod, mesh_comfy
+    tpl = comfy_mod.load_template("trellis2_mv.json")
+    wf = mesh_comfy.keep_views(comfy_mod.fill(tpl, {"seed": 1, "faces": 50000}, ["f.png", "b.png"]), ("front", "back"))
+    pix = next(n for n in wf.values() if n["class_type"] == "Pixal3DMultiViewConditioning")
+    loads = sorted(n["inputs"]["image"] for n in wf.values() if n["class_type"] == "LoadImage")
+    check("mesh ComfyUI : face et dos seuls, sans nœud orphelin",
+          sorted(k for k in ("front", "left", "back", "right") if k in pix["inputs"]) == ["back", "front"]
+          and loads == ["b.png", "f.png"]
+          and sum(n["class_type"] == "RemoveBackground" for n in wf.values()) == 2, f"{len(wf)} nœuds")
 
     usine("rig", "test-pilote", "--pose", "tpose", expect=2)
     check("bind en T-pose refusé", True)
