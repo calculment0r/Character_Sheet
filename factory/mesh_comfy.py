@@ -33,6 +33,12 @@ from .project import ChainError
 # Pixal3D ni MoGe).
 TEMPLATES = {"trellis2": ("trellis", "trellis2_mv.json", "trellis2_single.json")}
 ORDER = ("front", "left", "back", "right")
+# La décimation, automatique : le gabarit de ComfyUI gardait 700 000 faces
+# (691 000 sur le premier mesh réel, 27/09) — dix fois trop pour un
+# personnage qu'on rigge et qu'on anime. Le détail fin passe par la carte
+# de normales, cuite depuis le mesh dense, et la couleur par le mesh de
+# référence avant décimation. Réglage `mesh_faces`.
+FACES = 50_000
 
 
 def generate(engine: str, *, views: dict[str, Path], single_view: Path | None, dest: Path, seed: int,
@@ -50,7 +56,8 @@ def generate(engine: str, *, views: dict[str, Path], single_view: Path | None, d
             raise ChainError(f"vues préparées manquantes pour le multi-vues : {', '.join(missing)}")
         report(0.05, f"envoi des quatre vues à {comfy.url}")
         name, refs = multi, [comfy.upload(Path(views[k])) for k in ORDER]
-    wf = fill(load_template(name), {"seed": seed}, refs)
+    faces = int(config.setting("mesh_faces", str(FACES)))
+    wf = fill(load_template(name), {"seed": seed, "faces": faces}, refs)
     work = dest.parent / ".comfy"
     paths = [p for p in comfy.run(wf, work, report=report, prefix="trellis2") if p.suffix.lower() == ".glb"]
     if not paths:

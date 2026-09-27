@@ -350,7 +350,7 @@
  },
  "186": {
   "inputs": {
-   "target_face_count": 700000,
+   "target_face_count": "{{faces}}",
    "placement_mode": "midpoint",
    "mesh": [
     "241",
