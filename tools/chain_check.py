@@ -256,6 +256,17 @@ def studio_route(tmp: Path) -> None:
                   encoding="utf-8"))["prompt"],
               f"{len(kc['face']['candidates'])} propositions, tenues {list(kc['costumes'])}")
 
+        # « Autour de celui-ci » avec une puce de direction : la page envoie une
+        # clé, le studio y met la phrase ; une clé inconnue ne change rien.
+        older = run(kid, "face", around=1, variants=1, direction="older")
+        odd = run(kid, "face", around=1, variants=1, direction="n'importe quoi")
+        _, k = js(f"/api/characters/{kid}")
+        descs = [c["desc"] for c in k["character"]["face"]["candidates"]]
+        check("studio : autour d'un visage, la direction choisie s'ajoute à sa description, une inconnue est ignorée",
+              older["status"] == "done" and odd["status"] == "done"
+              and descs[-2] == f"{descs[0]}, noticeably older, with the marks of age on the face" and descs[-1] == descs[0],
+              str(descs[-2:]))
+
         buf = io.BytesIO()
         Image.new("RGB", (64, 96), (120, 90, 60)).save(buf, "PNG")
         code, _, raw = call("/api/uploads", raw=buf.getvalue())
@@ -282,6 +293,11 @@ def studio_route(tmp: Path) -> None:
               not failed and bad == 409 and len(cos["refs"]) == 1 and cos["apose"]["validated"]
               and all(stages[k] == "done" for k in ("face", "costumes", "fullbody", "pose", "sheet", "views", "mesh", "rig"))
               and detail["summary"]["next"] is None, str(failed or stages))
+        _, listing = js("/api/characters")
+        ilse = next(c for c in listing["characters"] if c["slug"] == slug)
+        check("studio : l'affiche du casting est le plein pied validé, sans voix ni question en attente",
+              ilse["poster"] == f"/files/{slug}/costumes/voyage/fullbody.png" and ilse["voice"] is None
+              and ilse["attention"] == 0, str({k: ilse.get(k) for k in ("poster", "voice", "attention")}))
 
         code, ctype, img = call(f"/files/{slug}/{detail['character']['face']['locked']}")
         outside = [call(p)[0] for p in (f"/files/{slug}/../../identite.json", "/factory.local.json",

@@ -22,6 +22,7 @@
   --or:      #e0674a;   /* orange — l'action, la voie B, l'alerte */
   --grn:     #2f6b4a;   /* vert sourd — l'état engagé */
   --grn2:    #3d8a60;   /* vert clair — la progression */
+  --amb:     #d6a24a;   /* ambre — ce qui attend Cal, jamais une action */
 
   /* rampe des barres de la console — du plus clair au plus sourd,
      comme la pile de logiciels du banc NL */
@@ -37,9 +38,13 @@
   --line-cy: rgba(185, 207, 216, .45);
   --line-or: rgba(224, 103, 74, .70);
   --line-gr: rgba(47, 107, 74, .85);
+  --line-amb: rgba(214, 162, 74, .55);
+  --amb-bg:  rgba(214, 162, 74, .08);
 
   /* voile posé sur une image, sous une étiquette */
   --veil:    rgba(10, 13, 11, .82);
+  --veil-0:  rgba(10, 13, 11, 0);     /* départ transparent d'un dégradé de voile */
+  --scrim:   rgba(4, 6, 5, .78);
 
   /* encres inversées, posées sur un aplat d'accent */
   --on-or:   #170c08;

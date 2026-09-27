@@ -1,15 +1,25 @@
 'use strict';
 
 import { SHEET_FIELDS } from './schema.js';
+import { talk, voiceConfig, micBlocker, Micro } from './parler.js';
 
 /* ============================================================
    Le studio.
-   L'accueil montre les personnages en cartes ; #/p/<slug> ouvre
-   un personnage, un bloc par étage, dans l'ordre de la chaîne.
-   Tout ce qui calcule part dans la file du serveur (un travail
-   à la fois sur DGX2) ; la page relève la file et se redessine
-   quand un travail finit. Les choix (verrouiller, valider) se
-   jouent tout de suite.
+
+     #/                     le casting : les personnages en affiches
+     #/p/<slug>             un personnage — sa naissance tant qu'il n'est
+                            pas décrit, puis le volet où il attend un choix
+     #/p/<slug>/<volet>     identite · visage · garde-robe · voix · planche
+     #/p/<slug>/scene       lui parler
+
+   On ne tranche ici que le goût : le visage, la tenue, la voix. La
+   technique (A-pose, vues, 3D, rig) tourne en arrière-plan ; elle ne
+   se montre que par une puce qui mène aux coulisses. Aucun nom de
+   modèle, aucune graine, aucune méthode dans le parcours.
+
+   Tout ce qui calcule part dans la file du serveur, un travail à la
+   fois ; la page relève la file et se redessine quand le personnage
+   change. Un seul bouton orange par écran : la question du moment.
    ============================================================ */
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -17,50 +27,70 @@ const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
-const pad = (n) => String(n).padStart(2, '0');
 const base = (rel) => String(rel || '').split('/').pop();
+const enc = encodeURIComponent;
 
 const state = {
-  route: { view: 'home' },
+  route: { view: 'home' },   // home | perso { slug, tab }
   list: null,
-  detail: null,          // { character, summary, busy, backends, view_methods }
-  costume: undefined,    // costume affiché ; null = onglet « + Costume »
+  attention: null,           // GET /api/attention, null si le studio ne la sert pas
+  detail: null,              // { character, summary, busy, backends }
   jobs: [],
-  seen: new Set(),       // travaux finis déjà pris en compte
-  drafts: {},            // valeurs saisies, par champ
-  refs: {},              // images déposées, par formulaire : [{ id, url, name }]
-  openLogs: new Set(),
-  fullLogs: {},
-  pending: false,        // un rendu attend que le champ actif perde le focus
-  stage: null,           // étape affichée ; null = celle où en est le personnage
+  seen: new Set(),           // travaux finis déjà annoncés
+  drafts: {},                // valeurs saisies, par champ
+  refs: {},                  // images déposées, par formulaire : [{ id, url, name }]
+  pick: {},                  // le candidat choisi, par décision : face, fb:<tenue>, voice
+  costume: undefined,        // tenue affichée ; null = nouvelle tenue
+  fbAgain: false,            // revoir les pleins pieds d'une tenue déjà choisie
+  pending: false,            // un rendu attend que le champ actif perde le focus
   renaming: false,
-  editField: null,       // champ de la fiche en cours de correction
+  editField: null,
   sig: '',
+  voice: { config: null },   // GET /api/voice/config
+  missing: {},               // actions que le serveur ne connaît pas encore
+  scene: { mode: 'talk', busy: false, mic: null, micState: '' },
   system: null,
 };
 
-// Les choix ne prennent jamais l'orange : il y en a un par candidat.
-const PICKS = new Set(['face_lock', 'fullbody_ok', 'apose_ok', 'sheet_ok', 'rig_ok']);
-const ORTHO = ['front', 'left', 'back', 'right'];
-const VIEWS = [...ORTHO, 'threequarter'];
-const VIEW_LABEL = { front: 'face', left: 'profil gauche', back: 'dos', right: 'profil droit', threequarter: '3/4' };
-const METHOD_LABEL = {
-  'qwen21-pose': 'Qwen-Image 2.1 · squelette par vue',
-  orbit: 'H3 · orbite redécoupée',
-  per_view: 'H3 · une génération par vue',
-  'qwen21-orbit': 'Qwen-Image 2.1 · LoRA orbite',
-  'qwen-2511': 'Qwen-Image-Edit 2511 · LoRA angles',
-  'qwen-2509': 'Qwen-Image-Edit 2509 · LoRA angles',
+const TABS = [
+  ['identite', 'Identité'], ['visage', 'Visage'], ['garde-robe', 'Garde-robe'], ['voix', 'Voix'], ['planche', 'Planche'],
+];
+const TAB_IDS = new Set(TABS.map(([id]) => id));
+
+// Ce que fait l'arrière-plan, dit simplement pour la puce de l'atelier.
+const BACKGROUND = {
+  apose: 'pose', apose_ok: 'pose', views: 'vues', prep: 'vues', check: 'vues',
+  mesh: '3D', rig: 'rig', rig_ok: 'rig', sheet: 'planche',
 };
-const NEXT_TEXT = {
-  face: 'suite : variantes du visage', face_lock: 'suite : verrouiller un visage',
-  costume_add: 'suite : un costume', fullbody: 'suite : plein pied', fullbody_ok: 'suite : valider un plein pied',
-  apose: 'suite : A-pose', apose_ok: 'suite : valider une A-pose', sheet: 'suite : planche',
-  sheet_ok: 'suite : valider une planche', views: 'suite : vues orthogonales',
-  prep: 'suite : préparer les vues', check: "suite : contrôle d'alignement", mesh: 'suite : mesh 3D',
-  rig: 'suite : rig', rig_ok: 'suite : regarder le rig',
+// Ce que fait un travail, pour la pastille d'en-tête et les annonces.
+const HUMAN = {
+  face: 'ses visages', fullbody: 'sa tenue', voice_design: 'ses voix', line: 'une réplique',
+  presentation: 'sa planche', apose: 'sa pose', views: 'ses vues', prep: 'ses vues', check: 'ses vues',
+  mesh: 'sa 3D', rig: 'son squelette', sheet: 'une planche',
 };
-const JOB_STATE = { queued: 'en file', running: 'en cours', done: 'fini', error: 'échec', cancelled: 'annulé' };
+const DONE_TEXT = {
+  face: 'ses visages sont arrivés', fullbody: 'ses pleins pieds sont arrivés', voice_design: 'ses voix sont prêtes',
+  line: 'la réplique est dite', presentation: 'sa planche est composée',
+};
+const VOICE_ACTIONS = new Set(['voice_design', 'voice_lock', 'voice_unlock', 'line', 'line_keep']);
+
+const DIRECTIONS = [
+  ['older', 'plus âgé'], ['younger', 'plus jeune'], ['harder', 'plus dur'], ['softer', 'plus doux'],
+  ['hair', 'autre coiffure'], ['smile', 'plus ouvert'],
+];
+const TRAITS = ['audacieux', 'discret', 'loyal', 'impulsif', 'méfiant', 'chaleureux', 'ironique', 'calme', 'têtu',
+  'curieux', 'protecteur', 'rêveur', 'rancunier', 'drôle', 'solitaire', 'généreux'];
+const FIELD_FR = {
+  alias: 'surnom', gender: 'genre', age: 'âge', height: 'taille', body_type: 'silhouette', ethnicity: 'origine',
+  face_description: 'visage', role: 'rôle', archetype: 'archétype', personality_traits: 'traits',
+  core_theme: 'ce qui le travaille', emotional_range: 'émotions', behavior_notes: 'comportement',
+  speech_style: 'façon de parler',
+};
+const SUGGEST = ['Qui es-tu ?', 'Qu\'est-ce qui te met en colère ?', 'Raconte-moi ta journée.'];
+// La planche en attente : autant de cases que la recette en prévoit.
+const PLANCHE_ROWS = [
+  ['expressions', 'Expressions', 6, 'sq'], ['poses', 'Poses naturelles', 5, 'tall'], ['details', 'Détails', 4, 'sq'],
+];
 
 /* ── réseau ─────────────────────────────────────────────── */
 
@@ -74,23 +104,33 @@ async function api(path, { method = 'GET', body, raw } = {}) {
   const res = await fetch(path, init);
   let json = null;
   try { json = await res.json(); } catch (_) { /* corps vide */ }
-  if (!res.ok) throw new Error(json?.error?.message || `${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    const err = new Error(json?.error?.message || `${res.status} ${res.statusText}`);
+    err.status = res.status;
+    throw err;
+  }
   return json;
 }
 
+// Une action que ce serveur ne connaît pas encore : on le dit, sans erreur.
+const unknown = (e) => e.status === 404 || (e.status === 409 && /action inconnue/.test(e.message));
+
 function fileUrl(slug, rel, version) {
   if (!rel) return '';
-  const path = `/files/${encodeURIComponent(slug)}/${rel.split('/').map(encodeURIComponent).join('/')}`;
-  return version ? `${path}?v=${encodeURIComponent(version)}` : path;
+  const path = `/files/${enc(slug)}/${String(rel).split('/').map(enc).join('/')}`;
+  return version ? `${path}?v=${enc(version)}` : path;
 }
 
+// Un chemin rendu par le serveur : déjà une URL, ou relatif au personnage.
+const anyUrl = (slug, v) => (!v ? '' : /^(\/|https?:|data:|blob:)/.test(v) ? v : fileUrl(slug, v));
+
 const slug = () => state.route.slug;
-const actionUrl = (action) => `/api/characters/${encodeURIComponent(slug())}/actions/${action}`;
+const actionUrl = (action, s = slug()) => `/api/characters/${enc(s)}/actions/${action}`;
 
 /* ── petits morceaux ────────────────────────────────────── */
 
 let toastTimer = null;
-function toast(msg, ms = 2800) {
+function toast(msg, ms = 3200) {
   const t = $('#toast');
   t.textContent = msg;
   t.classList.add('on');
@@ -98,52 +138,55 @@ function toast(msg, ms = 2800) {
   toastTimer = setTimeout(() => t.classList.remove('on'), ms);
 }
 
-function when(at) {
-  if (!at) return '—';
+function day(at) {
   const d = new Date(at);
-  return Number.isNaN(d.getTime()) ? at : d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
-}
-
-function size(v) {
-  if (v == null) return '—';
-  const parts = (Array.isArray(v) ? v : [v]).map((x) => Number(x).toFixed(2).replace('.', ','));
-  return `${parts.join(' × ')} m`;
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
 }
 
 function initials(name) {
   return String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
-function ticks(stages) {
-  return `<div class="ticks">${stages.map((s) =>
-    `<i class="${s.state}" title="${esc(`${s.ref} ${s.label}`)}"></i>`).join('')}</div>`;
-}
-
 function draft(key, fallback = '') {
   return key in state.drafts ? state.drafts[key] : fallback;
 }
 
-function textarea(key, fallback, placeholder, rows = 3) {
-  return `<textarea class="fld" rows="${rows}" data-draft="${esc(key)}" placeholder="${esc(placeholder)}">${
+function textarea(key, fallback, placeholder, rows = 3, cls = '') {
+  return `<textarea class="fld ${cls}" rows="${rows}" data-draft="${esc(key)}" placeholder="${esc(placeholder)}">${
     esc(draft(key, fallback))}</textarea>`;
 }
 
-function input(key, label, { fallback = '', placeholder = '', cls = '', grow = false } = {}) {
-  return `<label class="field${grow ? ' grow' : ''}"><span class="lbl">${esc(label)}</span>
-    <input class="fld ${cls}" data-draft="${esc(key)}" value="${esc(draft(key, fallback))}"
-           placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false"></label>`;
+function input(key, fallback, placeholder, cls = '') {
+  return `<input class="fld ${cls}" data-draft="${esc(key)}" value="${esc(draft(key, fallback))}"
+    placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false">`;
 }
 
-function select(key, label, options, fallback) {
-  const cur = String(draft(key, fallback));
-  return `<label class="field"><span class="lbl">${esc(label)}</span><select class="fld" data-draft="${esc(key)}">${
-    options.map(([v, text]) => `<option value="${esc(v)}"${String(v) === cur ? ' selected' : ''}>${esc(text)}</option>`)
-      .join('')}</select></label>`;
+/* Un bouton. `go` le rend orange — une fois par écran au plus : le
+   second demandé reste fantôme. Grisé, il dit pourquoi à côté. */
+let goUsed = false;
+function btn(label, { act, params, form, costume, confirm, go = false, sm = false, block = false, disabled = false,
+  why = '', attrs = '', type = 'button' } = {}) {
+  const orange = go && !goUsed;
+  if (orange) goUsed = true;
+  const a = [
+    act ? `data-act="${act}"` : '',
+    params ? `data-params="${esc(JSON.stringify(params))}"` : '',
+    form ? `data-form="${esc(form)}"` : '',
+    costume ? `data-costume="${esc(costume)}"` : '',
+    confirm ? `data-confirm="${esc(confirm)}"` : '',
+    disabled ? 'disabled' : '',
+    why && disabled ? `title="${esc(why)}"` : '',
+    attrs,
+  ].filter(Boolean).join(' ');
+  const cls = `tb ${orange ? 'go' : 'ghost'}${sm ? ' sm' : ''}${block ? ' block' : ''}`;
+  const b = `<button type="${type}" class="${cls}" ${a}>${esc(label)}</button>`;
+  return why && disabled ? `<span class="why">${esc(why)}</span>${b}` : b;
 }
 
-function check(key, label, fallback = false) {
-  return `<label class="check"><input type="checkbox" data-draft="${esc(key)}"${
-    draft(key, fallback) ? ' checked' : ''}>${esc(label)}</label>`;
+function link(label, href, { go = false, sm = false, cls = '' } = {}) {
+  const orange = go && !goUsed;
+  if (orange) goUsed = true;
+  return `<a class="tb ${orange ? 'go' : 'ghost'}${sm ? ' sm' : ''} ${cls}" href="${esc(href)}">${esc(label)}</a>`;
 }
 
 function refsZone(form, what) {
@@ -155,622 +198,928 @@ function refsZone(form, what) {
       <input type="file" accept="image/*" multiple data-refs="${esc(form)}"></label></div>`;
 }
 
-function activeJob(action, costume) {
-  return state.jobs.find((j) => (j.status === 'queued' || j.status === 'running') && j.action === action &&
-    (!costume || (j.params.costume || null) === costume));
+const live = (j) => j.status === 'queued' || j.status === 'running';
+
+function liveJob(action, costume) {
+  return state.jobs.find((j) => live(j) && j.action === action && (!costume || (j.params?.costume || null) === costume));
 }
 
-/* Le bouton d'une action. Il prend l'orange s'il porte l'étape
-   suivante de la chaîne — un seul par écran. */
-// Un bouton qui porte l'étape suivante sous un autre nom.
-const GO_AS = { costume_go: ['costume_add', 'fullbody'] };
-
-function act(action, label, { costume, form, params, confirm: ask, disabled = false, block = false, small = false } = {}) {
-  const next = state.detail?.summary.next;
-  const goes = GO_AS[action] || [action];
-  const go = !small && next && goes.includes(next.action) && !PICKS.has(action)
-    && (!next.costume || next.costume === costume || action === 'costume_go');
-  const running = activeJob(action, costume);
-  const attrs = [
-    `data-act="${action}"`,
-    costume ? `data-costume="${esc(costume)}"` : '',
-    form ? `data-form="${esc(form)}"` : '',
-    params ? `data-params="${esc(JSON.stringify(params))}"` : '',
-    ask ? `data-confirm="${esc(ask)}"` : '',
-    disabled || (running && !small) ? 'disabled' : '',
-  ].filter(Boolean).join(' ');
-  const cls = `tb ${go ? 'go' : 'ghost'}${block ? ' block' : ''}${PICKS.has(action) || small ? ' sm' : ''}`;
-  const busy = running && !small ? `${running.status === 'queued' ? 'en file' : 'en cours'}…` : label;
-  return `<button class="${cls}" ${attrs}>${esc(busy)}</button>`;
+function lastJob(action, costume) {
+  return state.jobs.find((j) => !live(j) && j.action === action && (!costume || (j.params?.costume || null) === costume));
 }
 
-function box({ sec, title, st, stLabel, body, next = false, wait = false }) {
-  return `<section class="box${next ? ' next' : ''}${wait ? ' wait' : ''}">
-    <div class="box-head"><span class="sec">${sec}</span><h2>${esc(title)}</h2>
-      <span class="state ${st}">${esc(stLabel)}</span></div>
-    <div class="box-body">${body}</div></section>`;
+const tabHref = (tab, s = slug()) => `#/p/${enc(s)}${tab ? `/${tab}` : ''}`;
+
+/* Le lot du moment : les candidats du travail en cours (ou du dernier),
+   les précédents dans la bande d'historique. */
+function lot(cands, action, costume) {
+  const job = liveJob(action, costume);
+  const done = lastJob(action, costume);
+  let current = [];
+  if (job) current = job.started ? cands.filter((x) => x.at >= job.started) : [];
+  else if (done?.started && done.status === 'done') {
+    current = cands.filter((x) => x.at >= done.started && (!done.ended || x.at <= done.ended));
+  }
+  if (!job && !current.length) current = cands.slice(-4);
+  const older = cands.filter((x) => !current.includes(x)).reverse();
+  const want = Number(job?.params?.variants || job?.params?.n) || 4;
+  return { current, older, job, expected: job ? Math.max(want, current.length) : current.length };
 }
 
-function isNext(...actions) {
-  const next = state.detail?.summary.next;
-  return !!next && actions.includes(next.action) && (!next.costume || next.costume === state.costume);
+/* Une case qui attend son image : la planche qui se remplit. */
+function slot(job, i, arrived, expected, cls = '') {
+  const running = job?.status === 'running';
+  const first = running && i === arrived;
+  const pr = running ? Math.max(0, Math.min(1, (job.progress || 0) * expected - i)) : 0;
+  return `<div class="prop slot ${cls}${first ? ' on' : ''}"><span class="slot-in">
+    <span class="lbl">${first ? 'en cours' : running ? 'ensuite' : 'en file'}</span>
+    ${first ? `<span class="slot-bar"><i style="width:${Math.round(pr * 100)}%"></i></span>` : ''}</span></div>`;
 }
 
-function cand({ src, label, cap, mark = '', markCls = '', button = '', sel = false, off = false }) {
-  return `<div class="cand${sel ? ' sel' : ''}${off ? ' off' : ''}">
-    <img src="${esc(src)}" alt="" loading="lazy" data-zoom="${esc(src)}" data-cap="${esc(cap || label)}">
-    ${mark ? `<span class="mark ${markCls}">${esc(mark)}</span>` : ''}
-    <div class="cap"><span class="lbl">${esc(label)}</span>${button}</div></div>`;
+function prop({ kind, n, src, cap, sel, cls = '' }) {
+  return `<div class="prop ${cls}${sel ? ' sel' : ''}" data-pick="${esc(kind)}" data-val="${n}" tabindex="0"
+      role="button" aria-pressed="${sel}" title="choisir le n° ${n}">
+    <img src="${esc(src)}" alt="proposition n° ${n}" loading="lazy">
+    <span class="prop-n">n° ${n}</span>
+    ${sel ? '<span class="prop-mark">choisi</span>' : ''}
+    <button class="prop-zoom" data-zoom="${esc(src)}" data-cap="${esc(cap)}" title="agrandir" aria-label="agrandir">+</button>
+  </div>`;
 }
 
-const stubMark = (e) => (e && e.backend === 'stub' ? ['factice', 'stub'] : ['', '']);
+function strip(kind, items, pickVal, srcOf, label = 'propositions précédentes') {
+  if (!items.length) return '';
+  return `<div class="strip-wrap"><span class="lbl">${esc(label)} · ${items.length}</span><div class="strip">${
+    items.map((x) => `<button class="strip-it${String(x.n) === String(pickVal) ? ' sel' : ''}" data-pick="${esc(kind)}"
+      data-val="${x.n}" title="n° ${x.n}"><img src="${esc(srcOf(x))}" alt="n° ${x.n}" loading="lazy"></button>`).join('')
+  }</div></div>`;
+}
 
-/* ── accueil ────────────────────────────────────────────── */
+function failure(job, retry = '') {
+  if (!job || job.status !== 'error') return '';
+  const msg = String(job.error || '').replace(/^refusé : /, '');
+  return `<div class="notice"><p><b>Le dernier rendu n'a pas abouti.</b> ${esc(msg.slice(0, 180))}</p>
+    ${retry}<a class="lbl" href="./coulisses.html#/${enc(job.slug)}">détails dans les coulisses</a></div>`;
+}
+
+/* ── le casting ─────────────────────────────────────────── */
+
+function waitsOnCasting(list) {
+  const out = [];
+  const global = Array.isArray(state.attention) ? state.attention : null;
+  for (const c of list) {
+    const href = `#/p/${enc(c.slug)}`;
+    const items = global ? global.filter((a) => a.slug === c.slug) : [];
+    items.forEach((a) => out.push({ c, href, amb: true, text: a.title || 'une question de l\'atelier' }));
+    if (!global && c.attention) {
+      out.push({ c, href, amb: true, text: `${c.attention} question${c.attention > 1 ? 's' : ''} de l'atelier` });
+    }
+    const next = c.next?.action;
+    if (next === 'face_lock') out.push({ c, href: `${href}/visage`, text: 'attend que tu choisisses son visage' });
+    else if (next === 'fullbody_ok') out.push({ c, href: `${href}/garde-robe`, text: 'attend que tu choisisses sa tenue' });
+    else if (next === 'face' && !c.thumb) out.push({ c, href, text: 'attend que tu dises qui il est' });
+  }
+  return out;
+}
 
 function renderHome() {
   const list = state.list?.characters || [];
+  const waits = waitsOnCasting(list);
+  // « Ce qui attend » ne se montre que s'il y a quelque chose : un panneau vide ne dit rien.
   return `
-  <div class="console-top">
-    <div class="hero">
-      <span class="ref">00_studio</span>
-      <h2 class="studio-title">Les personnages</h2>
-      <p>Un nom suffit pour commencer. Ensuite, on décrit ce qu'on veut voir — le visage, puis la tenue — et
-        la fiche se remplit toute seule à partir de là. Tout calcule sur DGX2, un rendu à la fois ; pendant ce
-        temps, on continue de travailler.</p>
-      <form data-form="create" class="create">
-        <input class="fld" name="name" placeholder="Nom du personnage" autocomplete="off" spellcheck="false">
-        <button class="tb go" type="submit">Créer ▸</button>
-      </form>
+  <section class="cast-top${waits.length ? '' : ' solo'}">
+    <div class="cast-hero">
+      <span class="kicker">casting</span>
+      <h1 class="cast-title">Les personnages</h1>
+      <p class="prose">Un nom pour commencer, une phrase pour dire qui il est. Son visage, sa voix et sa tenue viennent
+        ensuite, une question à la fois ; le reste se fait tout seul, pendant que tu travailles.</p>
     </div>
-    <div class="statcard">
-      <span class="ref">personnages</span>
-      <span class="n">${pad(list.length)}</span>
-      <span class="foot">${list.filter((c) => c.locked).length} visage(s) verrouillé(s)</span>
-      <span class="dots"></span>
+    ${waits.length ? `<aside class="waits-panel">
+      <div class="panel-head"><h2>Ce qui attend</h2><span class="lbl">${waits.length}</span></div>
+      <ul class="waits-list">${waits.slice(0, 6).map((w) => `<li><a class="wait-it${w.amb ? ' amb' : ''}"
+        href="${w.href}">${w.c.thumb ? `<img src="${esc(w.c.thumb)}" alt="">` : `<span class="ph">${esc(initials(w.c.name))}</span>`}
+        <span><b>${esc(w.c.name)}</b> ${esc(w.text)}</span></a></li>`).join('')}</ul>
+    </aside>` : ''}
+  </section>
+  <section class="posters">
+    <form class="poster new" data-form="create">
+      <span class="kicker">nouveau personnage</span>
+      <span class="new-q">Comment s'appelle-t-il ?</span>
+      <input class="fld" name="name" placeholder="un nom, même provisoire" autocomplete="off" spellcheck="false">
+      ${btn('Créer ▸', { go: true, type: 'submit' })}
+      <span class="hint">Le nom se change ensuite d'un clic.</span>
+    </form>
+    ${list.map(poster).join('')}
+  </section>`;
+}
+
+function castState(c) {
+  const next = c.next?.action;
+  if (!c.thumb) return ['à naître', ''];
+  if (next === 'face_lock') return ['visage à choisir', 'amb'];
+  if (next === 'costume_add' || next === 'fullbody') return ['à habiller', ''];
+  if (next === 'fullbody_ok') return ['tenue à choisir', 'amb'];
+  if (c.attention) return ['une question', 'amb'];
+  if (c.poster) return ['habillé', 'ok'];
+  return c.locked ? ['visage choisi', 'ok'] : ['', ''];
+}
+
+function poster(c) {
+  const [badge, bcls] = castState(c);
+  const img = c.thumb
+    ? `<img class="p1" src="${esc(c.thumb)}" alt="" loading="lazy">${c.poster ? `<img class="p2" src="${esc(c.poster)}" alt="" loading="lazy">` : ''}`
+    : `<span class="ph">${esc(initials(c.name))}</span>`;
+  const line = c.role || c.archetype || (c.thumb ? '' : 'à décrire');
+  return `<article class="poster">
+    <a class="poster-img" href="#/p/${enc(c.slug)}">${img}<span class="poster-veil"></span>
+      ${badge ? `<span class="poster-badge ${bcls}">${esc(badge)}</span>` : ''}
+      <span class="poster-name"><span class="nm">${esc(c.name)}</span>${line ? `<span class="line">${esc(line)}</span>` : ''}</span>
+    </a>
+    <div class="poster-acts">
+      ${c.voice ? `<button class="play" data-play="${esc(c.voice)}" title="écouter sa voix"><i></i><span>sa voix</span></button>`
+        : '<span class="lbl">pas encore de voix</span>'}
+      <span class="sp"></span>
+      ${c.locked ? `<a class="tb ghost sm" href="#/p/${enc(c.slug)}/scene">Parler</a>` : ''}
     </div>
-  </div>
-  ${list.length ? `<section class="sect">
-    <div class="sect-head"><h2>Personnages</h2><span class="cnt">${list.length} au studio</span></div>
-    <div class="cards">${list.map(card).join('')}</div>
-  </section>` : ''}`;
+  </article>`;
 }
 
-function card(c) {
-  const img = c.thumb ? `<img src="${esc(c.thumb)}" alt="" loading="lazy">` : `<span class="ph">${esc(initials(c.name))}</span>`;
-  const badge = c.locked ? '<span class="badge lock">visage verrouillé</span>' : c.thumb ? '<span class="badge">candidat</span>' : '';
-  return `<a class="card" href="#/p/${encodeURIComponent(c.slug)}">
-    <div class="card-img">${img}${badge}</div>
-    <div class="card-body">
-      <span class="ref">${esc(c.slug)} · ${esc(c.style)}</span>
-      <span class="nm">${esc(c.name)}</span>
-      <span class="role">${esc(c.role || c.archetype || '')}</span>
-      ${ticks(c.stages)}
-      <span class="sub">${esc(c.next ? NEXT_TEXT[c.next.action] || c.next.action : 'chaîne complète')}</span>
-    </div></a>`;
+/* ── un personnage ──────────────────────────────────────── */
+
+const voiceOf = (c) => (c.voice && typeof c.voice === 'object' ? c.voice : null);
+
+// La voix est-elle possible ? Le manifeste en a une, ou le studio sert sa configuration.
+function voicePossible(c) {
+  if (voiceOf(c)) return true;
+  if (state.missing.voice_design) return false;
+  return !!state.voice.config && !state.voice.config.missing;
 }
 
-/* ── un personnage : l'atelier ──────────────────────────── */
-
-const STAGES = [
-  { id: 'face', ref: '01', label: 'Visage' },
-  { id: 'costume', ref: '02', label: 'Costume' },
-  { id: 'pose', ref: '03', label: 'A-pose' },
-  { id: 'sheet', ref: '04', label: 'Planche' },
-  { id: 'views', ref: '05', label: 'Vues' },
-  { id: 'mesh', ref: '06', label: '3D' },
-  { id: 'rig', ref: '07', label: 'Rig' },
-];
-const STAGE_OF = {
-  face: 'face', face_lock: 'face', costume_add: 'costume', fullbody: 'costume', fullbody_ok: 'costume',
-  apose: 'pose', apose_ok: 'pose', sheet: 'sheet', sheet_ok: 'sheet', views: 'views', prep: 'views', check: 'views', mesh: 'mesh', rig: 'rig',
-  rig_ok: 'rig',
-};
-const ENGINE_LABEL = {
-  zimage: 'Z-Image Turbo · rapide, 8 s',
-  flux2: 'FLUX.2 dev · qualité, 75 s',
-  qwen21: 'Qwen-Image 2.1 · 40 s',
-  h3: 'H3 · pour normaliser une photo',
-};
-const TRAITS = ['audacieux', 'discret', 'loyal', 'impulsif', 'méfiant', 'chaleureux', 'ironique', 'calme', 'têtu',
-  'curieux', 'protecteur', 'rêveur', 'rancunier', 'drôle', 'solitaire', 'généreux'];
-// Les rendus H3 (~100 Go) : pendant eux, la mémoire manque au modèle de texte. Qwen-Image 2.1 tient à côté.
-function usesH3(run) {
-  const p = run.params || {};
-  return run.action === 'sheet' || (['face', 'fullbody'].includes(run.action) && p.engine === 'h3')
-    || (run.action === 'views' && ['per_view', 'orbit'].includes(p.method));
+function validatedCostume(c) {
+  const keys = Object.keys(c.costumes);
+  if (state.costume && c.costumes[state.costume]?.fullbody.validated) return state.costume;
+  return keys.find((k) => c.costumes[k].fullbody.validated) || null;
 }
 
-function costumeOf(c) {
-  return (state.costume && c.costumes[state.costume]) || Object.values(c.costumes)[0] || null;
-}
-
-function stageStates(c) {
-  const cos = costumeOf(c);
-  const v = cos?.views;
-  return {
-    face: c.face.locked ? 'done' : c.face.candidates.length ? 'partial' : 'open',
-    costume: cos?.fullbody.validated ? 'done' : cos ? 'partial' : 'open',
-    pose: !cos?.fullbody.validated ? 'locked' : cos.apose.validated ? 'done'
-      : cos.apose.candidates.length ? 'partial' : 'open',
-    sheet: !cos?.apose.validated ? 'locked' : cos.sheet ? 'done' : qwenSheets(cos).length ? 'partial' : 'open',
-    views: !cos?.apose.validated ? 'locked' : v.check?.ok ? 'done' : Object.keys(v.raw).length ? 'partial' : 'open',
-    mesh: !v || !Object.keys(v.prepared).length ? 'locked' : cos.meshes.length ? 'done' : 'open',
-    rig: !cos?.meshes.length ? 'locked' : cos.rigs.some((r) => r.verdict === 'accepted') ? 'done'
-      : cos.rigs.length ? 'partial' : 'open',
-  };
-}
-
-function currentStage(d, st) {
-  if (state.stage && st[state.stage] !== 'locked') return state.stage;
-  const next = d.summary.next;
-  return next ? STAGE_OF[next.action] || 'face' : 'rig';
-}
-
-function frise(st, cur) {
-  const label = { done: 'fait', partial: 'en cours', open: 'à faire', locked: 'attend' };
-  return `<nav class="frise">${STAGES.map((s) => `<button class="step ${st[s.id]}${s.id === cur ? ' cur' : ''}"
-    data-stage="${s.id}"${st[s.id] === 'locked' ? ' disabled' : ''}>
-    <span class="n">${s.ref}</span><span class="nm">${s.label}</span><span class="st">${label[st[s.id]]}</span></button>`)
-    .join('')}</nav>`;
+function currentTab(d) {
+  const t = state.route.tab;
+  if (t === 'scene' || TAB_IDS.has(t)) return t;
+  const c = d.character;
+  const f = c.face;
+  if (!f.locked && !f.candidates.length && !f.brief && !liveJob('face')) return 'naissance';
+  if (!f.locked) return 'visage';
+  const v = voiceOf(c);
+  if (voicePossible(c) && !v?.locked) return 'voix';
+  if (!validatedCostume(c)) return 'garde-robe';
+  return 'planche';
 }
 
 function renderPerso() {
   const d = state.detail;
-  if (!d) return '<p class="prose">chargement…</p>';
+  if (!d) return '<p class="prose loading">chargement…</p>';
+  const tab = currentTab(d);
+  // Le volet choisi d'office s'écrit dans l'adresse : un choix fait ici
+  // (« C'est lui ») ne fait pas sauter la page vers un autre volet.
+  if (!state.route.tab && TAB_IDS.has(tab)) {
+    state.route.tab = tab;
+    history.replaceState(null, '', tabHref(tab));
+  }
+  if (tab === 'naissance') return renderNaissance(d);
+  if (tab === 'scene') return renderScene(d);
+  const body = { identite: tabIdentite, visage: tabVisage, 'garde-robe': tabGarde, voix: tabVoix, planche: tabPlanche }[tab](d);
+  return `${persoHead(d)}${vols(d, tab)}${attentionCards(d)}<div class="vol-body">${body}</div>`;
+}
+
+function nameBlock(c, cls) {
+  return state.renaming
+    ? `<form data-form="rename" class="rename"><input class="fld" name="name" value="${esc(c.name)}" autocomplete="off"
+        spellcheck="false" aria-label="nom"><button class="tb ghost sm" type="submit">OK</button></form>`
+    : `<h1 class="${cls}" data-rename title="renommer">${esc(c.name)}</h1>`;
+}
+
+function atelier(d) {
+  const c = d.character;
+  const run = state.jobs.find((j) => live(j) && BACKGROUND[j.action]);
+  const att = attentionOf(d).length;
+  if (att) return [`atelier · ${att} en attente`, 'amb'];
+  if (run) return [`atelier · ${BACKGROUND[run.action]} en cours`, 'run'];
+  const cos = Object.values(c.costumes).filter((x) => x.fullbody.validated);
+  if (!cos.length) return ['atelier · au repos', ''];
+  if (cos.some((x) => (x.rigs || []).some((r) => r.verdict === 'accepted'))) return ['atelier · riggé', 'ok'];
+  if (cos.some((x) => (x.rigs || []).length)) return ['atelier · rig fait', 'ok'];
+  if (cos.some((x) => (x.meshes || []).length)) return ['atelier · 3D prête', 'ok'];
+  if (cos.some((x) => x.views?.check?.ok)) return ['atelier · vues prêtes', 'ok'];
+  if (cos.some((x) => x.apose?.validated)) return ['atelier · pose prête', 'ok'];
+  return ['atelier · en attente', ''];
+}
+
+function persoHead(d) {
   const c = d.character;
   const s = d.summary;
-  const st = stageStates(c);
-  const cur = currentStage(d, st);
-  const img = s.thumb ? `<img class="face" src="${esc(s.thumb)}" alt="" data-zoom="${esc(s.thumb)}" data-cap="${
-    esc(c.name)}">` : `<div class="face ph">${esc(initials(c.name))}</div>`;
-  const name = state.renaming
-    ? `<form data-form="rename" class="rename"><input class="fld" name="name" value="${esc(c.name)}"
-        autocomplete="off" spellcheck="false"><button class="tb ghost sm" type="submit">OK</button></form>`
-    : `<h1 class="name" data-rename title="renommer">${esc(c.name)}</h1>`;
-  return `
-  <div class="perso-head">
-    ${img}
-    <div class="who">
-      <span class="ref">${esc(c.slug)}</span>
-      ${name}
-      <span class="role">${esc([s.role, s.archetype].filter(Boolean).join(' · '))}</span>
-    </div>
-    <div class="acts">
-      <span class="seg">
-        <button class="tb sm${c.style === 'photoreal' ? ' on' : ''}" data-style-set="photoreal">Photo</button>
-        <button class="tb sm${c.style === 'stylized' ? ' on' : ''}" data-style-set="stylized">Stylisé</button>
-      </span>
-      <a class="tb ghost sm" href="#/">◂ Studio</a>
-    </div>
-  </div>
-  ${frise(st, cur)}
-  <div class="perso-grid">
-    <div class="perso-main">${stageView(cur, d)}</div>
-    <aside class="perso-side">
-      <div id="waiting">${waitingCard(d)}</div>
-      <div class="c-head"><h2>Rendus</h2><span class="cnt" id="jobs-count"></span></div>
-      <div class="jobs" id="jobs">${renderJobs()}</div>
-      ${fiche(d)}
-    </aside>
+  const face = s.thumb ? `<img class="p-face" src="${esc(s.thumb)}" alt="" data-zoom="${esc(s.thumb)}" data-cap="${esc(c.name)}">`
+    : `<span class="p-face ph">${esc(initials(c.name))}</span>`;
+  const [chip, chipCls] = atelier(d);
+  return `<div class="p-head">
+    <a class="tb ghost sm back" href="#/" title="le casting">◂ Casting</a>
+    <div class="p-id">${face}<div class="p-who">${nameBlock(c, 'p-name')}
+      <span class="p-line">${esc([s.role, s.archetype].filter(Boolean).join(' · ') || 'un clic sur le nom pour le changer')}</span>
+    </div></div>
+    <span class="sp"></span>
+    <a class="atelier ${chipCls}" href="./coulisses.html#/${enc(c.slug)}" title="ce que fait l'atelier : les coulisses"><i></i>${esc(chip)}</a>
+    ${c.face.locked ? `<a class="tb" href="${tabHref('scene')}">Parler ▸</a>`
+      : '<span class="tb disabled-link" title="il lui faut d\'abord un visage">Parler</span>'}
   </div>`;
 }
 
-function stageView(stage, d) {
-  const c = d.character;
-  if (stage === 'face') return stageFace(d);
-  if (stage === 'costume') return stageCostume(d);
-  const cos = costumeOf(c);
-  if (!cos) return stageCostume(d);
-  const key = Object.keys(c.costumes).find((k) => c.costumes[k] === cos);
-  const picker = Object.keys(c.costumes).length > 1 ? `<div class="tabs">${Object.entries(c.costumes).map(([k, x]) =>
-    `<button class="tb sm ${k === key ? 'on' : 'ghost'}" data-costume-tab="${esc(k)}">${esc(x.name)}</button>`).join('')}</div>` : '';
-  const view = { pose: boxPose, sheet: boxSheet, views: boxViews, mesh: boxMesh, rig: boxRig }[stage];
-  return picker + view(c, key, cos, d);
-}
-
-function goNext(label, stage) {
-  return `<div class="form-row next-row"><span class="sp"></span>
-    <button class="tb go" data-goto="${stage}">${esc(label)} ▸</button></div>`;
-}
-
-function stageFace(d) {
+function tabDot(d, id) {
   const c = d.character;
   const f = c.face;
-  if (f.locked) {
-    const src = fileUrl(c.slug, f.locked, f.locked_at);
-    const from = f.candidates.find((x) => x.file === f.locked_from);
-    const hasCostume = Object.keys(c.costumes).length > 0;
-    return box({
-      sec: '01', title: 'Visage', st: 'done', stLabel: 'verrouillé', body: `<div class="hero-img">
-        <img src="${esc(src)}" alt="" data-zoom="${esc(src)}" data-cap="visage verrouillé">
-        <div class="stage-body">
-          <p>Le visage fait autorité sur toute la suite et ne change plus. Pour un autre visage, un autre
-            personnage.</p>
-          ${from?.desc ? `<p class="hint">${esc(from.desc)}</p>` : ''}
-          <dl class="kv"><dt>modèle</dt><dd>${esc(ENGINE_LABEL[from?.engine || 'h3'] || from?.engine || '—')}</dd>
-            <dt>graine</dt><dd>${esc(f.locked_seed ?? '—')}</dd><dt>verrouillé</dt><dd>${esc(when(f.locked_at))}</dd></dl>
-        </div></div>${goNext(hasCostume ? 'Au costume' : 'Habiller le personnage', 'costume')}`,
-    });
+  const v = voiceOf(c);
+  const cos = Object.values(c.costumes);
+  if (id === 'identite') return d.summary.identity.filled >= 8 ? 'done' : '';
+  if (id === 'visage') return f.locked ? 'done' : liveJob('face') ? 'run' : f.candidates.length ? 'wait' : '';
+  if (id === 'garde-robe') {
+    if (liveJob('fullbody')) return 'run';
+    if (cos.some((x) => x.fullbody.validated)) return 'done';
+    return cos.some((x) => x.fullbody.candidates.length) ? 'wait' : '';
   }
-  const engines = Object.keys(d.face_engines || ENGINE_LABEL).map((k) => [k, ENGINE_LABEL[k] || k]);
-  const photo = (state.refs.face || []).length || f.refs.length;
-  let body = `
-    <label class="field"><span class="lbl">Décris son visage</span>
-      ${textarea('face.brief', f.brief || '', 'en français, comme ça vient : « 20 ans, peau noire, coupe courte dégradée, fine moustache, regard doux ». Le studio en tire quatre propositions différentes, et remplit la fiche.', 4)}</label>
-    <div class="form-row">
-      <div class="field"><span class="lbl">Photo · facultatif</span>${refsZone('face', 'photo')}</div>
-      ${select('face.engine', 'Modèle', engines, f.engine && !photo ? f.engine : photo ? 'h3' : 'zimage')}
-      ${select('face.variants', 'Propositions', [[2, '2'], [4, '4'], [6, '6']], 4)}
-      <span class="sp"></span>
-      ${act('face', 'Générer ▸', { form: 'face' })}
-    </div>`;
-  if (f.prompt_en) {
-    body += `<details class="read"><summary>ce que le modèle en a tiré</summary><p class="hint">${esc(f.prompt_en)}</p></details>`;
+  if (id === 'voix') {
+    if (liveJob('voice_design')) return 'run';
+    return v?.locked ? 'done' : v?.candidates?.length ? 'wait' : '';
   }
-  if (f.candidates.length) {
-    body += `<div class="box-sub">Propositions · verrouille celle qui fait le personnage</div>
-      <div class="cands big">${f.candidates.map((x, i) => {
-        const [mark, markCls] = x.backend === 'stub' ? ['factice', 'stub'] : [ENGINE_LABEL[x.engine]?.split(' · ')[0] || '', ''];
-        return cand({
-          src: fileUrl(c.slug, x.file, x.at), label: `n° ${i + 1}`, mark, markCls,
-          cap: `n° ${i + 1} · ${x.desc || ''}`,
-          button: act('face', 'Autour', { params: { around: i + 1, variants: 3 }, small: true }) +
-            act('face_lock', 'Verrouiller', {
-              params: { candidate: String(i + 1) },
-              confirm: `Verrouiller le visage n° ${i + 1} ? Il fera autorité sur toute la suite ; on ne pourra plus le changer.`,
-            }),
-        });
-      }).reverse().join('')}</div>`;
-  }
-  const st = f.candidates.length ? ['partial', `${f.candidates.length} proposition(s)`] : ['open', 'à faire'];
-  return box({ sec: '01', title: 'Visage', st: st[0], stLabel: st[1], body });
+  if (liveJob('presentation')) return 'run';
+  return cos.some((x) => x.presentation?.sheet) ? 'done' : '';
 }
 
-function stageCostume(d) {
+function vols(d, tab) {
+  return `<nav class="vols" aria-label="volets">${TABS.map(([id, label]) => {
+    const dot = tabDot(d, id);
+    return `<a class="vol${id === tab ? ' on' : ''}" href="${tabHref(id)}"${id === tab ? ' aria-current="page"' : ''}>
+      <span>${esc(label)}</span>${dot ? `<i class="dot ${dot}"></i>` : ''}</a>`;
+  }).join('')}</nav>`;
+}
+
+/* ── ce qui attend : les cartes de l'atelier ────────────── */
+
+function attentionOf(d) {
+  const own = d.character.attention || d.attention;
+  if (Array.isArray(own)) return own;
+  return Array.isArray(state.attention) ? state.attention.filter((a) => a.slug === d.character.slug) : [];
+}
+
+function optionOf(o, i) {
+  return typeof o === 'string' ? { id: o, label: o } : { id: o.id ?? String(i), label: o.label || o.id || '…', ...o };
+}
+
+function attentionCards(d) {
+  const list = attentionOf(d);
+  if (!list.length) return '';
+  return `<section class="waits">${list.map((a) => `<article class="att">
+    <span class="att-k">ce qui attend${a.kind ? ` · ${esc(a.kind)}` : ''}</span>
+    <h3>${esc(a.title || 'Une question de l\'atelier')}</h3>
+    ${a.text ? `<p>${esc(a.text)}</p>` : ''}
+    <div class="att-row">${(a.options || []).map((o, i) => {
+      const opt = optionOf(o, i);
+      return `<button class="tb ghost sm${opt.recommended ? ' rec' : ''}" data-attention="${esc(a.id)}"
+        data-option="${esc(JSON.stringify(opt))}">${esc(opt.label)}${opt.recommended ? '<i>recommandé</i>' : ''}</button>`;
+    }).join('')}<span class="sp"></span>
+      <a class="lbl" href="./coulisses.html#/${enc(d.character.slug)}">voir dans les coulisses</a></div>
+  </article>`).join('')}</section>`;
+}
+
+/* ── naissance : un nom, puis qui il est ────────────────── */
+
+function renderNaissance(d) {
   const c = d.character;
-  const keys = Object.keys(c.costumes);
-  const locked = !!c.face.locked;
-  if (state.costume === undefined || (state.costume !== null && !keys.includes(state.costume))) {
-    state.costume = keys[0] || null;
-  }
-  const tabs = keys.length ? `<div class="tabs">${keys.map((k) => `<button class="tb sm ${k === state.costume ? 'on' : 'ghost'}"
-    data-costume-tab="${esc(k)}">${esc(c.costumes[k].name)}</button>`).join('')}
-    <button class="tb sm ${state.costume === null ? 'on' : 'ghost'}" data-costume-tab="">+ Tenue</button></div>` : '';
-  // Sans visage verrouillé, pas de plein pied : on le dit en tête, avec le
-  // chemin, au lieu de laisser chercher un bouton qui n'existe pas.
-  const faceFirst = locked ? '' : `<div class="gate">
-      <p>Le plein pied part du <b>visage verrouillé</b>, et ce personnage n'en a pas encore. La tenue peut déjà
-        s'écrire : elle est gardée dès que tu quittes le champ.</p>
-      <button class="tb go" data-goto="face">Choisir le visage ▸</button></div>`;
-  const renderBtn = (key) => (locked
-    ? act(key ? 'fullbody' : 'costume_go', 'Générer le plein pied ▸',
-      { form: key ? `cos.${key}` : 'costume_new', costume: key || undefined })
-    : '<button class="tb ghost" disabled title="il faut d\'abord un visage verrouillé">Générer le plein pied ▸</button>');
-  let body;
-  if (state.costume === null) {
-    body = `${faceFirst}${tabs}
-      <label class="field"><span class="lbl">Décris sa tenue · gardée dès que tu quittes le champ</span>
-        ${textarea('costume_new.brief', '', 'en français : « hoodie bleu Adidas capuche baissée, baggy blanc usé aux genoux, baskets blanches, casquette noire à l\'envers »', 4)}</label>
-      <div class="form-row">
-        <div class="field"><span class="lbl">Vêtements · images</span>${refsZone('costume_new', 'vêtement')}</div>
-        ${input('costume_new.name', 'Nom de la tenue', { placeholder: `tenue ${keys.length + 1}` })}
-        ${select('costume_new.variants', 'Propositions', [[1, '1'], [2, '2'], [3, '3']], 2)}
-        <span class="sp"></span>${renderBtn(null)}
-      </div>`;
-    return box({ sec: '02', title: 'Costume', st: 'open', stLabel: 'à faire', body });
-  }
-  const key = state.costume;
-  const cos = c.costumes[key];
-  const form = `cos.${key}`;
-  const fb = cos.fullbody;
-  body = `${faceFirst}${tabs}
-    <label class="field"><span class="lbl">Décris sa tenue · gardée dès que tu quittes le champ</span>
-      ${textarea(`${form}.brief`, cos.brief || cos.prompt || '', 'en français, comme ça vient', 4)}</label>
-    <div class="form-row">
-      <div class="field"><span class="lbl">Vêtements · images</span>
-        <div class="refs">${cos.refs.map((r) => {
-          const src = fileUrl(c.slug, r);
-          return `<span class="thumb" style="background-image:url('${esc(src)}')" title="${esc(base(r))}" data-zoom="${
-            esc(src)}" data-cap="${esc(base(r))}"><button data-act="costume_edit" data-costume="${esc(key)}"
-            data-params="${esc(JSON.stringify({ drop_refs: [r] }))}" title="retirer"
-            data-confirm="${esc(`Retirer ${base(r)} des références de la tenue ?`)}">×</button></span>`;
-        }).join('')}</div>${refsZone(form, 'vêtement')}</div>
-      ${select(`${form}.variants`, 'Propositions', [[1, '1'], [2, '2'], [3, '3']], 2)}
-      <span class="sp"></span>${renderBtn(key)}
-    </div>`;
-  if (cos.brief_read && cos.prompt) {
-    body += `<details class="read"><summary>ce que le modèle en a tiré</summary><p class="hint">${esc(cos.prompt)}</p></details>`;
-  }
-  if (fb.candidates.length) {
-    body += `<div class="box-sub">Pleins pieds · valide celui qui tient</div><div class="cands tall">${fb.candidates.map((x, i) => {
-      const chosen = x.file === fb.validated_from;
-      const [mark, markCls] = chosen ? ['validé', 'ok'] : stubMark(x);
-      return cand({
-        src: fileUrl(c.slug, x.file, x.at), label: `n° ${i + 1}`, cap: `n° ${i + 1} · graine ${x.seed}`, mark, markCls,
-        sel: chosen,
-        button: chosen ? '' : act('fullbody_ok', 'Valider', {
-          costume: key, params: { candidate: String(i + 1) },
-          confirm: fb.validated ? 'Valider ce plein pied ? L\'A-pose validée sur l\'ancien ne vaudra plus.' : undefined,
-        }),
-      });
-    }).reverse().join('')}</div>`;
-  }
-  if (fb.validated) body += goNext('À l\'A-pose', 'pose');
-  const st = fb.validated ? ['done', 'plein pied validé'] : fb.candidates.length ? ['partial', `${fb.candidates.length} plein(s) pied(s)`]
-    : ['partial', 'tenue écrite'];
-  return box({ sec: '02', title: `Costume · ${cos.name}`, st: st[0], stLabel: st[1], body });
-}
-
-function waitBox(sec, title, text) {
-  return box({ sec, title, st: 'todo', stLabel: 'en attente', body: `<p>${esc(text)}</p>`, wait: true });
-}
-
-function boxPose(c, key, cos) {
-  if (!cos.fullbody.validated) return waitBox('03', 'A-pose', 'L\'A-pose attend un plein pied validé.');
-  const ap = cos.apose;
-  const form = `pose.${key}`;
-  const skel = ap.skeleton ? `<div class="field"><span class="lbl">Squelette</span><div class="refs">
-    <span class="thumb" style="background-image:url('${esc(fileUrl(c.slug, ap.skeleton))}')" title="squelette"
-      data-zoom="${esc(fileUrl(c.slug, ap.skeleton))}" data-cap="squelette A-pose"></span></div></div>` : '';
-  let body = `<p>Le plein pied validé, remis en A-pose : bras à 45°, jambes légèrement ouvertes, la pose que veulent le
-    mesh et le rig. La pose est imposée par un squelette relevé sur le plein pied, pas par le prompt ; la tenue et le
-    visage restent ceux du plein pied.</p>
-    <div class="form-row">
-      ${skel}
-      ${select(`${form}.variants`, 'Propositions', [[1, '1'], [2, '2'], [3, '3']], 2)}
-      ${input(`${form}.seed`, 'Graine', { placeholder: 'au hasard', cls: 'num' })}
-      <span class="sp"></span>${act('apose', 'Générer ▸', { form, costume: key })}
-    </div>`;
-  if (ap.candidates.length) {
-    body += `<div class="box-sub">A-poses · valide celle qui tient</div><div class="cands tall">${ap.candidates.map((x, i) => {
-      const chosen = x.file === ap.validated_from;
-      const [mark, markCls] = chosen ? ['validée', 'ok'] : stubMark(x);
-      return cand({
-        src: fileUrl(c.slug, x.file, x.at), label: `n° ${i + 1}`, cap: `n° ${i + 1} · graine ${x.seed}`, mark, markCls,
-        sel: chosen,
-        button: chosen ? '' : act('apose_ok', 'Valider', {
-          costume: key, params: { candidate: String(i + 1) },
-          confirm: Object.keys(cos.views.raw).length
-            ? 'Valider cette A-pose ? Les vues faites sur l\'ancienne ne vaudront plus.' : undefined,
-        }),
-      });
-    }).reverse().join('')}</div>`;
-  }
-  if (ap.validated) body += goNext('À la planche', 'sheet');
-  const st = ap.validated ? ['done', 'validée'] : ap.candidates.length ? ['partial', `${ap.candidates.length} proposition(s)`]
-    : ['todo', 'à faire'];
-  return box({ sec: '03', title: 'A-pose', st: st[0], stLabel: st[1], body, next: isNext('apose', 'apose_ok') });
-}
-
-// Les planches Qwen-Image 2.1 ; les anciennes planches H3 restent dans le manifeste, hors de l'atelier.
-function qwenSheets(cos) {
-  return cos.sheets.filter((s) => s.engine === 'qwen21');
-}
-
-function boxSheet(c, key, cos) {
-  if (!cos.apose.validated) return waitBox('04', 'Planche', 'La planche attend une A-pose validée.');
-  const form = `sheet.${key}`;
-  const sheets = qwenSheets(cos);
-  let body = `<p>La planche de référence : face et dos en pied dans l'A-pose, et un gros plan tête et épaules. Le visage
-    verrouillé donne l'identité, l'A-pose la tenue, une mise en page faite des squelettes la composition. Elle sert au
-    turnaround de présentation ; les vues n'en dépendent pas.</p>
-    <div class="form-row">
-      ${select(`${form}.variants`, 'Propositions', [[1, '1'], [2, '2'], [3, '3']], 2)}
-      ${input(`${form}.seed`, 'Graine', { placeholder: 'au hasard', cls: 'num' })}
-      <span class="sp"></span>${act('sheet', 'Générer ▸', { form, costume: key })}
-    </div>`;
-  if (sheets.length) {
-    body += `<div class="box-sub">Planches · valide celle qui tient</div><div class="cands wide">${sheets.map((s) => {
-      const chosen = s.id === cos.sheet;
-      const [mark, markCls] = chosen ? ['validée', 'ok'] : stubMark(s);
-      return cand({
-        src: fileUrl(c.slug, s.file, s.at), label: s.id, cap: `${s.id} · graine ${s.seed}`, mark, markCls, sel: chosen,
-        button: chosen ? '' : act('sheet_ok', 'Valider', { costume: key, params: { id: s.id } }),
-      });
-    }).reverse().join('')}</div>`;
-  }
-  if (cos.sheet) body += goNext('Aux vues', 'views');
-  const st = cos.sheet ? ['done', `${cos.sheet} validée`] : sheets.length ? ['partial', `${sheets.length} planche(s)`]
-    : ['todo', 'à faire'];
-  return box({ sec: '04', title: 'Planche', st: st[0], stLabel: st[1], body, next: isNext('sheet', 'sheet_ok') });
-}
-
-function boxViews(c, key, cos, d) {
-  if (!cos.apose.validated) return waitBox('05', 'Vues orthogonales', 'Les vues attendent une A-pose validée.');
-  const v = cos.views;
-  const form = `views.${key}`;
-  const methods = (d.view_methods || Object.keys(METHOD_LABEL)).map((m) => [m, METHOD_LABEL[m] || m]);
-  let body = `<p>Face, profils, dos et 3/4, plein cadre, pour la 3D, depuis l'A-pose validée. Par défaut, chaque vue
-    est guidée par le squelette A-pose tourné à son angle : même échelle, même ligne de sol.</p>
-    <div class="form-row">
-      ${select(`${form}.method`, 'Méthode', methods, v.method || 'qwen21-pose')}
-      ${input(`${form}.seed`, 'Graine', { placeholder: 'au hasard', cls: 'num' })}
-      <span class="sp"></span>${act('views', 'Générer ▸', { form, costume: key })}
-    </div>`;
-  const raw = VIEWS.filter((n) => v.raw[n]);
-  if (raw.length) {
-    body += `<div class="box-sub">Vues brutes · ${esc(METHOD_LABEL[v.method] || v.method || '')}</div>
-      <div class="cands tall">${raw.map((n) => {
-        const e = v.raw[n];
-        const got = e.azimuth_measured ?? e.azimuth_estimated;
-        const est = got != null && n !== 'front' ? ` · ${e.azimuth_measured != null ? 'mesuré' : 'relevé'} ${
-          Number(got).toFixed(0)}°` : '';
-        const [mark, markCls] = stubMark(e);
-        return cand({ src: fileUrl(c.slug, e.file, e.at), label: `${VIEW_LABEL[n]} · ${e.azimuth}°${est}`, mark, markCls });
-      }).join('')}</div>`;
-    const complete = ORTHO.every((n) => v.raw[n]);
-    body += `<div class="form-row"><span class="hint">${complete
-      ? 'Détourage BiRefNet, recentrage, même échelle, marges égales.'
-      : 'Il manque des vues : régénère.'}</span><span class="sp"></span>${
-      act('prep', 'Préparer ▸', { costume: key, disabled: !complete })}</div>`;
-  }
-  const prepared = VIEWS.filter((n) => v.prepared[n]);
-  if (prepared.length) {
-    const ver = v.prep?.at;
-    body += `<div class="box-sub">Vues préparées${v.prep ? ` · ${v.prep.size} px` : ''}</div>
-      <div class="cands tall">${prepared.map((n) => cand({
-        src: fileUrl(c.slug, v.prepared[n].file, ver), label: VIEW_LABEL[n] })).join('')}</div>
-      <div class="form-row">${check(`check.${key}.measure`, "mesurer l'azimut par SAM 3D Body", false)}
-        <span class="sp"></span>${act('check', 'Contrôler ±5° ▸', { form: `check.${key}`, costume: key })}</div>`;
-  }
-  if (v.check) body += checkTable(v.check);
-  let st = ['todo', 'à faire'];
-  if (v.check) st = v.check.ok ? ['done', 'contrôle passé'] : ['partial', 'contrôle en échec'];
-  else if (prepared.length) st = ['partial', 'préparées'];
-  else if (raw.length) st = ['partial', `${raw.length} brute(s)`];
-  return box({ sec: '05', title: 'Vues orthogonales', st: st[0], stLabel: st[1], body,
-    next: isNext('views', 'prep', 'check') });
-}
-
-function checkTable(chk) {
-  const rows = Object.entries(chk.angles).map(([n, r]) => {
-    const ok = Math.abs(r.error) <= chk.tolerance;
-    return `<tr><td>${esc(VIEW_LABEL[n] || n)}</td><td>${r.target}°</td><td>${Number(r.value).toFixed(1)}°${
-      r.precision_deg != null ? ` ±${r.precision_deg}°` : ''}</td><td class="${ok ? 'ok' : 'no'}">${
-      r.error > 0 ? '+' : ''}${Number(r.error).toFixed(1)}°</td><td>${esc(r.source)}</td></tr>`;
-  }).join('');
-  const missing = Object.entries(chk.errors).filter(([n]) => !chk.angles[n])
-    .map(([n, e]) => `<tr><td>${esc(VIEW_LABEL[n] || n)}</td><td colspan="3" class="no">${esc(e)}</td><td></td></tr>`).join('');
-  return `<div class="box-sub">Contrôle · ${chk.ok ? 'passé' : 'en échec'} · ±${chk.tolerance}°</div>
-    <div class="table-wrap"><table class="table"><thead><tr><th>vue</th><th>cible</th><th>relevé</th><th>écart</th>
-    <th>source</th></tr></thead><tbody>${rows}${missing}</tbody></table></div>
-    ${chk.measured ? '' : '<p class="hint">Aucun estimateur de pose n\'a regardé ces images : angles déclarés ou tirés de la silhouette.</p>'}`;
-}
-
-function boxMesh(c, key, cos) {
-  const v = cos.views;
-  if (!Object.keys(v.prepared).length) return waitBox('06', 'Mesh 3D', 'Le mesh attend les vues préparées.');
-  const form = `mesh.${key}`;
-  const multiOk = v.check?.ok;
-  let body = `<p>Le mesh PBR, canaux à part. En multi-vues, les quatre vues doivent avoir passé le contrôle ; une vue
-    seule part du 3/4.</p>
-    <div class="form-row">
-      ${select(`${form}.engine`, 'Moteur', [['trellis2', 'TRELLIS 2 · MIT'], ['hunyuan3d-2.1', 'Hunyuan3D 2.1']], 'trellis2')}
-      ${check(`${form}.single_view`, 'une vue (3/4)', !multiOk)}
-      ${input(`${form}.seed`, 'Graine', { placeholder: 'au hasard', cls: 'num' })}
-      <span class="sp"></span>${act('mesh', 'Générer ▸', { form, costume: key })}
+  return `<div class="birth-top"><a class="tb ghost sm" href="#/">◂ Casting</a></div>
+  <section class="birth">
+    <span class="kicker">naissance</span>
+    ${nameBlock(c, 'birth-name')}
+    <label class="birth-q" for="birth-brief">Qui est-il ?</label>
+    <textarea id="birth-brief" class="fld birth-fld" rows="3" data-draft="face.brief"
+      placeholder="Une phrase suffit : « un vieux marin breton, taiseux, barbe blanche, les mains abîmées ».">${
+      esc(draft('face.brief', ''))}</textarea>
+    <div class="birth-row">
+      <div class="birth-photo">${refsZone('face', 'une photo')}<span class="hint">une photo de départ, si tu en as une</span></div>
+      <span class="sp"></span>
+      ${btn('Le faire naître ▸', { act: 'face', form: 'face', params: { variants: 4 }, go: true })}
     </div>
-    <p class="hint">Hunyuan3D 2.1 : sa licence exclut l'UE, le Royaume-Uni et la Corée du Sud.${
-      multiOk ? '' : ' Contrôle non passé : le multi-vues sera refusé.'}</p>`;
-  if (cos.meshes.length) {
-    body += `<div class="table-wrap"><table class="table"><thead><tr><th>v</th><th>moteur</th><th>sommets</th>
-      <th>taille</th><th>entrée</th><th></th></tr></thead><tbody>${cos.meshes.slice().reverse().map((m) =>
-      `<tr><td>v${m.version}</td><td>${esc(m.engine)}${m.backend === 'stub' ? ' · factice' : ''}</td>
-       <td>${esc(m.stats?.vertices ?? '—')}</td><td>${esc(size(m.stats?.size_m))}</td>
-       <td>${m.single_view ? 'une vue' : 'multi-vues'}</td>
-       <td><a class="tb ghost sm" target="_blank" rel="noopener" href="./viewer.html?src=${
-         encodeURIComponent(fileUrl(c.slug, m.glb, m.at))}">Voir</a></td></tr>`).join('')}</tbody></table></div>`;
-  }
-  const st = cos.meshes.length ? ['done', `v${cos.meshes.at(-1).version}`] : ['todo', 'à faire'];
-  return box({ sec: '06', title: 'Mesh 3D', st: st[0], stLabel: st[1], body, next: isNext('mesh') });
+    <p class="hint">Sa fiche s'écrit d'abord, en quelques secondes. Puis quatre visages arrivent : tu choisis celui qui est lui.</p>
+  </section>`;
 }
 
-function boxRig(c, key, cos) {
-  if (!cos.meshes.length) return waitBox('07', 'Rig SOMA', 'Le rig attend un mesh.');
-  const backend = state.detail.backends.unirig;
-  let body = `<p>Squelette SOMA 77, bind en A-pose, cinq poses de contrôle à regarder dans le viewer avant
-    d'accepter.${backend === 'stub' ? ' UniRig n\'est pas encore branché : le rig est factice.' : ''}</p>
-    <div class="form-row"><span class="sp"></span>${act('rig', 'Rigger le dernier mesh ▸', { costume: key })}</div>`;
-  if (cos.rigs.length) {
-    const verdict = { unseen: 'à regarder', accepted: 'accepté', rejected: 'refusé' };
-    body += `<div class="table-wrap"><table class="table"><thead><tr><th>v</th><th>mesh</th><th>moteur</th>
-      <th>verdict</th><th></th></tr></thead><tbody>${cos.rigs.slice().reverse().map((r) =>
-      `<tr><td>v${r.version}</td><td>v${r.mesh}</td><td>${esc(r.backend)}</td>
-       <td class="${r.verdict === 'accepted' ? 'ok' : r.verdict === 'rejected' ? 'no' : ''}">${verdict[r.verdict]}</td>
-       <td><a class="tb ghost sm" target="_blank" rel="noopener" href="./viewer.html?src=${
-         encodeURIComponent(fileUrl(c.slug, r.glb, r.at))}">Poses</a>${r.verdict === 'unseen'
-         ? act('rig_ok', 'Accepter', { costume: key, params: { verdict: 'accepte', rig: r.version } }) +
-           act('rig_ok', 'Refuser', { costume: key, params: { verdict: 'refuse', rig: r.version } }) : ''}</td></tr>`)
-      .join('')}</tbody></table></div>`;
-  }
-  const last = cos.rigs.at(-1);
-  const st = !last ? ['todo', 'à faire'] : last.verdict === 'accepted' ? ['done', 'accepté']
-    : ['partial', last.verdict === 'rejected' ? 'refusé' : 'à regarder'];
-  return box({ sec: '07', title: 'Rig SOMA', st: st[0], stLabel: st[1], body, next: isNext('rig', 'rig_ok') });
+/* ── volet Identité ─────────────────────────────────────── */
+
+function ficheRows(d, section) {
+  const sheet = d.character.identity || {};
+  return SHEET_FIELDS.filter((f) => f.section === section && f.key !== 'character_name').map((f) => {
+    const v = sheet[f.key] || '';
+    const label = FIELD_FR[f.key] || f.label;
+    const cell = state.editField === f.key
+      ? `<form data-form="field" data-key="${f.key}" class="sheet-edit"><textarea class="fld" name="v" rows="${
+        Math.min(6, Math.max(1, Math.ceil(v.length / 46)))}" aria-label="${esc(label)}">${esc(v)}</textarea></form>`
+      : `<div class="sheet-val ${v ? 'filled' : 'empty'}" data-edit="${f.key}" title="corriger" tabindex="0">${esc(v)}</div>`;
+    return `<div class="sheet-row"><div class="sheet-key">${esc(label)}</div>${cell}</div>`;
+  }).join('');
+}
+
+function traitsChips(d) {
+  const have = String(d.character.identity?.personality_traits || '').split(',').map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  const all = [...new Set([...TRAITS, ...have.filter((t) => t.length < 22)])];
+  return `<div class="chips-row">${all.map((t) => `<button class="chip${have.includes(t) ? ' chip-selected' : ''}"
+    data-trait="${esc(t)}">${esc(t)}</button>`).join('')}</div>`;
+}
+
+function tabIdentite(d) {
+  const c = d.character;
+  const brief = c.face.brief;
+  return `<div class="duo">
+    <section class="panel">
+      <div class="panel-head"><h2>Qui il est</h2><span class="lbl">un clic pour corriger</span></div>
+      <div class="sheet-section fiche">${ficheRows(d, 'CORE')}</div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Son caractère</h2><span class="lbl">gardé tout seul</span></div>
+      ${traitsChips(d)}
+      <div class="sheet-section fiche">${ficheRows(d, 'PSYCHE')}</div>
+    </section>
+  </div>
+  ${brief ? `<section class="panel quote"><span class="lbl">sa première phrase</span><blockquote>${esc(brief)}</blockquote></section>` : ''}
+  <div class="row-end">
+    <details class="adv"><summary>réglages avancés</summary><div class="adv-body">
+      <span class="lbl">rendu</span>
+      <span class="seg">
+        <button class="tb sm${c.style === 'photoreal' ? ' on' : ''}" data-style-set="photoreal">Photo</button>
+        <button class="tb sm${c.style === 'stylized' ? ' on' : ''}" data-style-set="stylized">Stylisé</button>
+      </span></div></details>
+    <span class="sp"></span>
+    ${link('Approfondir avec l\'assistant ▸', `./console.html?slug=${enc(c.slug)}`)}
+  </div>`;
+}
+
+/* ── volet Visage ───────────────────────────────────────── */
+
+function knownPanel(d, job) {
+  const sheet = d.character.identity || {};
+  const keys = ['role', 'age', 'archetype', 'personality_traits', 'face_description', 'speech_style'];
+  const rows = keys.filter((k) => String(sheet[k] || '').trim());
+  const body = rows.length
+    ? `<div class="sheet-section">${rows.map((k) => `<div class="sheet-row"><div class="sheet-key">${esc(FIELD_FR[k] || k)}</div>
+        <div class="sheet-val filled">${esc(sheet[k])}</div></div>`).join('')}</div>`
+    : job ? '<div class="writing"><div class="thinking"><span></span><span></span><span></span></div><span class="hint">sa fiche s\'écrit…</span></div>'
+      : '<p class="hint">Rien encore.</p>';
+  return `<aside class="panel known"><div class="panel-head"><h2>Ce qu'on sait de lui</h2></div>${body}
+    <a class="lbl more" href="${tabHref('identite')}">toute sa fiche ▸</a></aside>`;
+}
+
+function tabVisage(d) {
+  const c = d.character;
+  const f = c.face;
+  if (f.locked) return visageLocked(d);
+  const cands = f.candidates.map((x, i) => ({ ...x, n: i + 1 }));
+  const { current, older, job, expected } = lot(cands, 'face');
+  const pickN = state.pick.face;
+  const picked = cands.find((x) => String(x.n) === String(pickN));
+  const src = (x) => fileUrl(c.slug, x.file, x.at);
+  const grid = `<div class="props">${current.map((x) => prop({
+    kind: 'face', n: x.n, src: src(x), cap: `n° ${x.n}`, sel: picked === x,
+  })).join('')}${Array.from({ length: expected - current.length }, (_, i) =>
+    slot(job, current.length + i, current.length, expected)).join('')}</div>`;
+  const around = picked ? `<div class="around"><span class="lbl">autour du n° ${picked.n}</span>
+      <div class="chips-row">${DIRECTIONS.map(([k, label]) => `<button class="chip" data-act="face"
+        data-params="${esc(JSON.stringify({ around: picked.n, variants: 3, direction: k }))}"${job ? ' disabled' : ''}>${
+        esc(label)}</button>`).join('')}
+        ${btn('Trois comme lui', { act: 'face', params: { around: picked.n, variants: 3 }, sm: true, disabled: !!job })}</div></div>`
+    : `<p class="hint around">${cands.length ? 'Clique le visage qui est lui. Pour chercher autour d\'un visage, choisis-le d\'abord.' : ''}</p>`;
+  const redo = `<details class="redo"${cands.length || job ? '' : ' open'}><summary>le redécrire</summary><div class="redo-body">
+      ${textarea('face.brief', f.brief || '', 'qui il est, en une phrase ou deux', 2)}
+      <div class="form-row">${refsZone('face', 'une photo')}<span class="sp"></span>
+        ${btn('Quatre autres ▸', { act: 'face', form: 'face', params: { variants: 4 }, disabled: !!job })}</div>
+    </div></details>`;
+  return `<div class="work">
+    <div class="work-main">
+      ${failure(job ? null : lastJob('face'))}
+      ${grid}
+      ${around}
+      ${strip('face', older, pickN, src)}
+      ${redo}
+      ${job ? waitingCard(d, 'visage') : ''}
+    </div>
+    ${knownPanel(d, job)}
+  </div>
+  ${decide({
+    thumb: picked && src(picked),
+    text: picked ? `le n° ${picked.n}, c'est lui ?` : cands.length ? 'Clique le visage qui est lui.'
+      : job ? 'Ses visages arrivent.' : 'Décris-le pour voir ses visages.',
+    button: btn('C\'est lui ▸', {
+      act: 'face_lock', params: picked ? { candidate: String(picked.n) } : undefined, go: true, disabled: !picked,
+      confirm: 'Garder ce visage ? Il fera autorité sur tout le reste — la tenue, la planche, la 3D — et ne changera plus.',
+    }),
+  })}`;
+}
+
+function decide({ thumb, text, button }) {
+  return `<div class="decide">${thumb ? `<img class="decide-thumb" src="${esc(thumb)}" alt="">` : '<span class="decide-thumb ph"></span>'}
+    <span class="decide-txt">${esc(text)}</span><span class="sp"></span>${button}</div>`;
+}
+
+function nextStepLink(d) {
+  const c = d.character;
+  if (voicePossible(c) && !voiceOf(c)?.locked) return link('Lui trouver une voix ▸', tabHref('voix'), { go: true });
+  if (!validatedCostume(c)) return link('L\'habiller ▸', tabHref('garde-robe'), { go: true });
+  return link('Voir sa planche ▸', tabHref('planche'), { go: true });
+}
+
+function visageLocked(d) {
+  const c = d.character;
+  const f = c.face;
+  const src = fileUrl(c.slug, f.locked, f.locked_at);
+  return `<div class="hero-pick">
+    <img class="hero-img-sq" src="${esc(src)}" alt="son visage" data-zoom="${esc(src)}" data-cap="${esc(c.name)}">
+    <div class="hero-txt">
+      <span class="kicker">son visage</span>
+      <h2 class="big">C'est lui.</h2>
+      <p class="prose">Choisi le ${esc(day(f.locked_at))}. Ce visage fait autorité sur tout le reste — sa tenue, sa planche,
+        sa 3D — et ne change plus. Pour un autre visage, un autre personnage.</p>
+      <div class="row-start">${nextStepLink(d)}</div>
+    </div>
+  </div>`;
 }
 
 /* ── en attendant : ce qu'on peut faire pendant un rendu ── */
 
-function waitingCard(d) {
-  const run = state.jobs.find((j) => j.status === 'running') || state.jobs.find((j) => j.status === 'queued');
-  if (!run || !d) return '';
-  const c = d.character;
-  const heavy = usesH3(run);
-  let body;
-  if (!Object.keys(c.costumes).length) {
-    body = `<p>Pendant que ça calcule : sa tenue. Elle attendra le visage verrouillé.</p>
-      ${textarea('costume_new.brief', '', 'en français : ce qu\'il porte, de la tête aux pieds', 3)}
-      <p class="hint">Gardée dès que tu quittes le champ.</p>`;
-  } else if (!(c.identity || {}).personality_traits) {
-    const picked = new Set(state.drafts['wait.traits'] || []);
-    body = `<p>Pendant que ça calcule : trois traits de caractère.</p>
-      <div class="chips-row">${TRAITS.map((t) => `<button class="chip${picked.has(t) ? ' chip-selected' : ''}"
-        data-trait="${esc(t)}">${esc(t)}</button>`).join('')}</div>
-      <div class="form-row"><span class="sp"></span><button class="tb ghost sm" data-save-traits${picked.size ? '' : ' disabled'}>
-        Garder</button></div>`;
-  } else {
-    body = `<p>Pendant que ça calcule : relis sa fiche, corrige d'un clic ce qui ne va pas.</p>`;
-  }
-  body += heavy
-    ? '<p class="hint">H3 occupe la mémoire : l\'assistant revient après ce rendu.</p>'
-    : `<a class="tb ghost block" href="./console.html?slug=${encodeURIComponent(c.slug)}">Parler avec l'assistant ▸</a>`;
-  return box({ sec: '', title: 'En attendant', st: 'partial', stLabel: run.label, body });
+// Les rendus H3 prennent la mémoire du modèle de texte : l'assistant attend.
+function heavy(run) {
+  const p = run.params || {};
+  return run.action === 'sheet' || (['face', 'fullbody'].includes(run.action) && p.engine === 'h3')
+    || (run.action === 'face' && (p.refs || []).length && !p.engine);
 }
 
-/* ── la fiche : ce que le studio sait de lui ────────────── */
-
-function fiche(d) {
+function waitingCard(d, here) {
+  const run = state.jobs.find((j) => j.status === 'running') || state.jobs.find((j) => j.status === 'queued');
+  if (!run) return '';
   const c = d.character;
   const sheet = c.identity || {};
-  const rows = SHEET_FIELDS.filter((f) => f.section === 'CORE' || f.section === 'PSYCHE')
-    .filter((f) => f.key !== 'character_name').map((f) => {
-      const v = sheet[f.key] || '';
-      const cell = state.editField === f.key
-        ? `<form data-form="field" data-key="${f.key}" class="sheet-edit"><input class="fld" name="v" value="${esc(v)}"
-            autocomplete="off"></form>`
-        : `<div class="sheet-val ${v ? 'filled' : 'empty'}" data-edit="${f.key}" title="modifier">${esc(v)}</div>`;
-      return `<div class="sheet-row"><div class="sheet-key">${esc(f.label)}</div>${cell}</div>`;
-    }).join('');
-  const notes = (c.notes || []).length ? `<div class="sheet-section"><div class="sheet-section-title">notes</div>${
-    c.notes.map((n, i) => `<div class="sheet-row"><div class="sheet-key">#${i + 1}</div><div class="sheet-val filled">${
-      esc(n)}</div></div>`).join('')}</div>` : '';
-  const filled = d.summary.identity.filled;
-  const body = `<div class="sheet-section">${rows}</div>${notes}
-    <a class="tb ghost block" href="./console.html?slug=${encodeURIComponent(c.slug)}">Approfondir avec l'assistant ▸</a>`;
-  return box({ sec: '', title: 'La fiche', st: filled ? 'partial' : 'todo', stLabel: `${filled}/${d.summary.identity.total}`, body });
+  let body;
+  if (!sheet.personality_traits && here !== 'identite') {
+    body = `<p>Pendant que ça calcule : trois traits de caractère. Un clic suffit, c'est gardé.</p>${traitsChips(d)}`;
+  } else if (!Object.keys(c.costumes).length && here !== 'garde-robe') {
+    body = `<p>Pendant que ça calcule : ce qu'il porte, de la tête aux pieds. Gardé dès que tu quittes le champ.</p>
+      ${textarea('costume_new.brief', '', 'en français : « caban bleu marine usé, pull de laine écrue, bottes de pont »', 2)}`;
+  } else if (voicePossible(c) && !voiceOf(c) && here !== 'voix') {
+    body = `<p>Pendant que ça calcule : sa voix. Décris-la en quelques mots, quatre propositions suivront.</p>
+      <div class="row-start"><a class="tb ghost sm" href="${tabHref('voix')}">Décrire sa voix ▸</a></div>`;
+  } else {
+    body = `<p>Pendant que ça calcule : relis sa fiche, corrige d'un clic ce qui ne va pas.</p>
+      <div class="row-start"><a class="tb ghost sm" href="${tabHref('identite')}">Sa fiche ▸</a></div>`;
+  }
+  body += heavy(run) ? '<p class="hint">Ce rendu occupe la mémoire : l\'assistant revient juste après.</p>'
+    : `<a class="lbl more" href="./console.html?slug=${enc(c.slug)}">ou en parler avec l'assistant ▸</a>`;
+  return `<section class="panel waiting"><div class="panel-head"><h2>En attendant</h2>
+    <span class="lbl">${esc(run.status === 'queued' ? 'en file' : `${HUMAN[run.action] || run.label} · ${Math.round((run.progress || 0) * 100)} %`)}</span></div>
+    ${body}</section>`;
 }
 
-/* ── la file ────────────────────────────────────────────── */
+/* ── volet Garde-robe ───────────────────────────────────── */
 
-function renderJobs() {
-  const jobs = state.jobs.slice(0, 14);
-  if (!jobs.length) return '<div class="jobs-empty">aucun travail pour ce personnage</div>';
-  return jobs.map((j) => {
-    const live = j.status === 'running' || j.status === 'queued';
-    const log = state.fullLogs[j.id] || j.log || [];
-    const where = j.params?.costume ? ` · ${j.params.costume}` : '';
-    return `<div class="job ${j.status}">
-      <div class="top"><span class="nm">${esc(j.label + where)}</span><span class="st ${j.status}">${
-        JOB_STATE[j.status] || j.status}</span></div>
-      ${live ? `<div class="bar"><i style="width:${Math.round((j.progress || 0) * 100)}%"></i></div>` : ''}
-      <div class="msg">${esc(j.error || j.message || '')}</div>
+function tabGarde(d) {
+  const c = d.character;
+  const keys = Object.keys(c.costumes);
+  if (state.costume === undefined || (state.costume !== null && !keys.includes(state.costume))) {
+    state.costume = keys.find((k) => !c.costumes[k].fullbody.validated) || keys[0] || null;
+  }
+  const locked = !!c.face.locked;
+  const gate = locked ? '' : `<div class="gate"><p>La tenue se porte sur <b>son visage</b>, et il n'est pas encore choisi.
+      Tu peux déjà écrire ce qu'il porte : c'est gardé dès que tu quittes le champ.</p>
+      ${link('Choisir son visage ▸', tabHref('visage'), { go: true })}</div>`;
+  const tenues = keys.length ? `<div class="seg tenues">${keys.map((k) => `<button class="tb sm${k === state.costume ? ' on' : ''}"
+      data-costume-tab="${esc(k)}">${esc(c.costumes[k].name)}</button>`).join('')}
+      <button class="tb sm${state.costume === null ? ' on' : ''}" data-costume-tab="">+ Tenue</button></div>` : '';
+  if (state.costume === null) {
+    const body = `<section class="panel">
+      <div class="panel-head"><h2>${keys.length ? 'Une autre tenue' : 'Ce qu\'il porte'}</h2><span class="lbl">gardé dès que tu quittes le champ</span></div>
+      ${textarea('costume_new.brief', '', 'en français : « hoodie bleu capuche baissée, baggy blanc usé aux genoux, baskets blanches »', 3)}
+      <div class="form-row">${refsZone('costume_new', 'vêtement')}
+        <label class="field"><span class="lbl">nom de la tenue</span>${input('costume_new.name', '', `tenue ${keys.length + 1}`)}</label>
+        <span class="sp"></span>
+        ${btn('L\'habiller ▸', { act: 'costume_go', form: 'costume_new', go: locked, disabled: !locked,
+          why: locked ? '' : 'il faut d\'abord son visage' })}</div>
+    </section>`;
+    return `${gate}${tenues}${body}`;
+  }
+  const key = state.costume;
+  const cos = c.costumes[key];
+  const fb = cos.fullbody;
+  const form = `cos.${key}`;
+  if (fb.validated && !state.fbAgain) return `${tenues}${gardeValidated(d, key, cos)}`;
+  const cands = fb.candidates.map((x, i) => ({ ...x, n: i + 1 }));
+  const { current, older, job, expected } = lot(cands, 'fullbody', key);
+  const pickN = state.pick[`fb:${key}`];
+  const picked = cands.find((x) => String(x.n) === String(pickN));
+  const src = (x) => fileUrl(c.slug, x.file, x.at);
+  const brief = `<section class="panel">
+      <div class="panel-head"><h2>Ce qu'il porte</h2><span class="lbl">gardé dès que tu quittes le champ</span></div>
+      ${textarea(`${form}.brief`, cos.brief || '', 'en français, comme ça vient', 3)}
       <div class="form-row">
-        <details data-job="${j.id}"${state.openLogs.has(j.id) ? ' open' : ''}><summary>journal · ${
-          esc(when(j.started || j.created))}</summary><pre>${esc(log.join('\n') || '—')}</pre></details>
-        ${live ? `<span class="sp"></span><button class="tb ghost sm" data-cancel="${j.id}">Annuler</button>` : ''}
-      </div></div>`;
-  }).join('');
+        <div class="refs">${cos.refs.map((r) => {
+          const u = fileUrl(c.slug, r);
+          return `<span class="thumb" style="background-image:url('${esc(u)}')" title="${esc(base(r))}" data-zoom="${esc(u)}"
+            data-cap="${esc(base(r))}"><button data-act="costume_edit" data-costume="${esc(key)}"
+            data-params="${esc(JSON.stringify({ drop_refs: [r] }))}" title="retirer"
+            data-confirm="${esc('Retirer cette image de la tenue ?')}">×</button></span>`;
+        }).join('')}</div>${refsZone(form, 'vêtement')}
+        <span class="sp"></span>
+        ${btn(cands.length ? 'Trois autres ▸' : 'L\'habiller ▸', {
+          act: 'fullbody', form, costume: key, params: { variants: 3 }, go: locked && !cands.length && !job,
+          disabled: !locked || !!job, why: !locked ? 'il faut d\'abord son visage' : job ? 'un rendu est en cours' : '' })}
+      </div>
+    </section>`;
+  const grid = cands.length || job ? `<div class="props tall">${current.map((x) => prop({
+    kind: `fb:${key}`, n: x.n, src: src(x), cap: `${cos.name} · n° ${x.n}`, sel: picked === x, cls: 'tall',
+  })).join('')}${Array.from({ length: expected - current.length }, (_, i) =>
+    slot(job, current.length + i, current.length, expected, 'tall')).join('')}</div>` : '';
+  const again = fb.validated ? `<p class="hint">Un autre plein pied : l'atelier refera sa pose, ses vues et sa 3D à partir de lui.
+    <button class="linkish" data-fb-again="0">garder l'actuel</button></p>` : '';
+  const decision = cands.length ? decide({
+    thumb: picked && src(picked),
+    text: picked ? `le n° ${picked.n}, cette tenue ?` : 'Clique le plein pied qui lui va.',
+    button: btn('Cette tenue ▸', {
+      act: 'fullbody_ok', costume: key, params: picked ? { candidate: String(picked.n) } : undefined, go: true,
+      disabled: !picked,
+      confirm: fb.validated ? 'Garder ce plein pied ? L\'atelier refera sa pose, ses vues et sa 3D à partir de lui.' : undefined,
+    }),
+  }) : '';
+  return `${gate}${tenues}<div class="work one">
+    <div class="work-main">${brief}${failure(job ? null : lastJob('fullbody', key))}${again}${grid}
+      ${strip(`fb:${key}`, older, pickN, src)}${job ? waitingCard(d, 'garde-robe') : ''}</div>
+  </div>${decision}`;
 }
 
-function paintJobs() {
-  const node = $('#jobs');
-  if (!node) return;
-  node.innerHTML = renderJobs();
-  const wait = $('#waiting');
-  if (wait && !wait.contains(document.activeElement)) wait.innerHTML = waitingCard(state.detail);
-  const live = state.jobs.filter((j) => j.status === 'running' || j.status === 'queued').length;
-  $('#jobs-count').textContent = live ? `${live} actif${live > 1 ? 's' : ''}` : '';
+function gardeValidated(d, key, cos) {
+  const c = d.character;
+  const src = fileUrl(c.slug, cos.fullbody.validated, cos.fullbody.validated_at);
+  const [chip] = atelier(d);
+  return `<div class="hero-pick tall">
+    <img class="hero-img-tall" src="${esc(src)}" alt="${esc(cos.name)}" data-zoom="${esc(src)}" data-cap="${esc(cos.name)}">
+    <div class="hero-txt">
+      <span class="kicker">sa tenue · ${esc(cos.name)}</span>
+      <h2 class="big">Il est habillé.</h2>
+      <p class="prose">L'atelier prend la suite tout seul : sa pose, ses vues, sa 3D, son squelette. Rien à faire ici ;
+        si quelque chose demande ton œil, ça arrivera dans « Ce qui attend ».</p>
+      <p class="lbl">${esc(chip)}</p>
+      ${cos.brief ? `<blockquote class="small">${esc(cos.brief)}</blockquote>` : ''}
+      <div class="row-start">${link('Voir sa planche ▸', tabHref('planche'), { go: true })}
+        <button class="tb ghost" data-fb-again="1">Changer de plein pied</button></div>
+    </div>
+  </div>`;
 }
+
+/* ── volet Voix ─────────────────────────────────────────── */
+
+function voiceSoon(d) {
+  const sheet = d.character.identity || {};
+  const reason = state.voice.config && !state.voice.config.missing ? state.voice.config.reason : '';
+  return `<section class="soon">
+    <span class="kicker">sa voix</span>
+    <h2 class="big">Sa voix arrive bientôt.</h2>
+    <p class="prose">Le studio n'a pas encore de service de voix${reason ? ` (${esc(reason)})` : ''}. Dès qu'il sera branché,
+      tu la décriras ici en quelques mots et tu en écouteras quatre, qui liront une de ses répliques.</p>
+    ${sheet.speech_style ? `<p class="prose">Ce qu'on sait déjà de sa façon de parler : <q>${esc(sheet.speech_style)}</q></p>` : ''}
+    <div class="row-start">${d.character.face.locked ? link('Lui parler par écrit ▸', tabHref('scene'))
+      : link('Choisir son visage ▸', tabHref('visage'))}</div>
+  </section>`;
+}
+
+function player(url, { n, text, cls = '' } = {}) {
+  return `<span class="player ${cls}"><button class="play" data-play="${esc(url)}" title="écouter" aria-label="écouter"><i></i></button>
+    <span class="wave" data-wave="${esc(url)}"><i></i></span>${n ? `<span class="lbl">${esc(n)}</span>` : ''}</span>
+    ${text ? `<span class="vc-text">« ${esc(text)} »</span>` : ''}`;
+}
+
+function tabVoix(d) {
+  const c = d.character;
+  const v = voiceOf(c);
+  if (!v && !voicePossible(c)) return voiceSoon(d);
+  if (v?.locked) return voiceLocked(d, v);
+  const sheet = c.identity || {};
+  const cands = (v?.candidates || []).map((x, i) => ({ ...x, n: i + 1 }));
+  const { current, older, job, expected } = lot(cands, 'voice_design');
+  const pickN = state.pick.voice;
+  const picked = cands.find((x) => String(x.n) === String(pickN));
+  const url = (x) => fileUrl(c.slug, x.file, x.at);
+  const brief = `<section class="panel">
+    <div class="panel-head"><h2>Sa voix, en mots</h2></div>
+    ${textarea('voice.description', v?.description || sheet.speech_style || '',
+      '« grave et lente, un peu cassée, accent du Finistère, jamais pressée »', 2)}
+    <label class="field"><span class="lbl">ce qu'il dit pour l'essai</span>${input('voice.text', cands.at(-1)?.text || '',
+      'laisse vide : il se présente')}</label>
+    <div class="form-row"><span class="hint">Quatre voix liront la même phrase ; tu gardes la sienne.</span><span class="sp"></span>
+      ${btn(cands.length ? 'Quatre autres ▸' : 'Quatre voix ▸', { act: 'voice_design', form: 'voice', params: { n: 4 },
+        go: !cands.length && !job, disabled: !!job, why: job ? 'des voix sont en cours' : '' })}</div>
+  </section>`;
+  const cards = cands.length || job ? `<div class="voices">${current.map((x) => `<div class="vc${picked === x ? ' sel' : ''}"
+      data-pick="voice" data-val="${x.n}" tabindex="0" role="button" aria-pressed="${picked === x}">
+      <span class="vc-n">voix n° ${x.n}${picked === x ? ' · choisie' : ''}</span>${player(url(x), { text: x.text })}</div>`).join('')}
+    ${Array.from({ length: expected - current.length }, (_, i) => slot(job, current.length + i, current.length, expected, 'vc'))
+      .join('')}</div>` : '';
+  const olderList = older.length ? `<div class="strip-wrap"><span class="lbl">voix précédentes · ${older.length}</span>
+    <div class="voices small">${older.map((x) => `<div class="vc${picked === x ? ' sel' : ''}" data-pick="voice" data-val="${x.n}"
+      tabindex="0" role="button"><span class="vc-n">n° ${x.n}</span>${player(url(x))}</div>`).join('')}</div></div>` : '';
+  return `<div class="work one"><div class="work-main">${brief}${failure(job ? null : lastJob('voice_design'))}${cards}
+    ${olderList}${job ? waitingCard(d, 'voix') : ''}</div></div>
+  ${cands.length ? decide({
+    text: picked ? `la voix n° ${picked.n}, c'est la sienne ?` : 'Écoute, puis clique la voix qui est la sienne.',
+    button: btn('Cette voix ▸', { act: 'voice_lock', params: picked ? { candidate: String(picked.n) } : undefined,
+      go: true, disabled: !picked }),
+  }) : ''}`;
+}
+
+function lockedVoiceFile(v) {
+  if (!v?.locked) return null;
+  if (/^\d+$/.test(String(v.locked))) return v.candidates?.[Number(v.locked) - 1]?.file || null;
+  return v.locked;
+}
+
+function voiceLocked(d, v) {
+  const c = d.character;
+  const url = fileUrl(c.slug, lockedVoiceFile(v), v.locked_at);
+  const lines = (v.lines || []).slice().reverse();
+  const job = liveJob('line');
+  return `<div class="duo wide-left">
+    <section class="panel voice-hero">
+      <span class="kicker">sa voix</span>
+      <h2 class="big">C'est la sienne.</h2>
+      ${player(url, { text: v.locked_text, cls: 'lg' })}
+      ${v.description ? `<p class="hint">${esc(v.description)}</p>` : ''}
+      <div class="row-start">${link('Lui parler ▸', tabHref('scene'), { go: true })}
+        ${btn('Changer de voix', { act: 'voice_unlock', confirm: 'Rouvrir le choix de sa voix ? Les répliques gardées restent.' })}</div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Faire dire</h2><span class="lbl">trois prises par réplique</span></div>
+      ${textarea('line.text', '', 'ce qu\'il dit', 2)}
+      <label class="field"><span class="lbl">direction de jeu</span>${input('line.direction', '', '« à voix basse, épuisé »')}</label>
+      <div class="form-row"><span class="sp"></span>${btn('Faire dire ▸', { act: 'line', form: 'line', params: { takes: 3 },
+        disabled: !!job, why: job ? 'une réplique est en cours' : '' })}</div>
+    </section>
+  </div>
+  <section class="panel">
+    <div class="panel-head"><h2>Ses répliques</h2><span class="lbl">${lines.length || 'aucune'}</span></div>
+    ${job ? `<div class="line-it pending"><span class="lbl">en cours · ${Math.round((job.progress || 0) * 100)} %</span>
+      <p>« ${esc(job.params?.text || '')} »</p></div>` : ''}
+    ${lines.map((l) => lineItem(c, l)).join('') || (job ? '' : '<p class="hint">Rien encore. Fais-lui dire une première phrase, ou parle-lui dans la Scène.</p>')}
+  </section>`;
+}
+
+function lineItem(c, l) {
+  const takes = l.takes || [];
+  return `<div class="line-it"><p>« ${esc(l.text)} »${l.direction ? ` <span class="lbl">${esc(l.direction)}</span>` : ''}</p>
+    <div class="takes">${takes.map((t, i) => {
+      // `kept` : le numéro de la prise (1, 2…), ou son fichier.
+      const kept = t.kept === true || String(l.kept) === String(i + 1) || (!!t.file && l.kept === t.file);
+      return `<span class="take${kept ? ' kept' : ''}">${player(fileUrl(c.slug, t.file, t.at), { n: `prise ${i + 1}` })}
+        ${kept ? '<span class="lbl ok">gardée</span>' : btn('Garder', { act: 'line_keep', params: { line: l.id, take: String(i + 1) }, sm: true })}</span>`;
+    }).join('')}</div></div>`;
+}
+
+/* ── volet Planche ──────────────────────────────────────── */
+
+const panelFile = (p) => (typeof p === 'string' ? p : p?.file);
+
+function tabPlanche(d) {
+  const c = d.character;
+  const key = validatedCostume(c);
+  if (!key) {
+    return `<section class="soon"><span class="kicker">sa planche</span><h2 class="big">Pas encore de planche.</h2>
+      <p class="prose">La planche de présentation se compose une fois sa tenue choisie : poses naturelles, expressions,
+        détails, palette et taille, sur une seule image à montrer.</p>
+      <div class="row-start">${link(c.face.locked ? 'L\'habiller ▸' : 'Choisir son visage ▸',
+        tabHref(c.face.locked ? 'garde-robe' : 'visage'), { go: true })}</div></section>`;
+  }
+  const cos = c.costumes[key];
+  const pres = cos.presentation || null;
+  const job = liveJob('presentation', key);
+  const panels = pres?.panels || {};
+  const src = (f) => fileUrl(c.slug, f, pres?.at);
+  const tenues = Object.keys(c.costumes).filter((k) => c.costumes[k].fullbody.validated);
+  const tabs = tenues.length > 1 ? `<div class="seg tenues">${tenues.map((k) => `<button class="tb sm${k === key ? ' on' : ''}"
+    data-costume-tab="${esc(k)}">${esc(c.costumes[k].name)}</button>`).join('')}</div>` : '';
+  const soon = state.missing.presentation;
+  const compose = soon ? '<p class="hint">La planche de présentation arrive bientôt : l\'atelier ne sait pas encore la composer.</p>'
+    : btn(pres ? 'Recomposer' : 'Composer sa planche ▸', {
+      act: 'presentation', costume: key, go: !pres && !job, disabled: !!job, why: job ? 'elle se compose' : '',
+      confirm: pres ? 'Recomposer sa planche ? L\'ancienne reste dans les coulisses.' : undefined,
+    });
+  const rows = (pres || job) ? PLANCHE_ROWS.map(([k, label, want, shape]) => {
+    const files = (panels[k] || []).map(panelFile).filter(Boolean);
+    const n = job ? Math.max(want, files.length) : files.length;
+    if (!n) return '';
+    return `<div class="pl-row"><span class="lbl">${esc(label)}</span><div class="pl-grid ${shape}">${
+      files.map((f, i) => `<button class="pl-cell ${shape}" data-zoom="${esc(src(f))}" data-cap="${esc(`${label} · ${i + 1}`)}">
+        <img src="${esc(src(f))}" alt="" loading="lazy"></button>`).join('')}${
+      Array.from({ length: n - files.length }, (_, i) => slot(job, files.length + i, files.length, n, `pl-cell ${shape}`)).join('')
+    }</div></div>`;
+  }).join('') : '';
+  const sheet = pres?.sheet ? `<figure class="pl-sheet"><img src="${esc(src(pres.sheet))}" alt="sa planche" data-zoom="${
+    esc(src(pres.sheet))}" data-cap="${esc(`${c.name} · ${cos.name}`)}"></figure>` : '';
+  // Rien de composé : ce qu'on a déjà de lui, en attendant.
+  const already = !pres && !job ? fallbackPlanche(c, key, cos) : '';
+  return `${tabs}<section class="panel pl">
+      <div class="panel-head"><h2>Sa planche · ${esc(cos.name)}</h2><span class="sp"></span>
+        ${pres?.sheet ? `<a class="tb ghost sm" href="${esc(src(pres.sheet))}" download="${esc(`${c.slug}-planche.png`)}">Exporter</a>` : ''}
+        ${compose}</div>
+      ${job ? '<p class="hint">Elle se remplit case par case : expressions, poses, détails.</p>' : ''}
+      ${sheet}${sheet && rows && !job ? `<details class="redo"><summary>les cases une à une</summary>
+        <div class="redo-body">${rows}</div></details>` : rows}${already}
+    </section>`;
+}
+
+function fallbackPlanche(c, key, cos) {
+  const f = c.face;
+  const items = [];
+  if (cos.fullbody.validated) {
+    items.push(['tall', fileUrl(c.slug, cos.fullbody.validated, cos.fullbody.validated_at), `${cos.name} · plein pied`]);
+  }
+  if (f.locked) items.push(['sq', fileUrl(c.slug, f.locked, f.locked_at), 'son visage']);
+  (cos.sheets || []).filter((s) => s.engine === 'qwen21').slice(-2)
+    .forEach((s) => items.push(['wide', fileUrl(c.slug, s.file, s.at), 'planche de référence']));
+  return `<p class="hint">Pas encore composée. Ce qu'on a déjà de lui :</p><div class="pl-have">${items.map(([shape, u, cap]) =>
+    `<button class="pl-cell ${shape}" data-zoom="${esc(u)}" data-cap="${esc(cap)}"><img src="${esc(u)}" alt="${esc(cap)}"
+      loading="lazy"><span class="lbl">${esc(cap)}</span></button>`).join('')}</div>`;
+}
+
+/* ── la Scène : lui parler ──────────────────────────────── */
+
+function sceneKey(s = slug()) { return `cf.scene.${s}`; }
+
+function sceneLog(s = slug()) {
+  state.scene.logs ||= {};
+  if (!state.scene.logs[s]) {
+    let saved = [];
+    try { saved = JSON.parse(sessionStorage.getItem(sceneKey(s)) || '[]'); } catch (_) { /* navigation privée */ }
+    state.scene.logs[s] = Array.isArray(saved) ? saved : [];
+  }
+  return state.scene.logs[s];
+}
+
+function saveSceneLog(s = slug()) {
+  try { sessionStorage.setItem(sceneKey(s), JSON.stringify(sceneLog(s).slice(-60))); } catch (_) { /* rien */ }
+}
+
+function bubble(m, name) {
+  if (m.role === 'note') return `<div class="bub note${m.err ? ' err' : ''}">${esc(m.text)}</div>`;
+  const me = m.role === 'user';
+  return `<div class="bub ${me ? 'me' : 'them'}"><span class="who">${me ? 'toi' : esc(name)}</span>
+    <div class="txt">${esc(m.text)}</div>${m.audio ? player(m.audio) : ''}</div>`;
+}
+
+function sceneLogHtml(d) {
+  const c = d.character;
+  const log = sceneLog();
+  if (state.scene.mode === 'say') {
+    const v = voiceOf(c);
+    const lines = (v?.lines || []).slice().reverse();
+    const job = liveJob('line');
+    const pend = job ? `<div class="line-it pending"><span class="lbl">il la dit · ${Math.round((job.progress || 0) * 100)} %</span>
+      <p>« ${esc(job.params?.text || '')} »</p></div>` : '';
+    return pend + (lines.map((l) => lineItem(c, l)).join('')
+      || (job ? '' : `<p class="scene-empty">Écris une phrase et une direction de jeu : il la dit, en trois prises. Tu gardes la meilleure.</p>`));
+  }
+  if (!log.length) {
+    return `<div class="scene-empty"><p>${esc(c.name)} t'écoute.</p><div class="chips-row">${SUGGEST.map((s) =>
+      `<button class="chip" data-suggest="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>`;
+  }
+  return log.map((m) => bubble(m, c.name)).join('') + (state.scene.busy
+    ? `<div class="bub them"><span class="who">${esc(c.name)}</span><div class="thinking"><span></span><span></span><span></span></div></div>` : '');
+}
+
+function renderScene(d) {
+  const c = d.character;
+  const s = d.summary;
+  const v = voiceOf(c);
+  const cos = validatedCostume(c);
+  const face = c.face.locked ? fileUrl(c.slug, c.face.locked, c.face.locked_at) : s.thumb;
+  const body = cos ? fileUrl(c.slug, c.costumes[cos].fullbody.validated, c.costumes[cos].fullbody.validated_at) : '';
+  const blocker = micBlocker(state.voice.config);
+  const voiceLine = v?.locked ? 'sa voix est choisie' : voicePossible(c) ? 'pas encore de voix : il répond par écrit'
+    : 'il répond par écrit';
+  const say = state.scene.mode === 'say';
+  const canSay = !!v?.locked;
+  const mic = !say && !blocker ? `<button type="button" class="tb ghost mic${state.scene.micState === 'listening' ? ' on' : ''}"
+      data-mic title="appuie et parle">${state.scene.micState === 'listening' ? 'Je t\'écoute…' : 'Micro'}</button>` : '';
+  const compose = say
+    ? `${textarea('scene.line', '', 'ce qu\'il dit', 2)}
+       <div class="compose-row">${input('scene.direction', '', 'direction de jeu : « à voix basse, épuisé »')}
+         ${btn('Faire dire ▸', { type: 'submit', go: true, disabled: !canSay || !!liveJob('line'),
+           why: !canSay ? 'il lui faut d\'abord une voix' : liveJob('line') ? 'il en dit déjà une' : '' })}</div>
+       ${canSay ? '' : `<a class="lbl more" href="${tabHref('voix')}">lui trouver une voix ▸</a>`}`
+    : `${textarea('scene.msg', '', `Dis-lui quelque chose…`, 2)}
+       <div class="compose-row">${mic}${!say && blocker && voicePossible(c) ? `<span class="hint">micro : ${esc(blocker)}</span>` : ''}
+         <span class="sp"></span>${btn('Dire ▸', { type: 'submit', go: true, disabled: state.scene.busy })}</div>`;
+  return `<div class="scene">
+    <div class="scene-bar">
+      <a class="tb ghost sm" href="${tabHref('')}">◂ ${esc(c.name)}</a>
+      <span class="sp"></span>
+      <span class="seg"><button class="tb sm${say ? '' : ' on'}" data-scene-mode="talk">Conversation</button>
+        <button class="tb sm${say ? ' on' : ''}" data-scene-mode="say">Faire dire</button></span>
+    </div>
+    <div class="scene-grid">
+      <figure class="scene-portrait">
+        ${face ? `<img class="sp-face" src="${esc(face)}" alt="${esc(c.name)}">` : `<span class="ph">${esc(initials(c.name))}</span>`}
+        ${body ? `<img class="sp-body" src="${esc(body)}" alt="" data-zoom="${esc(body)}" data-cap="${esc(c.name)}">` : ''}
+        <figcaption><span class="nm">${esc(c.name)}</span><span class="lbl">${esc(voiceLine)}</span></figcaption>
+      </figure>
+      <section class="scene-talk">
+        <div class="scene-log" id="scene-log" aria-live="polite">${sceneLogHtml(d)}</div>
+        <form class="scene-compose" data-form="scene">${compose}</form>
+      </section>
+    </div>
+  </div>`;
+}
+
+function paintScene() {
+  const node = $('#scene-log');
+  if (!node || !state.detail) return;
+  node.innerHTML = sceneLogHtml(state.detail);
+  node.scrollTop = node.scrollHeight;
+  paintPlayers();
+}
+
+async function sendScene(text) {
+  const d = state.detail;
+  const s = slug();
+  const log = sceneLog(s);
+  const history = log.filter((m) => m.role === 'user' || m.role === 'char')
+    .map((m) => ({ role: m.role === 'char' ? 'assistant' : 'user', content: m.text }));
+  log.push({ role: 'user', text });
+  state.scene.busy = true;
+  paintScene();
+  const btnSend = $('.scene-compose button[type=submit]');
+  if (btnSend) btnSend.disabled = true;
+  try {
+    const out = await talk({ slug: s, name: d.character.name, sheet: d.character.identity || {}, history, message: text });
+    const msg = { role: 'char', text: out.reply, audio: out.audio ? anyUrl(s, out.audio) : null };
+    log.push(msg);
+    if (out.via !== 'studio' && !state.scene.noted) {
+      state.scene.noted = true;
+      log.push({ role: 'note', text: 'il répond par écrit : la voix n\'est pas encore branchée à la conversation' });
+    }
+    if (msg.audio) play(msg.audio);
+  } catch (e) {
+    log.push({ role: 'note', err: true, text: `pas de réponse : ${e.message}` });
+  }
+  state.scene.busy = false;
+  saveSceneLog(s);
+  paintScene();
+  if (btnSend) btnSend.disabled = false;
+}
+
+async function toggleMic() {
+  if (state.scene.mic && state.scene.micState === 'listening') { state.scene.mic.stop(); return; }
+  const cfgv = state.voice.config;
+  const blocker = micBlocker(cfgv);
+  if (blocker) { toast(blocker, 5000); return; }
+  const log = sceneLog();
+  state.scene.mic ||= new Micro(cfgv.ws_url, {
+    onTranscript: (text) => { if (text) { log.push({ role: 'user', text }); paintScene(); } },
+    onReply: (text, audio) => {
+      log.push({ role: 'char', text, audio: audio ? anyUrl(slug(), audio) : null });
+      saveSceneLog();
+      paintScene();
+      if (audio) play(anyUrl(slug(), audio));
+    },
+    onAudio: (url) => play(url),
+    onState: (st) => { state.scene.micState = st; const b = $('[data-mic]'); if (b) b.classList.toggle('on', st === 'listening'); },
+  });
+  try {
+    await state.scene.mic.start();
+  } catch (e) {
+    toast(`micro : ${e.message}`, 6000);
+  }
+}
+
+/* ── lecture des voix : un seul lecteur pour toute la page ── */
+
+const audio = new Audio();
+audio.preload = 'none';
+
+function play(url) {
+  if (state.playing === url && !audio.paused) { audio.pause(); return; }
+  state.playing = url;
+  audio.src = url;
+  audio.play().catch(() => toast('lecture impossible'));
+  paintPlayers();
+}
+
+function paintPlayers() {
+  $$('[data-play]').forEach((b) => b.classList.toggle('on', b.dataset.play === state.playing && !audio.paused));
+  const pr = audio.duration ? audio.currentTime / audio.duration : 0;
+  $$('[data-wave]').forEach((w) => {
+    const i = w.firstElementChild;
+    if (i) i.style.width = `${w.dataset.wave === state.playing ? Math.round(pr * 100) : 0}%`;
+  });
+}
+
+['play', 'pause', 'ended', 'timeupdate'].forEach((ev) => audio.addEventListener(ev, paintPlayers));
 
 /* ── rendu ──────────────────────────────────────────────── */
 
@@ -782,8 +1131,15 @@ function typing() {
 function render(force = false) {
   if (!force && typing()) { state.pending = true; return; }
   state.pending = false;
+  goUsed = false;
+  const logBefore = $('#scene-log');
+  const keep = logBefore ? logBefore.scrollHeight - logBefore.scrollTop : null;
   $('#app').innerHTML = state.route.view === 'perso' ? renderPerso() : renderHome();
-  paintJobs();
+  const logAfter = $('#scene-log');
+  if (logAfter) logAfter.scrollTop = keep == null ? logAfter.scrollHeight : logAfter.scrollHeight - keep;
+  $('#coulisses-link').href = state.route.view === 'perso' ? `./coulisses.html#/${enc(slug())}` : './coulisses.html';
+  document.body.classList.toggle('in-scene', state.route.view === 'perso' && state.route.tab === 'scene');
+  paintPlayers();
 }
 
 /* ── chargements ────────────────────────────────────────── */
@@ -792,12 +1148,17 @@ async function loadList() {
   state.list = await api('/api/characters');
 }
 
-async function loadDetail() {
-  const d = await api(`/api/characters/${encodeURIComponent(slug())}`);
-  const keys = Object.keys(d.character.costumes);
-  if (state.costume === undefined || (state.costume !== null && !keys.includes(state.costume))) {
-    state.costume = d.summary.next?.costume || keys[0] || null;
+async function loadAttention() {
+  try {
+    const out = await api('/api/attention');
+    state.attention = Array.isArray(out) ? out : out?.attention || out?.items || [];
+  } catch (_) {
+    state.attention = null;    // pas de route : on s'en tient aux résumés
   }
+}
+
+async function loadDetail() {
+  const d = await api(`/api/characters/${enc(slug())}`);
   const sig = JSON.stringify(d);
   const changed = sig !== state.sig;
   state.sig = sig;
@@ -806,65 +1167,69 @@ async function loadDetail() {
 }
 
 async function loadJobs() {
-  const { jobs } = await api(`/api/jobs?slug=${encodeURIComponent(slug())}`);
+  const { jobs } = await api(`/api/jobs?slug=${enc(slug())}`);
   state.jobs = jobs;
-  await Promise.all([...state.openLogs].filter((id) => jobs.some((j) => j.id === id && j.status === 'running'))
-    .map(fetchLog));
   return jobs;
 }
 
-async function fetchLog(id) {
-  try {
-    state.fullLogs[id] = (await api(`/api/jobs/${id}`)).log;
-  } catch (_) { /* travail oublié par le serveur */ }
+async function loadVoice() {
+  state.voice.config = await voiceConfig();
 }
 
 /* ── la navigation ──────────────────────────────────────── */
 
 function parseRoute() {
   const h = location.hash.replace(/^#\/?/, '');
-  const m = /^p\/([^/]+)/.exec(h);
-  return m ? { view: 'perso', slug: decodeURIComponent(m[1]) } : { view: 'home' };
+  const m = /^p\/([^/]+)(?:\/([^/]+))?/.exec(h);
+  return m ? { view: 'perso', slug: decodeURIComponent(m[1]), tab: m[2] || null } : { view: 'home' };
 }
 
 async function onRoute() {
   const route = parseRoute();
   const changed = route.view !== state.route.view || route.slug !== state.route.slug;
+  const tabChanged = route.tab !== state.route.tab;
   state.route = route;
+  state.renaming = false;
+  state.editField = null;
   if (changed) {
     state.detail = null;
     state.jobs = [];
     state.costume = undefined;
-    state.stage = null;
-    state.renaming = false;
-    state.editField = null;
+    state.pick = {};
+    state.fbAgain = false;
     state.sig = '';
     state.seen.clear();
+    state.scene.mic?.close();
+    state.scene.mic = null;
     window.scrollTo(0, 0);
+  } else if (tabChanged) {
+    // Changer de volet garde la page où elle est, sauf si les volets sont passés au-dessus.
+    const bar = $('.vols');
+    if (bar && bar.getBoundingClientRect().top < 0) window.scrollTo(0, window.scrollY + bar.getBoundingClientRect().top - 70);
   }
   render(true);
   try {
     if (route.view === 'home') {
-      await loadList();
+      await Promise.all([loadList(), loadAttention()]);
+      document.title = 'CASTING · CHARACTER FACTORY';
     } else {
-      await loadDetail();
-      (await loadJobs()).forEach((j) => { if (!['queued', 'running'].includes(j.status)) state.seen.add(j.id); });
-      document.title = `${state.detail.character.name.toUpperCase()} · STUDIO`;
+      await Promise.all([loadDetail(), loadJobs(), state.voice.config ? null : loadVoice()]);
+      state.jobs.forEach((j) => { if (!live(j)) state.seen.add(j.id); });
+      document.title = `${state.detail.character.name.toUpperCase()} · CHARACTER FACTORY`;
     }
-    if (route.view === 'home') document.title = 'CHARACTER FACTORY · STUDIO';
     render(true);
   } catch (e) {
-    $('#app').innerHTML = `<div class="pan"><p class="prose">${esc(e.message)}</p>
-      <p class="prose"><a class="tb ghost sm" href="#/">◂ Studio</a></p></div>`;
+    $('#app').innerHTML = `<section class="soon"><h2 class="big">Introuvable.</h2><p class="prose">${esc(e.message)}</p>
+      <div class="row-start"><a class="tb ghost" href="#/">◂ Casting</a></div></section>`;
   }
 }
 
 /* ── les actions ────────────────────────────────────────── */
 
-function collect(btn) {
-  const params = btn.dataset.params ? JSON.parse(btn.dataset.params) : {};
-  if (btn.dataset.costume) params.costume = btn.dataset.costume;
-  const form = btn.dataset.form;
+function collect(el) {
+  const params = el.dataset.params ? JSON.parse(el.dataset.params) : {};
+  if (el.dataset.costume) params.costume = el.dataset.costume;
+  const form = el.dataset.form;
   if (form) {
     for (const node of $$(`[data-draft^="${CSS.escape(form)}."]`, $('#app'))) {
       params[node.dataset.draft.slice(form.length + 1)] = node.type === 'checkbox' ? node.checked : node.value;
@@ -877,51 +1242,106 @@ function collect(btn) {
 
 function forget(form) {
   if (!form) return;
-  // Les réglages (variantes, graine, méthode) restent d'un essai à l'autre ;
-  // les images déposées sont parties avec l'action.
-  if (form === 'costume_new') {
+  if (['costume_new', 'line', 'scene'].includes(form)) {
     for (const k of Object.keys(state.drafts)) if (k.startsWith(`${form}.`)) delete state.drafts[k];
   }
   (state.refs[form] || []).forEach((r) => URL.revokeObjectURL(r.url));
   delete state.refs[form];
 }
 
-async function doAction(btn) {
-  const action = btn.dataset.act;
-  if (btn.dataset.confirm && !window.confirm(btn.dataset.confirm)) return;
-  const params = collect(btn);
-  btn.disabled = true;
+function ask(text) {
+  const box = $('#confirm');
+  $('#confirm-text').textContent = text;
+  box.hidden = false;
+  $('#confirm-yes').focus();
+  return new Promise((resolve) => {
+    const done = (v) => {
+      box.hidden = true;
+      box.onclick = null;
+      document.removeEventListener('keydown', onKey, true);
+      resolve(v);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } };
+    document.addEventListener('keydown', onKey, true);
+    box.onclick = (e) => {
+      if (e.target.id === 'confirm-yes') done(true);
+      else if (e.target.id === 'confirm-no' || e.target === box) done(false);
+    };
+  });
+}
+
+const DONE_NOW = {
+  face_lock: 'c\'est lui', fullbody_ok: 'tenue choisie : l\'atelier prend la suite', voice_lock: 'voix choisie : tu peux lui parler',
+  voice_unlock: 'le choix de sa voix est rouvert', line_keep: 'prise gardée', costume_edit: 'tenue mise à jour',
+};
+
+async function doAction(el) {
+  const action = el.dataset.act;
+  if (el.dataset.confirm && !(await ask(el.dataset.confirm))) return;
+  const params = collect(el);
+  if (action === 'face') {
+    if (!String(params.brief ?? 'x').trim()) delete params.brief;
+    if (!('around' in params) && !params.brief && !(params.refs || []).length && !state.detail.character.face.brief) {
+      toast('dis en une phrase qui il est, ou dépose une photo', 5000);
+      $('[data-draft="face.brief"]')?.focus();
+      return;
+    }
+  }
+  el.disabled = true;
   try {
     if (action === 'costume_go') {
       // Une nouvelle tenue : elle se garde (une seule fois, même si le champ
       // vient d'être quitté), puis son plein pied part dans la file.
       const key = await createCostume();
-      if (!key) { btn.disabled = false; return; }
-      const run = await api(actionUrl('fullbody'), {
-        method: 'POST', body: { costume: key, variants: params.variants },
-      });
+      if (!key) { el.disabled = false; return; }
+      const run = await api(actionUrl('fullbody'), { method: 'POST', body: { costume: key, variants: 3 } });
       state.jobs.unshift(run.job);
-      toast(`${run.job.label} : en file`);
+      schedulePoll(600);
+      toast('il s\'habille : trois pleins pieds arrivent');
       await loadDetail();
       render(true);
       return;
     }
     const out = await api(actionUrl(action), { method: 'POST', body: params });
     if (out.job) {
-      toast(`${out.job.label} : en file`);
       state.jobs.unshift(out.job);
+      schedulePoll(600);
+      toast(`c'est parti : ${HUMAN[action] || out.job.label}`);
     } else {
-      toast('fait');
-      if (action === 'costume_add') state.costume = out.result.costume;
-      // Un choix qui clôt une étape : l'atelier reprend la suite de la chaîne.
-      if (PICKS.has(action)) state.stage = null;
+      toast(DONE_NOW[action] || 'fait');
+      if (action === 'face_lock') delete state.pick.face;
+      if (action === 'fullbody_ok') { delete state.pick[`fb:${params.costume}`]; state.fbAgain = false; }
+      if (action === 'voice_lock') delete state.pick.voice;
     }
-    forget(btn.dataset.form);
+    forget(el.dataset.form);
     await loadDetail();
     render(true);
   } catch (e) {
+    if (unknown(e)) {
+      state.missing[action] = true;
+      if (VOICE_ACTIONS.has(action)) state.missing.voice_design = true;
+      toast('pas encore branché dans l\'atelier : ça arrive bientôt', 5000);
+      render(true);
+      return;
+    }
     toast(e.message, 7000);
-    btn.disabled = false;
+    el.disabled = false;
+  }
+}
+
+async function answerAttention(el) {
+  const opt = JSON.parse(el.dataset.option || '{}');
+  const id = el.dataset.attention;
+  el.disabled = true;
+  try {
+    if (opt.action) await api(actionUrl(opt.action), { method: 'POST', body: opt.params || {} });
+    else await api(`/api/characters/${enc(slug())}/attention/${enc(id)}`, { method: 'POST', body: { option: opt.id } });
+    toast('réponse donnée à l\'atelier');
+    await loadDetail();
+    render(true);
+  } catch (e) {
+    toast(unknown(e) ? 'l\'atelier ne sait pas encore recevoir la réponse : vois dans les coulisses' : e.message, 6000);
+    el.disabled = false;
   }
 }
 
@@ -935,7 +1355,7 @@ function createCostume() {
   const brief = String(state.drafts['costume_new.brief'] || '').trim();
   const refs = (state.refs.costume_new || []).map((r) => r.id);
   if (!brief && !refs.length) {
-    toast("décris d'abord la tenue, ou dépose une image de vêtement", 5000);
+    toast('décris d\'abord la tenue, ou dépose une image de vêtement', 5000);
     return Promise.resolve(null);
   }
   costumeSaving = (async () => {
@@ -945,8 +1365,6 @@ function createCostume() {
       });
       state.costume = out.result.costume;
       forget('costume_new');
-      delete state.drafts['costume_new.brief'];
-      delete state.drafts['costume_new.name'];
       toast('tenue gardée');
       await loadDetail();
       render();
@@ -977,7 +1395,7 @@ async function uploadFiles(form, files) {
     try {
       const out = await api('/api/uploads', {
         method: 'POST',
-        raw: { body: f, headers: { 'content-type': f.type, 'x-filename': encodeURIComponent(f.name) } },
+        raw: { body: f, headers: { 'content-type': f.type, 'x-filename': enc(f.name) } },
       });
       (state.refs[form] ||= []).push({ id: out.id, url: URL.createObjectURL(f), name: f.name });
     } catch (e) {
@@ -998,10 +1416,10 @@ async function uploadFiles(form, files) {
 
 async function createCharacter(form) {
   const name = form.elements.name.value.trim();
-  if (!name) { form.elements.name.focus(); return; }
+  if (!name) { form.elements.name.focus(); toast('un nom, même provisoire'); return; }
   try {
     const out = await api('/api/characters', { method: 'POST', body: { name } });
-    location.hash = `#/p/${encodeURIComponent(out.slug)}`;
+    location.hash = `#/p/${enc(out.slug)}`;
   } catch (e) {
     toast(e.message, 6000);
   }
@@ -1009,7 +1427,7 @@ async function createCharacter(form) {
 
 async function saveIdentity(body, message) {
   try {
-    await api(`/api/characters/${encodeURIComponent(slug())}/identity`, { method: 'PUT', body });
+    await api(`/api/characters/${enc(slug())}/identity`, { method: 'PUT', body });
     await loadDetail();
     if (message) toast(message);
   } catch (e) {
@@ -1028,30 +1446,44 @@ async function saveField(form) {
   const key = form.dataset.key;
   const value = form.elements.v.value.trim();
   state.editField = null;
-  if (value !== ((state.detail.character.identity || {})[key] || '')) await saveIdentity({ fields: { [key]: value } });
+  if (value !== ((state.detail.character.identity || {})[key] || '')) await saveIdentity({ fields: { [key]: value } }, 'gardé');
+  render(true);
+}
+
+async function toggleTrait(t) {
+  const sheet = state.detail.character.identity || {};
+  const have = String(sheet.personality_traits || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const i = have.findIndex((x) => x.toLowerCase() === t);
+  if (i >= 0) have.splice(i, 1); else have.push(t);
+  await saveIdentity({ fields: { personality_traits: have.join(', ') } });
   render(true);
 }
 
 async function setStyle(value) {
-  try {
-    await api(`/api/characters/${encodeURIComponent(slug())}/identity`, { method: 'PUT', body: { style: value } });
-    await loadDetail();
-    render(true);
-    toast(`style : ${value === 'stylized' ? 'stylisé' : 'photoréaliste'}`);
-  } catch (e) {
-    toast(e.message, 6000);
-  }
+  await saveIdentity({ style: value }, `rendu : ${value === 'stylized' ? 'stylisé' : 'photo'}`);
+  render(true);
 }
 
-async function cancelJob(id) {
-  try {
-    const out = await api(`/api/jobs/${id}/cancel`, { method: 'POST' });
-    toast(out.message, 4000);
-    await loadJobs();
-    paintJobs();
-  } catch (e) {
-    toast(e.message, 6000);
+async function submitScene(form) {
+  const say = state.scene.mode === 'say';
+  if (say) {
+    const text = String(state.drafts['scene.line'] || '').trim();
+    if (!text) { toast('écris ce qu\'il doit dire'); return; }
+    const fake = document.createElement('button');
+    fake.dataset.act = 'line';
+    fake.dataset.params = JSON.stringify({ text, direction: String(state.drafts['scene.direction'] || '').trim(), takes: 3 });
+    delete state.drafts['scene.line'];
+    delete state.drafts['scene.direction'];
+    await doAction(fake);
+    return;
   }
+  const field = form.querySelector('[data-draft="scene.msg"]');
+  const text = String(field?.value || '').trim();
+  if (!text || state.scene.busy) return;
+  field.value = '';
+  delete state.drafts['scene.msg'];
+  await sendScene(text);
+  $('[data-draft="scene.msg"]')?.focus();
 }
 
 function zoom(src, cap) {
@@ -1065,20 +1497,25 @@ function wire() {
 
   app.addEventListener('click', (e) => {
     const t = e.target;
+    const z = t.closest('[data-zoom]');
+    if (z && !t.closest('[data-act], [data-drop-ref]')) {
+      e.preventDefault(); e.stopPropagation(); zoom(z.dataset.zoom, z.dataset.cap); return;
+    }
+    const playBtn = t.closest('[data-play]');
+    if (playBtn) { e.preventDefault(); e.stopPropagation(); play(playBtn.dataset.play); return; }
     const actBtn = t.closest('[data-act]');
-    if (actBtn) { e.preventDefault(); e.stopPropagation(); doAction(actBtn); return; }
-    const tab = t.closest('[data-costume-tab]');
-    if (tab) { state.costume = tab.dataset.costumeTab || null; render(true); return; }
-    const step = t.closest('[data-stage]');
-    if (step && !step.disabled) { state.stage = step.dataset.stage; render(true); window.scrollTo(0, 0); return; }
-    const goto = t.closest('[data-goto]');
-    if (goto) {
-      state.stage = goto.dataset.goto;
-      if (goto.dataset.goto === 'costume' && !Object.keys(state.detail.character.costumes).length) state.costume = null;
+    if (actBtn) { e.preventDefault(); e.stopPropagation(); if (!actBtn.disabled) doAction(actBtn); return; }
+    const pick = t.closest('[data-pick]');
+    if (pick) {
+      const k = pick.dataset.pick;
+      state.pick[k] = String(state.pick[k]) === pick.dataset.val ? undefined : pick.dataset.val;
       render(true);
-      window.scrollTo(0, 0);
       return;
     }
+    const tab = t.closest('[data-costume-tab]');
+    if (tab) { state.costume = tab.dataset.costumeTab || null; state.fbAgain = false; render(true); return; }
+    const again = t.closest('[data-fb-again]');
+    if (again) { state.fbAgain = again.dataset.fbAgain === '1'; render(true); return; }
     if (t.closest('[data-rename]')) {
       state.renaming = true;
       render(true);
@@ -1092,24 +1529,19 @@ function wire() {
     if (edit) {
       state.editField = edit.dataset.edit;
       render(true);
-      const inp = $('form[data-form="field"] input');
-      if (inp) inp.focus();
+      const inp = $('form[data-form="field"] textarea');
+      if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
       return;
     }
     const trait = t.closest('[data-trait]');
-    if (trait) {
-      const picked = new Set(state.drafts['wait.traits'] || []);
-      picked.has(trait.dataset.trait) ? picked.delete(trait.dataset.trait) : picked.add(trait.dataset.trait);
-      state.drafts['wait.traits'] = [...picked];
-      $('#waiting').innerHTML = waitingCard(state.detail);
-      return;
-    }
-    if (t.closest('[data-save-traits]')) {
-      const traits = (state.drafts['wait.traits'] || []).join(', ');
-      delete state.drafts['wait.traits'];
-      saveIdentity({ fields: { personality_traits: traits } }, 'traits gardés').then(() => render(true));
-      return;
-    }
+    if (trait) { toggleTrait(trait.dataset.trait); return; }
+    const mode = t.closest('[data-scene-mode]');
+    if (mode) { state.scene.mode = mode.dataset.sceneMode; render(true); return; }
+    const sug = t.closest('[data-suggest]');
+    if (sug) { sendScene(sug.dataset.suggest); return; }
+    if (t.closest('[data-mic]')) { toggleMic(); return; }
+    const att = t.closest('[data-attention]');
+    if (att) { answerAttention(att); return; }
     const drop = t.closest('[data-drop-ref]');
     if (drop) {
       e.preventDefault();
@@ -1117,12 +1549,7 @@ function wire() {
       const [gone] = (state.refs[form] || []).splice(Number(i), 1);
       if (gone) URL.revokeObjectURL(gone.url);
       render(true);
-      return;
     }
-    const cancel = t.closest('[data-cancel]');
-    if (cancel) { cancelJob(cancel.dataset.cancel); return; }
-    const z = t.closest('[data-zoom]');
-    if (z) zoom(z.dataset.zoom, z.dataset.cap);
   });
 
   const keep = (e) => {
@@ -1137,7 +1564,6 @@ function wire() {
     if (cosBrief) saveCostume(cosBrief[1], { brief: e.target.value });
     if (draftKey === 'costume_new.brief' && e.target.value.trim()) createCostume();
     if (e.target.dataset?.refs) { uploadFiles(e.target.dataset.refs, [...e.target.files]); e.target.value = ''; }
-    if (e.target.matches('[data-style]')) setStyle(e.target.value);
   });
   app.addEventListener('submit', (e) => {
     const form = e.target.dataset.form;
@@ -1146,26 +1572,25 @@ function wire() {
     if (form === 'create') createCharacter(e.target);
     if (form === 'rename') rename(e.target);
     if (form === 'field') saveField(e.target);
+    if (form === 'scene') submitScene(e.target);
   });
   app.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    if (state.renaming || state.editField) { state.renaming = false; state.editField = null; render(true); }
+    const t = e.target;
+    if (e.key === 'Escape' && (state.renaming || state.editField)) {
+      state.renaming = false; state.editField = null; render(true); return;
+    }
+    // Entrée envoie ; Maj+Entrée va à la ligne.
+    if (e.key === 'Enter' && !e.shiftKey && t.matches('form[data-form="field"] textarea, [data-draft="scene.msg"]')) {
+      e.preventDefault();
+      t.form.requestSubmit();
+      return;
+    }
+    if ((e.key === 'Enter' || e.key === ' ') && t.matches('[data-pick], [data-edit]')) { e.preventDefault(); t.click(); }
   });
-  app.addEventListener('toggle', (e) => {
-    const id = e.target.dataset?.job;
-    if (!id) return;
-    if (e.target.open) {
-      state.openLogs.add(id);
-      fetchLog(id).then(() => {
-        const pre = $(`details[data-job="${id}"] pre`);
-        if (pre && state.fullLogs[id]) pre.textContent = state.fullLogs[id].join('\n') || '—';
-      });
-    } else state.openLogs.delete(id);
-  }, true);
   app.addEventListener('focusout', (e) => {
     // Un champ de la fiche se garde en quittant le champ, comme avec Entrée.
     const field = e.target.closest?.('form[data-form="field"]');
-    if (field && state.editField) setTimeout(() => { if (state.editField) saveField(field); }, 120);
+    if (field && state.editField) setTimeout(() => { if (state.editField && document.contains(field)) saveField(field); }, 120);
     setTimeout(() => { if (state.pending && !typing()) render(); }, 180);
   });
 
@@ -1174,9 +1599,7 @@ function wire() {
     const zone = e.target.closest?.('[data-refs-zone]');
     if (zone) { e.preventDefault(); zone.classList.add('over'); }
   });
-  app.addEventListener('dragleave', (e) => {
-    e.target.closest?.('[data-refs-zone]')?.classList.remove('over');
-  });
+  app.addEventListener('dragleave', (e) => { e.target.closest?.('[data-refs-zone]')?.classList.remove('over'); });
   app.addEventListener('drop', (e) => {
     const zone = e.target.closest?.('[data-refs-zone]');
     if (!zone) return;
@@ -1191,28 +1614,42 @@ function wire() {
 
 /* ── relevés périodiques ────────────────────────────────── */
 
+function announce(j) {
+  if (BACKGROUND[j.action]) return;   // l'arrière-plan ne dérange pas
+  if (j.status === 'done') toast(DONE_TEXT[j.action] || `${j.label} : fini`, 4500);
+  else if (j.status === 'error') toast(`le rendu n'a pas abouti : ${String(j.error || '').replace(/^refusé : /, '').slice(0, 120)}`, 7000);
+}
+
+const jobsSig = () => state.jobs.map((j) => `${j.id}:${j.status}:${j.progress}`).join('|');
+
 async function pollJobs() {
   let active = false;
   try {
     if (state.route.view === 'perso' && state.detail) {
+      const before = jobsSig();
       const jobs = await loadJobs();
-      active = jobs.some((j) => j.status === 'running' || j.status === 'queued');
-      const finished = jobs.filter((j) => !['queued', 'running'].includes(j.status) && !state.seen.has(j.id));
-      finished.forEach((j) => {
-        state.seen.add(j.id);
-        toast(j.status === 'done' ? `${j.label} : fini` : `${j.label} : ${j.error || j.status}`, 5000);
-      });
-      // Pendant un travail, les candidats arrivent un à un : on relit
-      // le personnage à chaque relevé et on redessine s'il a changé.
-      if (await loadDetail() || finished.length) render();
-      else paintJobs();
+      const moved = jobsSig() !== before;
+      active = jobs.some(live);
+      const finished = jobs.filter((j) => !live(j) && !state.seen.has(j.id));
+      finished.forEach((j) => { state.seen.add(j.id); announce(j); });
+      const changed = await loadDetail();
+      // La Scène ne se redessine pas sous les doigts : seul son fil bouge.
+      if (state.route.tab === 'scene') { if ((changed || moved) && state.scene.mode === 'say') paintScene(); }
+      else if (changed || moved) render();
     } else if (state.route.view === 'home') {
-      const before = JSON.stringify(state.list);
-      await loadList();
-      if (JSON.stringify(state.list) !== before) render();
+      const before = JSON.stringify([state.list, state.attention]);
+      await Promise.all([loadList(), loadAttention()]);
+      if (JSON.stringify([state.list, state.attention]) !== before) render();
     }
   } catch (_) { /* serveur momentanément muet : on réessaie */ }
-  setTimeout(pollJobs, active ? 1500 : 5000);
+  schedulePoll(active ? 1500 : 5000);
+}
+
+// Un travail vient de partir : on relève tout de suite, sans attendre le tour lent.
+let pollTimer = null;
+function schedulePoll(ms) {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(pollJobs, ms);
 }
 
 async function pollSystem() {
@@ -1220,20 +1657,15 @@ async function pollSystem() {
   try {
     const s = await api('/api/system');
     state.system = s;
-    const mem = s.memory.available_gb;
+    const mem = s.memory?.available_gb;
     const low = mem != null && mem < s.memory.min_free_gb;
     const run = s.running;
-    const parts = [];
-    if (run) parts.push(`${run.label} · ${run.slug}`);
-    if (mem != null) parts.push(`${Math.round(mem)} go libres`);
-    parts.push(s.llm.loaded.length ? `texte chargé` : 'texte au repos');
-    $('#sys-text').textContent = parts.join(' · ');
+    const who = run && state.list?.characters?.find((c) => c.slug === run.slug)?.name;
+    $('#sys-text').textContent = run ? `au travail · ${HUMAN[run.action] || run.label}${who ? ` · ${who}` : ''}`
+      : low ? 'mémoire basse' : 'prêt';
     pill.className = `pill ${run ? 'work' : low ? 'err' : 'on'}`;
-    pill.title = [`modèle de texte : ${s.llm.model}${s.llm.loaded.length ? ' (chargé)' : ''}`,
-      ...Object.entries(s.comfy).map(([u, c]) => `ComfyUI ${u} : ${c.busy === null ? 'muet' : c.busy ? 'occupé' : 'libre'}${
-        c.family ? ` · ${c.family}` : ''}`),
-      `en file : ${s.queued}`].join('\n');
-  } catch (e) {
+    pill.title = s.queued ? `${s.queued} en file` : '';
+  } catch (_) {
     $('#sys-text').textContent = 'studio muet';
     pill.className = 'pill err';
   }
