@@ -59,11 +59,12 @@ vues et des gros plans). Rends un objet JSON :
   membres, épaules), exagérées comprises.
 - "sheet" : en français, valeurs courtes : gender, age (un nombre), ethnicity, body_type, face_description (une
   phrase), default_outfit_description (une phrase), color_palette (3 à 5 couleurs), personality_traits (trois
-  mots que suggère l'attitude).
+  mots que suggère l'attitude), height (la taille estimée en centimètres, « 118 cm » pour un enfant de six ans :
+  elle fixe l'échelle du modèle 3D).
 """
 
 FIELDS = ("gender", "age", "ethnicity", "body_type", "face_description", "default_outfit_description",
-          "color_palette", "personality_traits")
+          "color_palette", "personality_traits", "height")
 
 
 def _schema() -> dict:
