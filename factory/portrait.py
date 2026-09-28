@@ -8,7 +8,10 @@ le ComfyUI principal (`:8188`), avec leurs nœuds natifs :
 
   zimage   Z-Image Turbo (Tongyi), 8 pas, encodeur Qwen3-4B — rapide ;
   flux2    FLUX.2 dev (fp8), encodeur Mistral Small 3 — le plus lourd ;
-  qwen21   Qwen-Image 2.1, encodeur Qwen3-VL-8B.
+  qwen21   Qwen-Image 2.1, encodeur Qwen3-VL-8B ;
+  krea2    Krea 2 Turbo (`krea2.py`) — par défaut depuis le 28/09 : Cal
+           trouve Qwen mauvais en photographie (peau plastique), et le
+           visage fait autorité sur toutes les images qui suivent.
 
 Le prompt ne décrit que l'identité : âge, genre, origine, carrure, et
 les précisions du visage. Ni rôle, ni archétype, ni notes : ce sont des
@@ -31,6 +34,7 @@ ENGINES = {
     "zimage": "Z-Image Turbo",
     "flux2": "FLUX.2 dev",
     "qwen21": "Qwen-Image 2.1",
+    "krea2": "Krea 2 · photo",
 }
 SIZE = 1024
 
@@ -47,9 +51,55 @@ def who(sheet: dict) -> str:
     return ", ".join(bits) or "a person"
 
 
-def text(sheet: dict, extra: str = "", style: str = "photoreal") -> str:
+# La fiche est en français, le prompt d'image en anglais : les valeurs
+# courantes de la console, traduites ; une valeur inconnue passe telle quelle.
+GENDER_EN = {"femme": "woman", "homme": "man", "fille": "girl", "garçon": "boy", "garcon": "boy",
+             "non-binaire": "non-binary person", "non binaire": "non-binary person"}
+ETHNICITY_EN = {"caucasienne": "Caucasian", "caucasien": "Caucasian", "blanche": "white", "blanc": "white",
+                "noire": "Black", "noir": "Black", "africaine": "African", "africain": "African",
+                "asiatique": "Asian", "est-asiatique": "East Asian", "sud-asiatique": "South Asian",
+                "indienne": "Indian", "indien": "Indian", "arabe": "Arab", "maghrébine": "North African",
+                "maghrébin": "North African", "latine": "Latina", "latino": "Latino", "métisse": "mixed-race",
+                "métis": "mixed-race", "méditerranéenne": "Mediterranean", "méditerranéen": "Mediterranean",
+                "nordique": "Nordic", "slave": "Slavic", "japonaise": "Japanese", "japonais": "Japanese",
+                "chinoise": "Chinese", "chinois": "Chinese", "coréenne": "Korean", "coréen": "Korean"}
+BUILD_EN = {"mince": "slim", "élancé": "slender", "élancée": "slender", "athlétique": "athletic",
+            "musclé": "muscular", "musclée": "muscular", "trapu": "stocky", "trapue": "stocky",
+            "rond": "full-figured", "ronde": "full-figured", "fin": "slight", "fine": "slight",
+            "moyen": "average", "moyenne": "average", "costaud": "burly", "robuste": "sturdy"}
+
+
+def _en(value, table: dict) -> str:
+    v = str(value or "").strip()
+    return table.get(v.lower(), v)
+
+
+def who_en(sheet: dict, *, build: bool = False) -> str:
+    """« a 22-year-old Caucasian woman » : l'âge, l'origine et le genre de
+    la fiche, en anglais ; la carrure sur demande (le plein pied)."""
+    age = str(sheet.get("age") or "").strip()
+    gender = _en(sheet.get("gender"), GENDER_EN) or "person"
+    words = [f"{age}-year-old" if age.isdigit() else age, _en(sheet.get("ethnicity"), ETHNICITY_EN), gender]
+    text = " ".join(w for w in words if w)
+    if build and sheet.get("body_type"):
+        text += f" with a {_en(sheet['body_type'], BUILD_EN)} build"
+    return ("an " if text[:1].lower() in "aeiou" else "a ") + text
+
+
+# Ce qui fait une photo et non une image de synthèse, et un personnage
+# qu'on a envie de filmer : Cal, 28/09 — « vraiment beaux et super
+# photoréalistes », chaque défaut passe dans les planches de la vidéo.
+PHOTO_LOOK = ("Strikingly attractive and photogenic, with well-balanced features, like a lead cast for a feature film. "
+              "Shot on a full-frame camera with an 85mm lens, soft diffused daylight, natural skin texture with fine "
+              "pores and subtle natural marks, healthy skin, no heavy retouching, true-to-life colours, editorial "
+              "casting photograph.")
+
+
+def text(sheet: dict, extra: str = "", style: str = "photoreal", engine: str = "") -> str:
     """Un paragraphe, pour un modèle d'image : pas de sections, pas de
     négatif — les contraintes s'écrivent en prose."""
+    if engine == "krea2" and style == "photoreal":
+        return text_photo(sheet, extra)
     look = ("Photorealistic casting headshot, natural skin texture with visible pores, true-to-life colour, "
             "sharp focus, 85 mm portrait lens." if style == "photoreal" else
             "Stylised character portrait for a production design reference, clean shapes, consistent shading, "
@@ -67,6 +117,23 @@ def text(sheet: dict, extra: str = "", style: str = "photoreal") -> str:
         "Soft, even, neutral studio light from the front, identical on both sides of the face, plain uniform "
         "light grey seamless background, no text, no logo.",
         look,
+    ]))
+
+
+def text_photo(sheet: dict, extra: str = "") -> str:
+    """Le portrait d'identité en photographie, pour Krea 2 : on décrit la
+    photo qu'un photographe de casting ferait, pas une « image réaliste ».
+    Même cadre que `text` : tête nue, rien de porté, coupé aux clavicules,
+    épaules nues — un vêtement passerait dans toutes les images suivantes."""
+    return " ".join(filter(None, [
+        f"Close-up portrait photograph of {who_en(sheet)}.",
+        extra.strip().rstrip(".") + "." if extra.strip() else "",
+        "Framed from just above the top of the hair to the collarbones, bare shoulders, no clothing visible.",
+        "Facing the camera straight on at eye level, centred, calm neutral expression, lips softly closed, eyes "
+        "looking into the lens.",
+        "Bare head with the hair fully visible: no hat, no hood, no glasses, no earrings, no jewellery.",
+        "Plain light grey seamless paper backdrop, soft even light on both sides of the face.",
+        PHOTO_LOOK,
     ]))
 
 
@@ -144,6 +211,10 @@ def generate(engine: str, *, prompt: str, dest: Path, seed: int, report=lambda p
         dest.parent.mkdir(parents=True, exist_ok=True)
         stubs.portrait((SIZE, SIZE), seed=identity_seed if identity_seed is not None else seed).save(dest)
         return dest
+    if engine == "krea2":
+        from . import krea2
+
+        return krea2.generate(prompt=prompt, dest=dest, seed=seed, size=krea2.FACE, report=report)
     comfy = Comfy(config.comfyui_url("portrait"))
     wf = fill(workflow(engine), {"prompt": prompt, "seed": seed}, [])
     files = comfy.run(wf, dest.parent / f".{dest.stem}", report=report, prefix="portrait")

@@ -200,8 +200,8 @@ def studio_route(tmp: Path) -> None:
               kc["identity"].get("face_description") == "vingt ans, coupe courte" and len(kc["face"]["variations"]) == 4
               and len({c["desc"] for c in kc["face"]["candidates"]}) == 4 and "tenue-1" in kc["costumes"]
               and kc["costumes"]["tenue-1"]["brief"] == "hoodie bleu, baggy blanc" and code == 200 and empty == 409
-              and "Tight close-up" in json.loads((tmp / "studio" / kid / "face" / "cand-001.json").read_text(
-                  encoding="utf-8"))["prompt"],
+              and "Close-up portrait photograph" in json.loads((tmp / "studio" / kid / "face" / "cand-001.json")
+                                                               .read_text(encoding="utf-8"))["prompt"],
               f"{len(kc['face']['candidates'])} propositions, tenues {list(kc['costumes'])}")
 
         # « Autour de celui-ci » avec une puce de direction : la page envoie une
@@ -680,7 +680,9 @@ def main() -> int:
           and board.size == (3840, 2160) and set(pres["variants"]) == {"clair", "sombre"}
           and 2 <= len(pres["palette"]) <= 6
           and all((root / e["cut"]).exists() and (root / e["skeleton"]).exists() for e in pres["panels"]["poses"])
-          and all("<image1>" in e["prompt"] for e in pres["panels"]["expressions"] + pres["panels"]["poses"])
+          and all(e["engine"] == "krea2" and e["prompt"].startswith("Change only the person's facial expression")
+                  for e in pres["panels"]["expressions"])
+          and all("<image1>" in e["prompt"] for e in pres["panels"]["poses"])
           and "<image2>" in pres["panels"]["poses"][0]["prompt"],
           f"{ids} · palette {pres['palette']}")
     seeds = {e["id"]: e["seed"] for v in pres["panels"].values() for e in v}

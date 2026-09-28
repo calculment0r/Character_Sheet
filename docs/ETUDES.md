@@ -353,11 +353,55 @@ coupait des cadrages justes). La couleur se compare région par région
 relevés, en histogrammes Lab — pas d'embedding : c'est ce qui sépare
 déjà 0,9 (même tenue) de 0,4 (autre personne).
 
-## 8. Sources principales
+## 8. Krea 2 à la place de Qwen-Image 2.1 (28/09)
+
+Cal, 28/09 : « qwen est vraiment pas bon en photographie… c'est très
+moche » ; les personnages doivent être « vraiment beaux et super
+photoréalistes », car leurs défauts passent dans les planches de la
+vidéo. Krea 2 était installé sur DGX1 (turbo bf16 et fp8, LoRA Identity
+Edit v1.1, réalisme RudySen V2, profondeur Patil, et quatre workflows de
+Cal `KREA2_*.json`) ; copié sur DGX2 par le câble direct (26 Go en
+1 min 03). Module : `factory/krea2.py`. Essais sur l'identité de `seed`
+(images : `dgx2:~/cf_krea2_tests/`) [V] :
+
+| Essai | Résultat |
+|---|---|
+| portrait texte → image, 1024², 8 pas | 16–24 s ; vraie peau, pores, taches de rousseur ; « unretouched, imperfections » vieillit de dix ans |
+| ordonnanceur beta / simple | beta : la peau la plus fine, les yeux nets — gardé pour le texte → image |
+| LoRA réalisme V2 à 1,0 / 1,6 | 1,0 : presque rien ; 1,6 : peau lissée, air de poupée — laissé à 0 |
+| gabarit de recherche (lumière décrite, pas d'éloge) | plus mat, lumière plus plate ; nos prompts gardés |
+| plein pied texte → image 1152 × 2048 | photo de costume réelle, tissus et coutures ; la tête y fait ~200 px |
+| report du visage, tout le plein pied, 2 réf. | FaceNet 0,61 → 0,67, 150 s, le reste intact |
+| report sur la tête recadrée, ancrage 768/1024 | la personne dédoublée côte à côte (FaceNet ne voit que la plus grande) |
+| tête recadrée 768², 2 réf., « une seule personne », ancrage 512 | 0,62 → **0,79**, une seule personne — gardé (`face_pass`) |
+| diptyque tête + visage, une source | 0,66 et 0,55, tête tournée — écarté |
+| expression par édition (sourire) | FaceNet 0,84, cadre identique, photo réelle ; ajoutait des rides sans « keep the age » |
+
+Pièges : les nœuds `comfyui-krea2edit` v1.1 cassent sur ComfyUI 0.37
+(`wrapper() takes from 4 to 6 positional arguments but 7 were given`) :
+ComfyUI gère lui-même les références de Krea 2 depuis #14843 ; on garde
+leur encodeur ancré et on passe les sources en `ReferenceLatent`,
+méthode `index`. L'édition veut une sortie au rapport de sa source.
+Les consignes de ce qu'on ne veut pas voir s'écrivent en positif (CFG 1,
+pas de négatif).
+
+À faire : LoRA Identity Edit v1.2 (échange de tête, essayage d'un
+vêtement, planches de personnage, passe 1024 ; 1,83 Go sur
+huggingface.co/conradlocke/krea2-identity-edit, nœuds v1.2.5) — pas
+téléchargé sans l'accord de Cal ; poses de la planche et A-pose encore
+par Qwen-Image 2.1 (Krea 2 n'a ici ni squelette ni pose ; contrôle par
+profondeur ou pose ControlNet thedeoxen à essayer). Rapport de
+recherche complet : sources Krea, Comfy, conradlocke, RudySen.
+
+## 9. Sources principales
 
 - Viggle turbo : https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo
 - Workflow pose nomadoor : https://github.com/nomadoor/Comfy-with-ComfyUI/pull/139
 - Bug encodeur : https://github.com/Comfy-Org/ComfyUI/issues/16435
+- Krea 2 (prompts, réglages) : https://github.com/krea-ai/krea-2/blob/main/docs/prompting.md
+- Krea 2 Identity Edit : https://huggingface.co/conradlocke/krea2-identity-edit,
+  https://github.com/lbouaraba/comfyui-krea2edit
+- Réalisme V2 : https://huggingface.co/RudySen/Krea2-realism-V2
 - Fun ControlNet 2.1 : https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union · https://github.com/Comfy-Org/ComfyUI/pull/16519
 - Orbite 2.1 : https://huggingface.co/ML-Intern-lab/Qwen-Image-2.1-viewpoint-orbit-LoRA
 - Pixal3D : https://github.com/TencentARC/Pixal3D · https://docs.comfy.org/tutorials/3d/pixal3d

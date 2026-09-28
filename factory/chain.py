@@ -64,7 +64,7 @@ def face(p: Project, *, prompt: str = "", refs: list[str] = (), variants: int = 
     p.face["refs"] = list(dict.fromkeys(p.face["refs"] + imported))
     if prompt:
         p.face["prompt"] = prompt
-    engine = engine or ("h3" if p.face["refs"] else config.setting("face_engine", "zimage"))
+    engine = engine or ("h3" if p.face["refs"] else config.setting("face_engine", "krea2"))
     if engine not in portrait.ENGINES:
         raise ChainError(f"moteur de visage inconnu : {engine} (possibles : {', '.join(portrait.ENGINES)})")
     p.face["engine"] = engine
@@ -87,7 +87,7 @@ def face(p: Project, *, prompt: str = "", refs: list[str] = (), variants: int = 
                            seed=s, report=report, extra={"identity_seed": ident})
             backend = out.backend
         else:
-            text = portrait.text(p.sheet, extra, style=p.data["style"])
+            text = portrait.text(p.sheet, extra, style=p.data["style"], engine=engine)
             portrait.generate(engine, prompt=text, dest=dest, seed=s, report=report, identity_seed=ident)
             backend = config.backend("portrait")
             dest.with_suffix(".json").write_text(json.dumps(
@@ -124,16 +124,17 @@ def fullbody(p: Project, costume: str | None, *, variants: int = 2, seed: int | 
     """Le plein pied habillé, le visage verrouillé comme référence (§4),
     en pose naturelle : l'A-pose vient ensuite, par `apose`.
 
-    Par Qwen-Image 2.1 turbo en HD (`figure.py`, `qwen21.py`) : H3 le
-    rendait à 768 px, mains et matières comprises, trop pauvre pour une
-    image qui sert ensuite de référence à l'A-pose et aux vues."""
+    Par Krea 2 (`figure.py`, `krea2.py`), décision de Cal du 28/09 : Qwen-
+    Image 2.1 turbo rendait des images de synthèse, et H3 avant lui un
+    768 px trop pauvre pour une image qui sert ensuite de référence à
+    l'A-pose, aux vues et aux planches."""
     from . import figure
 
     locked = p.require_face()
     key, cos = p.costume(costume)
     if prompt:
         cos["prompt"] = prompt
-    engine = engine or config.setting("fullbody_engine", "qwen21")
+    engine = engine or config.setting("fullbody_engine", "krea2")
     if engine not in figure.ENGINES:
         raise ChainError(f"moteur de plein pied inconnu : {engine} (possibles : {', '.join(figure.ENGINES)})")
     report = report or _report()
@@ -143,7 +144,14 @@ def fullbody(p: Project, costume: str | None, *, variants: int = 2, seed: int | 
                                     costume_prompt=cos["prompt"], style=p.data["style"])
     else:
         outfit = prompts.describe_outfit(p.sheet, cos["prompt"])
-        text = figure.text(outfit, garments=len(cos["refs"]), style=p.data["style"], tags=engine == "qwen21")
+        if engine == "krea2" and p.data["style"] == "photoreal":
+            from . import portrait
+
+            person = " ".join(filter(None, [portrait.who_en(p.sheet, build=True) + ".",
+                                            p.face.get("prompt_en") or ""]))
+            text = figure.text_photo(person, outfit)
+        else:
+            text = figure.text(outfit, garments=len(cos["refs"]), style=p.data["style"], tags=engine == "qwen21")
     base = _seed(seed)
     made = []
     for i in range(variants):

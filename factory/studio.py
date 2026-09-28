@@ -186,14 +186,14 @@ def _variants(fn, n: int, base: int, report) -> list[dict]:
 
 def face_engine(p: Project | None, q: dict) -> str:
     """Le moteur du visage : celui demandé, sinon H3 s'il y a une photo
-    à normaliser, sinon le modèle d'image par défaut (Z-Image Turbo)."""
+    à normaliser, sinon le modèle d'image par défaut (Krea 2)."""
     from . import portrait
 
     engine = q.get("engine") or ""
     if engine in portrait.ENGINES:
         return engine
     has_photo = bool(q.get("refs")) or bool(p and p.face["refs"])
-    return "h3" if has_photo else config.setting("face_engine", "zimage")
+    return "h3" if has_photo else config.setting("face_engine", "krea2")
 
 
 def read_face_brief(p: Project, q: dict, llm, say) -> None:
@@ -466,9 +466,9 @@ def _gpu_views(q: dict, p: Project | None = None):
 
 
 def _gpu_fullbody(q: dict, p: Project | None = None):
-    engine = q.get("engine") or config.setting("fullbody_engine", "qwen21")
+    engine = q.get("engine") or config.setting("fullbody_engine", "krea2")
     return {"h3": ("h3", "h3"), "flux2": ("flux2", "portrait"), "qwen2511": ("qwenedit", "portrait"),
-            "qwen21": ("qwen21", "portrait")}.get(
+            "qwen21": ("qwen21", "portrait"), "krea2": ("krea2", "portrait")}.get(
         engine, ("h3", "h3"))
 
 

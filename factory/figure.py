@@ -11,7 +11,15 @@ personne d'après une image de référence :
   qwen2511   Qwen-Image-Edit 2511 (LoRA Lightning 4 pas) : le visage et
              jusqu'à deux images de vêtements.
 
-L'image fait 896 × 1600 px (1152 × 2048 pour Qwen-Image 2.1). La pose est
+Depuis le 28/09, Krea 2 par défaut (`krea2.py`) : Cal juge Qwen mauvais
+en photographie. Krea 2 n'édite qu'à partir d'une image au même cadre
+que la sortie : le plein pied se fait donc en deux temps — une
+photographie de mode en pied écrite d'après la fiche (identité et tenue,
+en anglais), puis le visage verrouillé reporté sur la tête, recadrée et
+éditée en gros (`krea2.face_pass`) ; avec une image de vêtement, un
+passage de plus l'habille d'après elle, avant le visage.
+
+L'image fait 896 × 1600 px (1152 × 2048 pour Qwen-Image 2.1 et Krea 2). La pose est
 naturelle, face à l'objectif : c'est l'image que Cal valide ; l'A-pose
 vient après, imposée par un squelette (`pose.py`). La tenue est le prompt
 du costume (écrit par le modèle de texte depuis son brief).
@@ -25,13 +33,14 @@ from . import config
 from .comfy import Comfy, fill
 
 ENGINES = {
+    "krea2": "Krea 2 · photo",
     "qwen21": "Qwen-Image 2.1 turbo · HD",
     "flux2": "FLUX.2 dev",
     "qwen2511": "Qwen-Image-Edit 2511",
     "h3": "H3 · 768 px",
 }
 W, H = 896, 1600
-MAX_REFS = {"flux2": 6, "qwen2511": 3, "qwen21": 3}
+MAX_REFS = {"flux2": 6, "qwen2511": 3, "qwen21": 3, "krea2": 2}
 
 
 def text(outfit: str, *, garments: int = 0, style: str = "photoreal", tags: bool = False) -> str:
@@ -52,6 +61,71 @@ def text(outfit: str, *, garments: int = 0, style: str = "photoreal", tags: bool
         "Plain uniform light grey seamless background, soft even studio light from the front, no text, no logo.",
         look,
     ]))
+
+
+def text_photo(person: str, outfit: str) -> str:
+    """Le plein pied en photographie, pour Krea 2 : `person` dit qui (âge,
+    origine, carrure, visage et cheveux, en anglais), `outfit` la tenue."""
+    from .portrait import PHOTO_LOOK
+
+    return " ".join(filter(None, [
+        f"Full-body fashion photograph of {person.strip().rstrip('.')}.",
+        f"Outfit: {outfit.strip().rstrip('.')}." if outfit.strip() else "",
+        "The person stands in a relaxed natural pose, weight on one leg, arms resting at the sides, facing the "
+        "camera at eye level.",
+        "The whole figure is in frame from the top of the head to the soles of the shoes, with an even margin, on a "
+        "plain light grey seamless studio backdrop, soft even studio light, shot on a 50mm lens.",
+        "Real fabric texture, seams and wear, natural hands with five fingers.",
+        PHOTO_LOOK.replace("an 85mm lens", "a 50mm lens"),
+    ]))
+
+
+GARMENT_PASS = ("Dress the person in the first image in the outfit shown in the second image, every piece kept as it "
+                "is. Keep the person's face, hair, body, pose, framing, light and background exactly as they are. "
+                "Photograph.")
+
+
+def _krea2(prompt: str, refs: list[Path], dest: Path, seed: int, report) -> Path:
+    """Photo en pied, vêtement d'après image s'il y en a, puis le visage
+    verrouillé reporté en gros. Les étapes restent dans `.<nom>/` pour les
+    coulisses."""
+    from . import krea2
+    from .presentation import identity
+
+    face, garments = refs[0], refs[1:]
+    work = dest.parent / f".{dest.stem}"
+
+    def step(a, b):
+        return lambda pr, m: report(a + (b - a) * pr, m)
+
+    shot = krea2.generate(prompt=prompt, dest=work / "photo.png", seed=seed, size=krea2.FULLBODY,
+                          report=step(0.0, 0.45))
+    if garments:
+        shot = krea2.generate(prompt=GARMENT_PASS, refs=[shot, garments[0]], dest=work / "tenue.png", seed=seed,
+                              size=krea2.FULLBODY, report=step(0.45, 0.7))
+    found = identity(face, [shot])[0]
+    if not found.get("box"):
+        print("  pas de visage trouvé sur le plein pied : visage verrouillé non reporté")
+        dest.write_bytes(Path(shot).read_bytes())
+        return dest
+    # Deux essais au plus ; un report qui dédouble la personne ou perd en
+    # ressemblance est écarté, et la photo reste telle quelle.
+    best, best_score = None, found.get("score") if found.get("score") is not None else -1.0
+    for k in range(2):
+        out = work / f"visage_{k + 1}.png"
+        krea2.face_pass(shot, face, out, box=found["box"], seed=seed + k, report=step(0.7 + 0.15 * k, 0.85 + 0.15 * k))
+        got = identity(face, [out])[0]
+        ok = got.get("score") is not None and (got.get("faces") or 1) == 1
+        print(f"  report du visage {k + 1} : identité {got.get('score')} · visages {got.get('faces')}"
+              + ("" if ok else " — écarté"))
+        if ok and got["score"] > best_score:
+            best, best_score = out, got["score"]
+        if best is not None and best_score >= 0.75:
+            break
+    dest.write_bytes(Path(best or shot).read_bytes())
+    print(f"  identité : {found.get('score')} → {best_score:.3f}" if best else
+          "  identité : report du visage sans gain, photo gardée telle quelle")
+    return dest
 
 
 def _flux2(n_refs: int) -> dict:
@@ -139,6 +213,16 @@ def generate(engine: str, *, prompt: str, refs: list[Path], dest: Path, seed: in
     """Rend un plein pied dans `dest`. `refs` : le visage verrouillé
     d'abord, puis les images de vêtements (tronquées au maximum du modèle)."""
     refs = list(refs)[:MAX_REFS.get(engine, 1)]
+    if engine == "krea2":
+        from . import krea2
+        from . import stubs as sketches
+
+        if config.backend("portrait") == "stub":
+            return krea2.generate(prompt=prompt, dest=dest, seed=seed, size=krea2.FULLBODY, report=report,
+                                  stub=lambda: sketches.mannequin(krea2.FULLBODY, azimuth=0.0,
+                                                                  seed=identity_seed if identity_seed is not None
+                                                                  else seed))
+        return _krea2(prompt, [Path(r) for r in refs], dest, seed, report)
     if engine == "qwen21":
         from . import qwen21
         from . import stubs as sketches

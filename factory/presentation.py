@@ -2,7 +2,8 @@
 
 Cal, 27/09 : « une planche hyper belle de notre character dans des
 positions naturelles, des expressions etc. ». Pas une image générée d'un
-coup : chaque case est une édition Qwen-Image 2.1 séparée, contrôlée, et
+coup : chaque case est une édition séparée, contrôlée — Krea 2 depuis
+le 28/09 pour les expressions (`krea2.py`), Qwen-Image 2.1 avant —, et
 la planche se compose en code (`presentation_sheet.py`), façon planche
 de modèle (docs/ETUDES.md §5) :
 
@@ -93,6 +94,14 @@ def natural_poses() -> list[dict]:
 
 
 # ── les prompts ────────────────────────────────────────────────────
+
+def text_expression_photo(emotion: str) -> str:
+    """Pour Krea 2 (édition d'identité) : une consigne courte, au verbe,
+    et l'âge nommé parmi ce qui ne bouge pas — sans lui, un grand sourire
+    ajoute des rides (essai du 28/09)."""
+    return (f"Change only the person's facial expression to {emotion}. Keep the same face, identity, age, skin, hair, "
+            "head angle, framing, light and plain light-grey background. Photograph with natural skin texture.")
+
 
 def text_expression(emotion: str) -> str:
     return (f"Change only the facial expression of the person in <image1> to {emotion}. Keep the exact same face, "
@@ -249,12 +258,21 @@ def _stub() -> bool:
 
 # ── expressions ────────────────────────────────────────────────────
 
+def engine() -> str:
+    """Le modèle des cases : Krea 2 depuis le 28/09 (Cal : Qwen n'est pas
+    bon en photographie), `qwen21` reste possible (`presentation_engine`)."""
+    return config.setting("presentation_engine", "krea2")
+
+
 def _expressions(p: Project, st: dict, folder: Path, locked: str, ids: list[str], base: int, report) -> None:
-    from . import pose, qwen21
+    from . import krea2, pose, qwen21
     from . import stubs as sketches
     from .chain import identity_seed
 
-    head = pose.head_only(p.path(locked), folder / "face_ref.png")
+    photo = engine() == "krea2"
+    # Krea 2 édite au cadre de sa source : le portrait verrouillé entier
+    # (épaules nues, rien de porté) ; Qwen recevait la tête coupée au col.
+    head = p.path(locked) if photo else pose.head_only(p.path(locked), folder / "face_ref.png")
     labels = {e[0]: (e[1], e[2]) for e in EXPRESSIONS}
     tries: dict[str, list[dict]] = {i: [] for i in ids}
     pending = list(ids)
@@ -263,12 +281,16 @@ def _expressions(p: Project, st: dict, folder: Path, locked: str, ids: list[str]
         for n, eid in enumerate(pending):
             s = base + 10 * [e[0] for e in EXPRESSIONS].index(eid) + k
             dest = folder / f".expr_{eid}_{k}.png"
-            text = text_expression(labels[eid][1])
-            print(f"  expression {eid} · essai {k + 1} · graine {s}")
+            text = text_expression_photo(labels[eid][1]) if photo else text_expression(labels[eid][1])
+            print(f"  expression {eid} · essai {k + 1} · graine {s} · {'Krea 2' if photo else 'Qwen-Image 2.1'}")
             t0 = time.monotonic()
-            qwen21.generate(prompt=text, refs=[head], dest=dest, seed=s, size=EXPR_SIZE, resolution=RESOLUTION,
-                            report=lambda pr, m, n=n: report((k + (n + pr) / len(pending)) / rounds, m),
-                            stub=lambda s=s: sketches.portrait(EXPR_SIZE, seed=identity_seed(p), label=f"FACTICE · {eid}"))
+            step = (lambda pr, m, n=n: report((k + (n + pr) / len(pending)) / rounds, m))
+            stub = (lambda s=s: sketches.portrait(EXPR_SIZE, seed=identity_seed(p), label=f"FACTICE · {eid}"))
+            if photo:
+                krea2.generate(prompt=text, refs=[head], dest=dest, seed=s, size=EXPR_SIZE, report=step, stub=stub)
+            else:
+                qwen21.generate(prompt=text, refs=[head], dest=dest, seed=s, size=EXPR_SIZE, resolution=RESOLUTION,
+                                report=step, stub=stub)
             tries[eid].append({"file": dest, "seed": s, "secs": round(time.monotonic() - t0, 1), "prompt": text})
         scores = identity(p.path(locked), [tries[e][-1]["file"] for e in pending])
         for eid, sc in zip(pending, scores):
@@ -283,6 +305,7 @@ def _expressions(p: Project, st: dict, folder: Path, locked: str, ids: list[str]
     for eid in ids:
         entry = _keep(p, folder, f"expr_{eid}", tries[eid], eid, labels[eid][0], EXPR_FLOOR.get(eid, EXPR_MIN))
         entry["prompt"] = tries[eid][0]["prompt"]
+        entry["engine"] = engine()
         _replace(st["panels"]["expressions"], entry)
     p.save()
     for eid in ids:
@@ -465,7 +488,8 @@ def identity(reference: Path, images: list[Path]) -> list[dict]:
         tail = (res.stderr or res.stdout).strip().splitlines()[-2:]
         print("    contrôle d'identité indisponible : " + " / ".join(tail))
         return [{"score": None} for _ in images]
-    return [{"score": g["score"], "eyes": g.get("eyes"), "box": g.get("box"), "checked": True} for g in got]
+    return [{"score": g["score"], "eyes": g.get("eyes"), "box": g.get("box"), "faces": g.get("faces"),
+             "checked": True} for g in got]
 
 
 def _matte(src: Path, dest: Path, folder: Path) -> Path:

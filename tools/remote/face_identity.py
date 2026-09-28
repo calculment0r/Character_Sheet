@@ -8,7 +8,8 @@ MTCNN trouve le visage (boîte, yeux), FaceNet (InceptionResnetV1,
 VGGFace2) en tire une empreinte ; le score est le cosinus entre
 l'empreinte de chaque image et celle de la référence (le visage
 verrouillé). Rend du JSON sur la sortie standard : pour chaque image, le
-score (null sans visage trouvé), la boîte et les deux yeux, en pixels —
+score (null sans visage trouvé), la boîte et les deux yeux, en pixels, et
+le nombre de visages nets (`faces`) —
 les yeux servent à aligner les expressions sur la planche.
 
 Sur le CPU : quelques images, et le GPU est aux autres.
@@ -36,8 +37,11 @@ def main():
         emb = torch.nn.functional.normalize(net(crop.unsqueeze(0) if crop.dim() == 3 else crop), dim=1)[0]
         # Les yeux dans l'ordre de l'image : gauche puis droite.
         eyes = sorted(marks[0][:2].tolist())
+        # Les visages nets de l'image : une édition qui dédouble la personne
+        # (Krea 2, report du visage du 28/09) en montre deux.
+        faces = int(sum(1 for q in probs if q is not None and q >= 0.9))
         return emb, {"file": path, "box": [round(float(v), 1) for v in boxes[0]], "prob": round(float(probs[0]), 4),
-                     "eyes": [[round(float(x), 1), round(float(y), 1)] for x, y in eyes]}
+                     "eyes": [[round(float(x), 1), round(float(y), 1)] for x, y in eyes], "faces": faces}
 
     ref, ref_info = read(paths[0])
     if ref is None:
