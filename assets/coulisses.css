@@ -135,3 +135,5 @@
 .cz-page .job .top { align-items: center; }
 .cz-page .job .top .tb { margin-left: var(--s2); }
 .cz-page .job .top a { color: var(--cy); text-decoration: none; }
+/* La tête de la file n'a pas de visage : deux colonnes, le texte en large. */
+.cz-head .perso-head.cz-qhead { grid-template-columns: minmax(0, 1fr) auto; }

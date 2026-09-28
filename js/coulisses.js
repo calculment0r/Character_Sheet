@@ -661,7 +661,7 @@ function renderQueue() {
       ${a.failed ? `<div class="msg">en échec : ${esc(a.failed.step || '')} ${esc(a.failed.error || '')}</div>` : ''}</div>`;
   }).join('')}</div>` : '<div class="jobs-empty">Aucun autopilote en route.</div>';
   $('#main').innerHTML = [
-    `<div class="cz-head"><div class="perso-head"><div class="who"><span class="ref">file des rendus · un calcul à la fois</span>
+    `<div class="cz-head"><div class="perso-head cz-qhead"><div class="who"><span class="ref">file des rendus · un calcul à la fois</span>
       <h1>File des rendus</h1><span class="role">Arrêter retire un rendu de la file, ou interrompt celui qui tourne ;
       relancer le remet en file avec les mêmes réglages.</span></div>
       <div class="acts"><button class="tb ghost sm" data-refresh>Relire</button></div></div></div>`,
@@ -818,6 +818,7 @@ async function pollSystem() {
     const mem = s.memory?.available_gb;
     const low = mem != null && mem < s.memory.min_free_gb;
     const parts = [];
+    if (s.host) $('.logo small').textContent = `coulisses · ${s.host.toLowerCase()}`;
     if (s.running) parts.push(`${s.running.label} · ${s.running.slug}`);
     if (mem != null) parts.push(`${Math.round(mem)} go libres`);
     parts.push(`${s.queued} en file`);

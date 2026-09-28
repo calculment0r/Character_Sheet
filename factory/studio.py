@@ -925,6 +925,7 @@ class Studio:
             "backends": backends(),
             "running": self.running.public() if self.running else None,
             "queued": sum(1 for j in self.jobs if j.status == "queued"),
+            "host": os.uname().nodename if hasattr(os, "uname") else "",
         }
 
 
