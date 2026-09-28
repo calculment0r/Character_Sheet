@@ -44,7 +44,9 @@ APOSE_BATCH = 4       # propositions par tour : deux par machine (DGX1, DGX2)
 APOSE_ROUNDS = 3      # tours avant d'appeler Cal
 VIEW_ROUNDS = 2       # reprises des vues hors tolérance
 STEP_TRIES = 2        # une exception deux fois sur la même étape : Cal
-VIEW_GROUPS = (("front", "left"), ("back",), ("right",), ("threequarter",))
+# deux vues à rendre par étape : une par machine (DGX1, DGX2), et des
+# étapes courtes que le travail de Cal peut toujours doubler
+VIEW_GROUPS = (("front", "left", "right"), ("back", "threequarter"))
 LOG_LINES = 60
 
 KIND = {"apose": "apose_failed", "views": "views_failed", "prep": "views_failed", "check": "views_failed",
