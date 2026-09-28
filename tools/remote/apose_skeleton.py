@@ -8,6 +8,15 @@ Les bras sont redressés à 45° de la verticale, les jambes légèrement
 ouvertes, les longueurs d'os gardées ; les mains suivent l'avant-bras
 en bloc. Le squelette est remis à l'échelle de la hauteur du cadre et
 centré. Écrit aussi <sortie>.json (points en pixels) et <sortie>_debug.png.
+
+Le cadrage suit la silhouette réelle, relevée sur l'image (sommet du
+crâne, semelles) : un squelette ne fixe que la place des articulations,
+pas la longueur des membres. Cadré sur le nez et les chevilles (les
+chevilles au bas du cadre, 6 % de marge au-dessus du nez), il laissait
+un personnage trop grand pour le cadre : le modèle le rétrécissait (tronc
+−8 à −17 %, jambes −10 %) en gardant les mains sur les poignets du
+squelette — des bras 10 à 20 % trop longs, relevés le 28/09 sur les
+personnages MJ et sur David (essai-atelier).
 """
 import json
 import math
@@ -78,14 +87,36 @@ def apose(body, lhand, rhand):
     return body
 
 
-def fit(parts, w, h, margin=0.05):
+def silhouette(img):
+    """Le haut du crâne et le bas des semelles, en pixels : les lignes de
+    l'image où le personnage se détache du fond. Le fond est estimé ligne
+    par ligne sur les bords gauche et droit : un fond de studio est souvent
+    un dégradé vertical (David, 28/09). None si le fond n'est pas lisible."""
+    edges = np.concatenate([img[:, :12], img[:, -12:]], axis=1).astype(np.int16)
+    bg = np.median(edges, axis=1)[:, None, :]
+    diff = np.abs(img.astype(np.int16) - bg).max(axis=2)
+    rows = np.where((diff > 28).sum(axis=1) > img.shape[1] * 0.004)[0]
+    if len(rows) < img.shape[0] * 0.3:
+        return None
+    return float(rows[0]), float(rows[-1])
+
+
+def fit(parts, w, h, margin=0.05, extent=None):
+    """Met le squelette au cadre. `extent` = (sommet du crâne, semelles)
+    dans les coordonnées des points : c'est la silhouette entière, et non
+    le nez et les chevilles, qui doit tenir dans le cadre — à l'échelle où
+    le modèle pourra la dessiner sans la rétrécir."""
     pts = np.array([p for part in parts if part for p in part if p is not None])
     top, bottom = pts[:, 1].min(), pts[:, 1].max()
-    head_room = (bottom - top) * 0.06   # le nez n'est pas le sommet du crâne
+    if extent:
+        top, bottom = min(top, extent[0]), max(bottom, extent[1])
+        head_room = 0.0
+    else:
+        head_room = (bottom - top) * 0.06   # le nez n'est pas le sommet du crâne
     span = pts[:, 0].max() - pts[:, 0].min() + (bottom - top) * 0.04   # bout des doigts au-delà des points
     scale = min(h * (1 - 2 * margin) / (bottom - top + head_room), w * (1 - 2 * margin) / span)
     cx = (pts[:, 0].min() + pts[:, 0].max()) / 2
-    shift = np.array([w / 2, h - h * margin - (bottom - top) * scale])   # pieds au bas du cadre
+    shift = np.array([w / 2, h - h * margin - (bottom - top) * scale])   # semelles au bas du cadre
     out = []
     for part in parts:
         out.append(None if part is None else
@@ -164,8 +195,11 @@ def main():
     img, body, lhand, rhand, face = detect(src)
     ih, iw = img.shape[:2]
     natural = draw(body, lhand, rhand, face, iw, ih)
+    extent = silhouette(img)
+    if extent is None:
+        print("silhouette illisible : cadrage sur le nez et les chevilles")
     body = apose(body, lhand, rhand)
-    body, lhand, rhand, face = fit([body, lhand, rhand, face], w, h)
+    body, lhand, rhand, face = fit([body, lhand, rhand, face], w, h, extent=extent)
     canvas = draw(body, lhand, rhand, face, w, h)
     dest.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(dest), cv2.cvtColor(canvas, cv2.COLOR_RGB2BGR))
@@ -175,7 +209,8 @@ def main():
     debug = cv2.addWeighted(cv2.cvtColor(img, cv2.COLOR_RGB2BGR), 0.5, cv2.cvtColor(natural, cv2.COLOR_RGB2BGR), 1, 0)
     cv2.imwrite(str(dest.with_name(dest.stem + "_debug.png")), debug)
     dest.with_suffix(".json").write_text(json.dumps(
-        {"width": w, "height": h, "body": [None if p is None else [float(p[0]), float(p[1])] for p in body]}))
+        {"width": w, "height": h, "body": [None if p is None else [float(p[0]), float(p[1])] for p in body],
+         "extent": None if extent is None else [extent[0], extent[1]], "source_size": [iw, ih]}))
     print("squelette :", dest)
 
 
