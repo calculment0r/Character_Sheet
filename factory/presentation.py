@@ -10,9 +10,10 @@ de modèle (docs/ETUDES.md §5) :
   expressions  le visage verrouillé coupé au-dessus du col (`pose.head_only`)
                en <image1>, une expression décrite par ses muscles ; sortie
                1024², encodeur à 1056 ;
-  poses        Krea 2 (28/09) : la photo en pied du personnage prise dans
-               la pose (`text_pose_photo`), le visage verrouillé reporté
-               sur la tête ; avant, Qwen : le plein pied validé en <image1>,
+  poses        Krea 2 (28/09) : le plein pied validé remis dans la pose par
+               l'édition d'identité v1.2 (`text_pose_photo`), la tenue
+               gardée telle quelle, puis le visage verrouillé reporté sur la
+               tête ; avant, Qwen : le plein pied validé en <image1>,
                un squelette OpenPose en <image2> posé sur les os du personnage
                (`tools/remote/natural_skeleton.py`, `data/natural_poses.json`) ;
                1152 × 2048, le cadre du plein pied ;
@@ -111,22 +112,15 @@ def text_expression(emotion: str) -> str:
             "Head-and-shoulders portrait, front view.")
 
 
-STILL = ("The person stands in a relaxed natural pose, weight on one leg, arms resting at the sides, facing the "
-         "camera at eye level.")
-
-
-def text_pose_photo(p: Project, cos: dict, hint: str) -> str:
-    """Pour Krea 2 : la photographie en pied du personnage (fiche, visage
-    décrit, tenue), prise dans la pose ; le visage verrouillé y est
-    reporté ensuite (`figure._krea2`). Essai du 28/09 : mettre à la place
-    la personne du plein pied validé (deux références) la dédouble ou lui
-    retire un bras — écarté."""
-    from . import figure, portrait
-    from .prompts import describe_outfit
-
-    person = " ".join(filter(None, [portrait.who_en(p.sheet, build=True) + ".", p.face.get("prompt_en") or ""]))
-    text = figure.text_photo(person, describe_outfit(p.sheet, cos.get("prompt") or ""))
-    return text.replace(STILL, f"The person {hint.strip().rstrip('.')}.")
+def text_pose_photo(hint: str) -> str:
+    """Pour Krea 2 (édition d'identité v1.2) : la personne du plein pied
+    validé, remise dans la pose. Banc du 28/09 : la tenue reste exactement
+    celle du plein pied (costume, ceinture, bottes, lunettes) ; photographier
+    la pose d'après le texte la faisait varier d'une case à l'autre, et
+    mettre la personne dans une photo posée (deux références) la dédoublait."""
+    return (f"The person now {hint.strip().rstrip('.')}. Same person, same outfit and everything worn, same plain "
+            "light grey studio background, the whole body in frame from the top of the head to the shoes. "
+            "Photograph.")
 
 
 def text_pose(hint: str, style: str = "photoreal") -> str:
@@ -383,9 +377,20 @@ def _poses(p: Project, st: dict, folder: Path, body: Path, ids: list[str], base:
             print(f"  pose {pid} · essai {k + 1} · graine {s} · {'Krea 2' if photo else 'Qwen-Image 2.1'}")
             t0 = time.monotonic()
             if photo:
-                text = text_pose_photo(p, cos, specs[pid]["hint"])
-                figure.generate("krea2", prompt=text, refs=[locked_path], dest=dest, seed=s, report=step,
-                                identity_seed=identity_seed(p))
+                from . import krea2
+
+                text = text_pose_photo(specs[pid]["hint"])
+                work = folder / f".pose_{pid}_{k}"
+                shot = krea2.generate(prompt=text, refs=[body], dest=work / "pose.png", seed=s, size=POSE_SIZE,
+                                      report=lambda pr, m, st=step: st(0.6 * pr, m),
+                                      stub=lambda pid=pid: sketches.mannequin(
+                                          POSE_SIZE, azimuth=float(specs[pid].get("yaw", 0)),
+                                          seed=identity_seed(p), label=f"FACTICE · {pid}"))
+                if _stub():
+                    dest.write_bytes(shot.read_bytes())
+                else:
+                    figure.carry_face(shot, locked_path, dest, seed=s, work=work,
+                                      report=lambda pr, m, st=step: st(0.6 + 0.4 * pr, m))
             else:
                 text = text_pose(specs[pid]["hint"], p.data["style"])
                 qwen21.generate(prompt=text, refs=[body, skel_dir / f"{pid}.png"], dest=dest, seed=s, size=POSE_SIZE,

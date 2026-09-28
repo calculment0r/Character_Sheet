@@ -100,7 +100,6 @@ def _krea2(prompt: str, refs: list[Path], dest: Path, seed: int, report) -> Path
     verrouillé reporté en gros. Les étapes restent dans `.<nom>/` pour les
     coulisses."""
     from . import krea2
-    from .presentation import identity
 
     face, garments = refs[0], refs[1:]
     work = dest.parent / f".{dest.stem}"
@@ -113,17 +112,27 @@ def _krea2(prompt: str, refs: list[Path], dest: Path, seed: int, report) -> Path
     if garments:
         shot = krea2.generate(prompt=GARMENT_PASS, refs=[shot, garments[0]], dest=work / "tenue.png", seed=seed,
                               size=krea2.FULLBODY, report=step(0.45, 0.7))
+    return carry_face(shot, face, dest, seed=seed, work=work, report=step(0.7, 1.0))
+
+
+def carry_face(shot: Path, face: Path, dest: Path, *, seed: int, work: Path, report=lambda p, m: None) -> Path:
+    """Le visage verrouillé reporté sur la tête d'une photo en pied
+    (`krea2.face_pass`) : deux essais au plus ; un report qui dédouble la
+    personne ou perd en ressemblance est écarté, la photo reste telle
+    quelle."""
+    from . import krea2
+    from .presentation import identity
+
     found = identity(face, [shot])[0]
     if not found.get("box"):
-        print("  pas de visage trouvé sur le plein pied : visage verrouillé non reporté")
+        print("  pas de visage trouvé : visage verrouillé non reporté")
         dest.write_bytes(Path(shot).read_bytes())
         return dest
-    # Deux essais au plus ; un report qui dédouble la personne ou perd en
-    # ressemblance est écarté, et la photo reste telle quelle.
     best, best_score = None, found.get("score") if found.get("score") is not None else -1.0
     for k in range(2):
         out = work / f"visage_{k + 1}.png"
-        krea2.face_pass(shot, face, out, box=found["box"], seed=seed + k, report=step(0.7 + 0.15 * k, 0.85 + 0.15 * k))
+        krea2.face_pass(shot, face, out, box=found["box"], seed=seed + k,
+                        report=lambda pr, m, k=k: report((k + pr) / 2, m))
         got = identity(face, [out])[0]
         ok = got.get("score") is not None and (got.get("faces") or 1) == 1
         print(f"  report du visage {k + 1} : identité {got.get('score')} · visages {got.get('faces')}"

@@ -46,9 +46,15 @@ from . import config
 from .comfy import Comfy, fill
 
 UNET = "krea2_turbo_bf16.safetensors"
+# Le LoRA des photos (texte → image) : UltraReal KR2 V2 Pro (vizsumit,
+# Civitai 2462105), à 0,7 — banc du 28/09 : yeux, sourcils, peau et
+# tissus plus nets, rendu de photo professionnelle ; « Skin Texture »
+# aplatit et vieillit, le réalisme V2 ne change presque rien.
+PHOTO_LORAS = "ultra_real_krea2_v2.safetensors:0.7"
 CLIP = "qwen3vl_4b_fp8_scaled.safetensors"
 VAE = "qwen_image_vae.safetensors"
 EDIT_LORA = "krea2_identity_edit_v1_1.safetensors"
+EDIT_LORA_V12 = "krea2_identity_edit_v1_2.safetensors"
 REALISM_LORA = "Krea2-realism-V2.safetensors"
 STEPS = 8
 MAX_REFS = 2
@@ -60,12 +66,18 @@ FULLBODY = (1152, 2048)
 
 def workflow(n_refs: int, width: int, height: int, *, grounding: int = GROUNDING, realism: float = 0.0,
              edit_strength: float = 1.0, steps: int = STEPS, scheduler: str = "simple", refine: float = 0.0,
-             refine_scale: float = 1.5) -> dict:
+             refine_scale: float = 1.5, loras: list[tuple[str, float]] | None = None, edit: str = "native",
+             edit_lora: str | None = None, ref_boost: float = 1.0) -> dict:
     """Le graphe au format API. `realism` : force du LoRA de réalisme
-    (0 : absent). `refine` : un second passage (texte → image seulement) —
-    la première image rendue à la taille divisée par `refine_scale`,
-    agrandie, puis reprise à ce débruitage (0,15–0,3 : au-delà, il
-    réinvente), pour la peau."""
+    (0 : absent) ; `loras` : d'autres LoRA de style, (fichier, force).
+    `refine` : un second passage (texte → image seulement) — la première
+    image rendue à la taille divisée par `refine_scale`, agrandie, puis
+    reprise à ce débruitage (0,15–0,3 : au-delà, il réinvente), pour la peau.
+
+    `edit` : `native` — les sources en `ReferenceLatent` (LoRA v1.1) ; `node`
+    — le `Krea2EditModelPatch` des nœuds v1.2.5 (LoRA v1.2), qui met la
+    source au cadre de la sortie lui-même (`fit`) et tire vers le sujet
+    (`ref_boost`)."""
     wf = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": config.setting("krea2_unet", UNET),
                                                      "weight_dtype": "default"}},
@@ -75,14 +87,17 @@ def workflow(n_refs: int, width: int, height: int, *, grounding: int = GROUNDING
         "7": {"class_type": "EmptySD3LatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
     }
     model = ["1", 0]
-    if realism:
-        wf["4"] = {"class_type": "LoraLoaderModelOnly",
-                   "inputs": {"model": model, "lora_name": config.setting("krea2_realism_lora", REALISM_LORA),
-                              "strength_model": realism}}
-        model = ["4", 0]
+    stack = ([(config.setting("krea2_realism_lora", REALISM_LORA), realism)] if realism else []) + list(loras or [])
+    for k, (name, strength) in enumerate(stack):
+        nid = f"4{k}"
+        wf[nid] = {"class_type": "LoraLoaderModelOnly",
+                   "inputs": {"model": model, "lora_name": name, "strength_model": strength}}
+        model = [nid, 0]
     if n_refs:
+        default_lora = EDIT_LORA_V12 if edit == "node" else EDIT_LORA
         wf["5"] = {"class_type": "LoraLoaderModelOnly",
-                   "inputs": {"model": model, "lora_name": config.setting("krea2_edit_lora", EDIT_LORA),
+                   "inputs": {"model": model, "lora_name": edit_lora or config.setting(
+                       "krea2_edit_lora" if edit != "node" else "krea2_edit_lora_v12", default_lora),
                               "strength_model": edit_strength}}
         model = ["5", 0]
         images = {}
@@ -91,21 +106,33 @@ def workflow(n_refs: int, width: int, height: int, *, grounding: int = GROUNDING
             wf[nid] = {"class_type": "LoadImage", "inputs": {"image": "ref.png"}, "_meta": {"title": f"REF {k + 1}"}}
             wf[str(100 + 10 * k + 1)] = {"class_type": "VAEEncode", "inputs": {"pixels": [nid, 0], "vae": ["3", 0]}}
             images["image" if k == 0 else "image_b"] = [nid, 0]
-        # Les sources en latents propres, trames 1 et 2 (méthode `index`) :
-        # ce que faisait `Krea2EditModelPatch`, que ComfyUI 0.37 fait lui-même
-        # (#14843) et qui ne s'y branche plus.
-        for cond, prompt in (("8", "{{prompt}}"), ("9", "")):
-            wf[cond] = {"class_type": "Krea2EditGroundedEncode",
-                        "inputs": {"clip": ["2", 0], "prompt": prompt, "grounding_px": grounding, **images}}
-            last = [cond, 0]
-            for k in range(n_refs):
-                nid = f"{cond}{k}"
-                wf[nid] = {"class_type": "ReferenceLatent",
-                           "inputs": {"conditioning": last, "latent": [str(100 + 10 * k + 1), 0]}}
-                last = [nid, 0]
-            wf[f"{cond}m"] = {"class_type": "FluxKontextMultiReferenceLatentMethod",
-                              "inputs": {"conditioning": last, "reference_latents_method": "index"}}
-        positive, negative = ["8m", 0], ["9m", 0]
+        if edit == "node":
+            patch = {"model": model, "source_latent": ["101", 0], "vae": ["3", 0], "source_image": ["100", 0],
+                     "target_latent": ["7", 0], "fit_mode": "fit", "ref_boost": ref_boost}
+            if n_refs > 1:
+                patch.update(source_latent_b=["111", 0], source_image_b=["110", 0])
+            wf["6"] = {"class_type": "Krea2EditModelPatch", "inputs": patch}
+            model = ["6", 0]
+            for cond, prompt in (("8", "{{prompt}}"), ("9", "")):
+                wf[cond] = {"class_type": "Krea2EditGroundedEncode",
+                            "inputs": {"clip": ["2", 0], "prompt": prompt, "grounding_px": grounding, **images}}
+            positive, negative = ["8", 0], ["9", 0]
+        else:
+            # Les sources en latents propres, trames 1 et 2 (méthode `index`) :
+            # ce que faisait `Krea2EditModelPatch` v1.1, que ComfyUI 0.37 fait
+            # lui-même (#14843) et qui ne s'y branchait plus.
+            for cond, prompt in (("8", "{{prompt}}"), ("9", "")):
+                wf[cond] = {"class_type": "Krea2EditGroundedEncode",
+                            "inputs": {"clip": ["2", 0], "prompt": prompt, "grounding_px": grounding, **images}}
+                last = [cond, 0]
+                for k in range(n_refs):
+                    nid = f"{cond}{k}"
+                    wf[nid] = {"class_type": "ReferenceLatent",
+                               "inputs": {"conditioning": last, "latent": [str(100 + 10 * k + 1), 0]}}
+                    last = [nid, 0]
+                wf[f"{cond}m"] = {"class_type": "FluxKontextMultiReferenceLatentMethod",
+                                  "inputs": {"conditioning": last, "reference_latents_method": "index"}}
+            positive, negative = ["8m", 0], ["9m", 0]
     else:
         wf["8"] = {"class_type": "CLIPTextEncode", "inputs": {"clip": ["2", 0], "text": "{{prompt}}"}}
         wf["9"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["8", 0]}}
@@ -136,27 +163,30 @@ def workflow(n_refs: int, width: int, height: int, *, grounding: int = GROUNDING
     return wf
 
 
-FACE_PASS = ("Replace only the face of the person in the first image with the face of the person in the second "
-             "image. There is only one person in the picture. Keep the head angle, the expression, anything worn on "
-             "the head or face, the hair, the clothing, the framing, the light and the background exactly as they "
-             "are. Photograph with natural skin texture.")
+FACE_PASS = ("Swap the face of the person in the first image with the face of the person in the second image. "
+             "There is only one person in the picture. Keep the head angle, the expression, anything worn on the "
+             "head or face, the hair, the clothing, the framing, the light and the background exactly as they are.")
 FACE_PASS_SIDE = 768
-FACE_PASS_GROUNDING = 512
+FACE_PASS_GROUNDING = 768
 
 
 def face_pass(src: Path, face: Path, dest: Path, *, box, seed: int, prompt: str = FACE_PASS,
-              side: int = FACE_PASS_SIDE, report=lambda p, m: None, grounding: int = FACE_PASS_GROUNDING) -> Path:
+              side: int = FACE_PASS_SIDE, report=lambda p, m: None, grounding: int = FACE_PASS_GROUNDING,
+              **edit) -> Path:
     """Le visage d'une image en pied, repris en gros d'après le visage
     verrouillé : dans le plein pied, la tête ne fait que 200 px, trop peu
     pour que l'édition y porte l'identité. La tête (boîte `box` du visage,
     élargie aux cheveux) est recadrée au carré, éditée à `side` px avec le
     visage verrouillé en sujet, puis recollée avec un bord fondu — le
-    reste de l'image ne bouge pas.
+    reste de l'image ne bouge pas. `edit` : passé à `generate` (mode
+    d'édition, `ref_boost`).
 
     Essais du 28/09 (seed, FaceNet contre le visage verrouillé) : tête
-    seule 0,62 ; deux références et « une seule personne », ancrage 512 :
-    0,79 ; ancrage 768 ou 1024 : la personne dédoublée côte à côte ; tout
-    le plein pied en deux références : 0,67 en 150 s."""
+    seule 0,62 ; LoRA v1.1, deux références et « une seule personne »,
+    ancrage 512 : 0,79 ; ancrage 768 ou 1024 : la personne dédoublée côte à
+    côte ; tout le plein pied en deux références : 0,67 en 150 s. LoRA
+    v1.2 par ses nœuds, ancrage 768 : 0,75 contre 0,73 pour la v1.1 sur la
+    même photo, une seule personne."""
     from PIL import Image, ImageDraw, ImageFilter
 
     img = Image.open(src).convert("RGB")
@@ -171,7 +201,7 @@ def face_pass(src: Path, face: Path, dest: Path, *, box, seed: int, prompt: str 
     crop = work / "head.png"
     img.crop((left, top, left + n, top + n)).resize((side, side), Image.LANCZOS).save(crop)
     edited = generate(prompt=prompt, refs=[crop, face], dest=work / f"head_krea2_{seed}.png", seed=seed,
-                      size=(side, side), report=report, grounding=grounding)
+                      size=(side, side), report=report, grounding=grounding, **edit)
     head = Image.open(edited).convert("RGB").resize((n, n), Image.LANCZOS)
     mask = Image.new("L", (n, n), 0)
     pad = int(n * 0.12)
@@ -193,13 +223,36 @@ def fit(src: Path, size: tuple[int, int], dest: Path) -> Path:
     return dest
 
 
+def photo_loras() -> list[tuple[str, float]]:
+    """`krea2_photo_loras` : « fichier:force, … », vide pour aucun."""
+    out = []
+    for item in str(config.setting("krea2_photo_loras", PHOTO_LORAS) or "").split(","):
+        name, _, strength = item.strip().partition(":")
+        if name:
+            out.append((name, float(strength or 1.0)))
+    return out
+
+
+def prepare(src: Path, dest: Path, longest: int = 2048) -> Path:
+    """Une référence pour les nœuds v1.2 : en RVB, le grand côté ramené à
+    `longest` au plus — ils la mettent eux-mêmes au cadre de la sortie."""
+    from PIL import Image
+
+    img = Image.open(src).convert("RGB")
+    if max(img.size) > longest:
+        img.thumbnail((longest, longest), Image.LANCZOS)
+    img.save(dest)
+    return dest
+
+
 def generate(*, prompt: str, refs: list[Path] | None = None, dest: Path, seed: int, size: tuple[int, int],
              report=lambda p, m: None, stub=None, grounding: int | None = None, realism: float | None = None,
              edit_strength: float = 1.0, steps: int = STEPS, scheduler: str | None = None,
-             refine: float | None = None) -> Path:
+             refine: float | None = None, loras: list[tuple[str, float]] | None = None, edit: str | None = None,
+             edit_lora: str | None = None, ref_boost: float = 1.0) -> Path:
     """Rend une image dans `dest`. `refs` : aucune (texte → image), une
     (la source à éditer) ou deux (la scène, puis le sujet). `stub` : l'image
-    à écrire en factice."""
+    à écrire en factice. `edit` : `native` (v1.1) ou `node` (v1.2)."""
     refs = list(refs or [])[:MAX_REFS]
     dest.parent.mkdir(parents=True, exist_ok=True)
     if config.backend("portrait") == "stub":
@@ -214,15 +267,23 @@ def generate(*, prompt: str, refs: list[Path] | None = None, dest: Path, seed: i
                                             "beta" if not refs else "simple")
     if refine is None:
         refine = float(config.setting("krea2_refine", "0") or 0)
+    # v1.2 par ses nœuds (banc du 28/09) : même ressemblance que la v1.1,
+    # expressions plus franches, et une pose tirée du plein pied garde la
+    # tenue telle quelle ; `native` reste pour la v1.1.
+    edit = edit or config.setting("krea2_edit", "node")
+    if loras is None and not refs:
+        loras = photo_loras()
     work = dest.parent / f".{dest.stem}"
     work.mkdir(parents=True, exist_ok=True)
     comfy = Comfy(config.comfyui_url("portrait"))
     names = []
     for k, r in enumerate(refs):
         tag = uuid.uuid4().hex[:8]
-        names.append(comfy.upload(fit(Path(r), size, work / f"krea2_ref{k + 1}_{tag}.png")))
+        local = work / f"krea2_ref{k + 1}_{tag}.png"
+        names.append(comfy.upload(prepare(Path(r), local) if edit == "node" else fit(Path(r), size, local)))
     wf = fill(workflow(len(names), *size, grounding=grounding or GROUNDING, realism=realism,
-                       edit_strength=edit_strength, steps=steps, scheduler=scheduler, refine=refine),
+                       edit_strength=edit_strength, steps=steps, scheduler=scheduler, refine=refine, loras=loras,
+                       edit=edit, edit_lora=edit_lora, ref_boost=ref_boost),
               {"prompt": prompt, "seed": seed}, names)
     files = comfy.run(wf, work, report=report, prefix="krea2")
     Path(files[0]).replace(dest)

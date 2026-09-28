@@ -383,6 +383,24 @@ Cal `KREA2_*.json`) ; copié sur DGX2 par le câble direct (26 Go en
 | LoRA réalisme V2 à 0,8 | à peine différent de sans — laissé à 0 |
 | second passage (rendu aux 2/3, agrandi, repris à 0,25) | portrait : plus de pores mais plus plat et plus âgé — pas gardé ; plein pied : peau de la tête et grain du tissu nettement meilleurs — gardé (`BODY_REFINE`) |
 
+Téléchargements accordés par Cal le 28/09 (DGX2, `models/loras/`,
+empreintes SHA256 vérifiées contre Civitai) : UltraReal KR2 V2 Pro
+(miroir HF jay1000, 0,22 Go), Realistic Skin Texture (HF inlineresearch,
+0,19 Go), Identity Edit v1.2 (HF conradlocke, 1,83 Go) ; nœuds
+`comfyui-krea2edit` passés en v1.2.5 (le `Krea2EditModelPatch` y remarche
+avec ComfyUI 0.37). CyberRealistic Krea 2 : Civitai seulement, et Civitai
+refuse sans compte (401) — pas téléchargé. Banc, graine 22 [V] :
+
+| Essai | Résultat |
+|---|---|
+| UltraReal 0,7 (texte → image) | portrait et pied : yeux, sourcils, peau et tissus plus nets, photo professionnelle — **gardé** |
+| Skin Texture 0,8 (déclencheur en tête) | peau plus brute mais visage plus plat et plus âgé — écarté |
+| UltraReal 0,5 + Skin 0,5 | proche d'UltraReal seul, un peu plus de grain — pas mieux |
+| report du visage v1.2 (nœuds, ancrage 768) | 0,745 contre 0,726 en v1.1, une seule personne — gardé |
+| plein pied tiré du seul visage (v1.2, `fit`) | 0,68–0,73, tenue réinventée — écarté (photo + report meilleurs) |
+| poses tirées du plein pied validé (v1.2) | marche 0,69, bras croisés 0,75 ; **tenue identique** au plein pied, poses naturelles — gardé |
+| expressions v1.2 / v1.1 | joie 0,83 / 0,88, colère 0,77 / 0,76 ; v1.2 plus franche (la colère v1.1 se voyait à peine) — v1.2 gardée |
+
 Pièges : les nœuds `comfyui-krea2edit` v1.1 cassent sur ComfyUI 0.37
 (`wrapper() takes from 4 to 6 positional arguments but 7 were given`) :
 ComfyUI gère lui-même les références de Krea 2 depuis #14843 ; on garde

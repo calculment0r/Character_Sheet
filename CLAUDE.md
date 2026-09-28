@@ -5,7 +5,8 @@ pied en pose naturelle → A-pose par squelette → vues orthogonales → mesh
 PBR → rig SOMA → animation, et un turnaround H3 de présentation à la fin.
 Les images du personnage (visage, plein pied, expressions et poses de la
 planche) sortent de **Krea 2** (`factory/krea2.py`, décision de Cal du
-28/09 : Qwen-Image 2.1 n'est pas bon en photographie) ; Qwen-Image 2.1 ne
+28/09 : Qwen-Image 2.1 n'est pas bon en photographie) — photos avec le
+LoRA UltraReal, retouches par l'Identity Edit v1.2 ; Qwen-Image 2.1 ne
 fait plus que l'A-pose et les vues, guidées par squelette.
 Les études et essais qui fondent ces choix : `docs/ETUDES.md`, à lire
 avant de toucher à ces étages. **Tout tourne en
