@@ -433,3 +433,28 @@ recherche complet : sources Krea, Comfy, conradlocke, RudySen.
 - Pixal3D : https://github.com/TencentARC/Pixal3D · https://docs.comfy.org/tutorials/3d/pixal3d
 - Dérive des LoRA caméra : https://arxiv.org/html/2609.04603
 - Planches : https://github.com/muse-collective-26/muse-character-sheet-klein · https://huggingface.co/Qwen/Qwen-Image-2.1-PE-I2I · https://note.com/sepiablue/n/n02026f718c3f
+
+## 10. Le squelette posé sur l'anatomie du personnage (28/09, soir)
+
+Cal, sur le rig de Costaud : « regarde pourquoi le rig n'a pas réussi à
+mettre les bonnes proportions … il faut absolument qu'on puisse avoir des
+persos stylisés qui ne sont pas forcément aux proportions d'un humain ».
+
+Cause [V] : `rig_unirig.match_soma` lit le squelette d'UniRig par sa
+seule topologie (« la main est la fourche des doigts ou le bout du bras »,
+« le coude est au mi-chemin »), et `soma_positions` pose le reste sur le
+gabarit SOMA humain. Sur Costaud (grosses mains, UniRig sans doigts),
+la main tombait au bout des doigts, le coude au tiers du bras, les doigts
+du squelette sortaient de 11 cm du mesh, les orteils plongeaient sous le
+sol.
+
+Correction [V] : `rig_unirig.anatomy` relève la vue de face préparée
+(celle dont le mesh est tiré) par DWPose — corps et 21 points par main —
+et reporte chaque point dans le repère du mesh (même silhouette : rapport
+0,82 contre 0,82 ; profondeur au milieu du volume) ; les orteils se
+lisent sur le pied du mesh, le sommet du crâne en haut du mesh. 69
+articulations sur 77 viennent de là ; la colonne, le cou et la tête
+suivent l'axe du corps aux proportions du gabarit ; les clavicules entre
+cou et épaule. Chaque os UniRig verse ses poids à l'os SOMA le plus
+proche (`nearest_owner`). Costaud refait : poignets, coudes, épaules et
+doigts à leur place, contrôle du rig passé (bras 39°, accroupi −23 %).
