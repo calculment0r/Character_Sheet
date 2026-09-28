@@ -414,7 +414,7 @@ def views(p: Project, costume: str | None, *, method: str = "qwen21-pose", names
             from . import sam3d
 
             report(0.05, "SAM 3D Body · face")
-            front_yaw = sam3d.yaw(p.path(body), workdir=workdir, name="front")
+            front_yaw = sam3d.root_yaw(sam3d.read(p.path(body), workdir=workdir, name="front"))
         if "front" in names:
             dest = folder / "front.png"
             imaging.load(p.path(body)).save(dest)
@@ -438,14 +438,23 @@ def views(p: Project, costume: str | None, *, method: str = "qwen21-pose", names
                                 stub=lambda: sketches.mannequin(pose.SIZE, azimuth=float(az), seed=identity_seed(p)))
                 got = {"file": out, "seed": seed_k}
                 if measure:
-                    got["yaw"] = sam3d.yaw(out, workdir=workdir, name=f"{n}_{k}")
+                    # un seul passage de SAM 3D Body : l'angle de la vue et
+                    # la place des bras (un profil garde souvent un bras
+                    # devant et l'autre derrière — Survêt, Manteau, 28/09)
+                    bvh = sam3d.read(out, workdir=workdir, name=f"{n}_{k}")
+                    got["yaw"] = sam3d.root_yaw(bvh)
                     got["azimuth"] = sam3d.azimuth(got["yaw"], front_yaw)
                     got["error"] = angular_error(got["azimuth"], az)
-                    print(f"    mesuré {got['azimuth']:.1f}° (écart {got['error']:+.1f}°)")
+                    shape = sam3d.body(bvh)
+                    got["arms"], got["arm_fails"] = shape["arms_forward"], sam3d.arms_placed(shape)
+                    print(f"    mesuré {got['azimuth']:.1f}° (écart {got['error']:+.1f}°)"
+                          + (f" · {'; '.join(got['arm_fails'])}" if got["arm_fails"] else " · bras en place"))
                 tries.append(got)
-                if not measure or abs(got["error"]) <= limit:
+                if not measure or (abs(got["error"]) <= limit and not got["arm_fails"]):
                     break
-            best = min(tries, key=lambda t: abs(t.get("error", 0.0)))
+            # l'angle d'abord (le contrôle ±5° le refuserait), puis les bras
+            best = min(tries, key=lambda t: (abs(t.get("error", 0.0)) > limit, bool(t.get("arm_fails")),
+                                             abs(t.get("error", 0.0))))
             if best["file"] != dest:
                 best["file"].replace(dest)
             for t in tries:
@@ -456,6 +465,7 @@ def views(p: Project, costume: str | None, *, method: str = "qwen21-pose", names
                      "seed": best["seed"], "backend": backend, "prompt": text, "at": now()}
             if measure:
                 entry["azimuth_measured"] = best["azimuth"]
+                entry["arms"] = {"forward": best["arms"], "fails": best["arm_fails"]}
                 entry["azimuth_measure"] = {"engine": "sam3dbody", "yaw_raw": round(best["yaw"], 1),
                                             "reference": "front", "tries": [
                                                 {"seed": t["seed"], "azimuth": t["azimuth"]} for t in tries],

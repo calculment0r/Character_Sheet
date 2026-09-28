@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path.home() / "ComfyUI/custom_nodes/comfyui_controlnet_au
 from custom_controlnet_aux.dwpose import DwposeDetector, util  # noqa: E402
 
 ARM_DEG = 45.0   # bras : angle avec la verticale
+ARM_FORWARD = 10.0   # vues tournées : les bras un peu en avant du plan des épaules
 LEG_DEG = 4.0   # jambes : angle avec la verticale
 
 # OpenPose 18 : 0 nez, 1 cou, 2-4 épaule/coude/poignet droits, 5-7 gauches,
@@ -293,10 +294,26 @@ def view(body, lhand, rhand, face, w, azimuth):
         cx = w / 2 + (hx - w / 2) * math.cos(t)
         return np.array([cx + r * radius * math.sin(phi - t), p[1]])
 
+    # Les bras de l'A-pose sont dans le plan des épaules : de profil, ils
+    # se projetaient sur le tronc et Qwen les dessinait l'un devant,
+    # l'autre derrière (Survêt, Manteau, 28/09). On les avance un peu
+    # (ARM_FORWARD) pour qu'ils se lisent devant le corps, et le bras du
+    # fond disparaît derrière lui dans un profil.
+    lean = math.sin(math.radians(ARM_FORWARD))
+
+    def depth(i, p, shoulder):
+        s = body[shoulder]
+        return 0.0 if s is None else float(np.linalg.norm(p - s)) * lean
+
+    profile = abs(math.sin(t)) > 0.9
+    near_left = math.sin(t) > 0          # 90° : on voit le côté gauche du personnage
+    hidden = set() if not profile else ({3, 4} if near_left else {6, 7})
     out = []
     for i, p in enumerate(body):
-        if p is None:
+        if p is None or i in hidden:
             out.append(None)
+        elif i in (3, 4, 6, 7):
+            out.append(project(p, depth(i, p, 2 if i in (3, 4) else 5)))
         elif i in HEAD:
             if i in (16, 17):   # les oreilles, à ±90°
                 phi = math.radians(-90 if i == 16 else 90)
@@ -307,7 +324,10 @@ def view(body, lhand, rhand, face, w, azimuth):
                 out.append(on_head(p, radius=1.3 if i == 0 else 1.05, limit=-0.1))
         else:
             out.append(project(p))
-    hands = [None if hd is None else [None if p is None else project(p) for p in hd] for hd in (lhand, rhand)]
+    hands = []
+    for hd, shoulder, far in ((lhand, 5, profile and not near_left), (rhand, 2, profile and near_left)):
+        hands.append(None if hd is None or far else
+                     [None if p is None else project(p, depth(0, p, shoulder)) for p in hd])
     shown = None if face is None else [None if p is None else on_head(p) for p in face]
     return out, hands[0], hands[1], shown
 

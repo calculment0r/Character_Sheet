@@ -60,15 +60,24 @@ SIDES = ("The person and the outfit stay exactly as asymmetric as in <image1>: e
 VIEWS = {
     45: "a three-quarter front view: the whole body, chest, hips, feet and face, is turned halfway toward the left edge "
         "of the image, forty-five degrees to the person's right, so we see the front and the left side of the body; "
-        "the person looks toward the left of the image",
+        "the person looks toward the left of the image; both arms are still held out to the sides of the body at "
+        "forty-five degrees, the left arm nearer to the camera",
     90: "an exact left profile: the person is turned ninety degrees to their right and faces the left edge of the "
-        "image; we see only the left side of the body, the left arm and left leg nearest to the camera",
-    180: "a back view: the camera is directly behind; we see the back, the back of the head and the hair from behind",
+        "image; we see only the left side of the body, the left arm and left leg nearest to the camera. Seen from the "
+        "side, the arms held out in the A-pose point toward the camera and the far side: the left arm comes down "
+        "from the shoulder beside the body, just in front of the hip, the left hand at hip height; the right arm is "
+        "hidden behind the body. Neither arm reaches forward or swings backward",
+    180: "a back view: the camera is directly behind; we see the back, the back of the head and the hair from behind; "
+         "both arms are held out to the sides at forty-five degrees, exactly as in the front view",
     270: "an exact right profile: the person is turned ninety degrees to their left and faces the right edge of the "
-         "image; we see only the right side of the body, the right arm and right leg nearest to the camera",
+         "image; we see only the right side of the body, the right arm and right leg nearest to the camera. Seen from "
+         "the side, the arms held out in the A-pose point toward the camera and the far side: the right arm comes "
+         "down from the shoulder beside the body, just in front of the hip, the right hand at hip height; the left "
+         "arm is hidden behind the body. Neither arm reaches forward or swings backward",
     315: "a three-quarter front view: the whole body, chest, hips, feet and face, is turned halfway toward the right "
          "edge of the image, forty-five degrees to the person's left, so we see the front and the right side of the "
-         "body; the person looks toward the right of the image",
+         "body; the person looks toward the right of the image; both arms are still held out to the sides of the "
+         "body at forty-five degrees, the right arm nearer to the camera",
 }
 
 

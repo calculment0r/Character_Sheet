@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from pathlib import Path
 
 from . import chain, config, h3
 from .project import ChainError, Project, apose as apose_of, fullbody_token, now
@@ -359,6 +360,17 @@ def _apose_pick(p: Project, key: str, cos: dict, st: dict, report) -> None:
         ref = got[str(body)]
         for c in todo:
             m = apose_pick.score(body, ref, p.path(c["file"]), got[str(p.path(c["file"]))])
+            if _real_chain() and m.get("arms_deg"):
+                # de face pour de bon : DWPose ne voit pas un corps tourné
+                # de 10° (Survêt, 28/09), SAM 3D Body si
+                from . import sam3d
+
+                shape = sam3d.body(sam3d.read(p.path(c["file"]), workdir=p.dir(f"costumes/{key}/apose/.sam3d"),
+                                              name=Path(c["file"]).stem))
+                m["body3d"] = shape
+                turned = sam3d.square(shape)
+                if turned:
+                    m = {**m, "ok": False, "fails": [*m["fails"], *turned]}
             c["measure"] = {**m, "engine": "dwpose", "fullbody": st["fullbody"], "at": now()}
             _log(st, f"A-pose {c['file'].rsplit('/', 1)[-1]} : {'recevable' if m['ok'] else 'refusée'}, "
                      f"note {m['score']}" + (f" — {'; '.join(m['fails'][:3])}" if m["fails"] else ""))
@@ -369,7 +381,8 @@ def _apose_pick(p: Project, key: str, cos: dict, st: dict, report) -> None:
         n, best = max(good, key=lambda nc: nc[1]["measure"]["score"])
         metric = {k: best["measure"].get(k) for k in ("score", "arms_deg", "elbows_deg", "legs_deg", "ankle_ratio",
                                                       "facing", "nose_offset", "torso_tilt", "level", "knees_deg",
-                                                      "ankle_level", "eye_tilt", "frame", "outfit", "engine")}
+                                                      "ankle_level", "eye_tilt", "body3d", "frame", "outfit",
+                                                      "engine")}
         metric["thresholds"] = apose_pick.THRESHOLDS
         metric["candidates"] = len(cands)
         p.validate_apose(key, str(n), by="auto", metric=metric)
