@@ -682,8 +682,9 @@ def main() -> int:
           and all((root / e["cut"]).exists() and (root / e["skeleton"]).exists() for e in pres["panels"]["poses"])
           and all(e["engine"] == "krea2" and e["prompt"].startswith("Change only the person's facial expression")
                   for e in pres["panels"]["expressions"])
-          and all("<image1>" in e["prompt"] for e in pres["panels"]["poses"])
-          and "<image2>" in pres["panels"]["poses"][0]["prompt"],
+          and all(e["engine"] == "krea2" and e["prompt"].startswith("Full-body fashion photograph")
+                  and "The person stands in a relaxed natural pose" not in e["prompt"]
+                  for e in pres["panels"]["poses"]),
           f"{ids} · palette {pres['palette']}")
     seeds = {e["id"]: e["seed"] for v in pres["panels"].values() for e in v}
     usine("presentation", "test-pilote", "--refaire", "joie,marche", "--graine", "900")

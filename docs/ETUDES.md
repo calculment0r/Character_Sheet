@@ -376,6 +376,9 @@ Cal `KREA2_*.json`) ; copié sur DGX2 par le câble direct (26 Go en
 | tête recadrée 768², 2 réf., « une seule personne », ancrage 512 | 0,62 → **0,79**, une seule personne — gardé (`face_pass`) |
 | diptyque tête + visage, une source | 0,66 et 0,55, tête tournée — écarté |
 | expression par édition (sourire) | FaceNet 0,84, cadre identique, photo réelle ; ajoutait des rides sans « keep the age » |
+| six expressions, personnage d'essai | 0,96 / 0,80 / 0,84 / 0,80 / 0,72 / 0,87 (Qwen ce matin sur `seed` : 0,72–0,78) |
+| pose : photo dans la pose + report du visage | marche, bras croisés, par-dessus l'épaule : poses justes, photo réelle ; FaceNet 0,66–0,76 — gardé |
+| pose : la personne du plein pied mise à la place (2 réf.) | dédoublée deux fois sur trois, un bras en moins une fois — écarté |
 
 Pièges : les nœuds `comfyui-krea2edit` v1.1 cassent sur ComfyUI 0.37
 (`wrapper() takes from 4 to 6 positional arguments but 7 were given`) :
@@ -388,9 +391,11 @@ pas de négatif).
 À faire : LoRA Identity Edit v1.2 (échange de tête, essayage d'un
 vêtement, planches de personnage, passe 1024 ; 1,83 Go sur
 huggingface.co/conradlocke/krea2-identity-edit, nœuds v1.2.5) — pas
-téléchargé sans l'accord de Cal ; poses de la planche et A-pose encore
-par Qwen-Image 2.1 (Krea 2 n'a ici ni squelette ni pose ; contrôle par
-profondeur ou pose ControlNet thedeoxen à essayer). Rapport de
+téléchargé sans l'accord de Cal ; A-pose et vues encore par Qwen-Image
+2.1 (Krea 2 n'a ici ni squelette ni pose ; contrôle par profondeur ou
+pose ControlNet thedeoxen à essayer). La tenue des poses Krea 2 suit le
+texte, pas l'image validée : les détails varient d'une pose à l'autre
+(l'essayage de la v1.2 le corrigerait). Rapport de
 recherche complet : sources Krea, Comfy, conradlocke, RudySen.
 
 ## 9. Sources principales

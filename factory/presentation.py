@@ -10,8 +10,10 @@ de modèle (docs/ETUDES.md §5) :
   expressions  le visage verrouillé coupé au-dessus du col (`pose.head_only`)
                en <image1>, une expression décrite par ses muscles ; sortie
                1024², encodeur à 1056 ;
-  poses        le plein pied validé, en pose naturelle, en <image1>, un
-               squelette OpenPose en <image2> posé sur les os du personnage
+  poses        Krea 2 (28/09) : la photo en pied du personnage prise dans
+               la pose (`text_pose_photo`), le visage verrouillé reporté
+               sur la tête ; avant, Qwen : le plein pied validé en <image1>,
+               un squelette OpenPose en <image2> posé sur les os du personnage
                (`tools/remote/natural_skeleton.py`, `data/natural_poses.json`) ;
                1152 × 2048, le cadre du plein pied ;
   détails      des recadrages du plein pied (col, poche, main, chaussures),
@@ -109,6 +111,24 @@ def text_expression(emotion: str) -> str:
             "Head-and-shoulders portrait, front view.")
 
 
+STILL = ("The person stands in a relaxed natural pose, weight on one leg, arms resting at the sides, facing the "
+         "camera at eye level.")
+
+
+def text_pose_photo(p: Project, cos: dict, hint: str) -> str:
+    """Pour Krea 2 : la photographie en pied du personnage (fiche, visage
+    décrit, tenue), prise dans la pose ; le visage verrouillé y est
+    reporté ensuite (`figure._krea2`). Essai du 28/09 : mettre à la place
+    la personne du plein pied validé (deux références) la dédouble ou lui
+    retire un bras — écarté."""
+    from . import figure, portrait
+    from .prompts import describe_outfit
+
+    person = " ".join(filter(None, [portrait.who_en(p.sheet, build=True) + ".", p.face.get("prompt_en") or ""]))
+    text = figure.text_photo(person, describe_outfit(p.sheet, cos.get("prompt") or ""))
+    return text.replace(STILL, f"The person {hint.strip().rstrip('.')}.")
+
+
 def text_pose(hint: str, style: str = "photoreal") -> str:
     from .pose import LOOK, STYLIZED
 
@@ -197,7 +217,8 @@ def run(p: Project, costume: str | None, *, redo: list[str] | None = None, seed:
     natural = folder / "skeletons" / "natural.json"
     if todo["poses"] or (todo["details"] and not natural.exists()):
         order = [x["id"] for x in natural_poses()]
-        _poses(p, st, folder, p.path(body), sorted(todo["poses"], key=order.index), base + 100, part("poses"))
+        _poses(p, st, folder, p.path(body), sorted(todo["poses"], key=order.index), base + 100, part("poses"),
+               cos=cos)
     if todo["details"]:
         _details(p, st, folder, p.path(body), sorted(todo["details"], key=[d[0] for d in DETAILS].index),
                  base + 200, part("details"))
@@ -335,10 +356,13 @@ def _keep(p: Project, folder: Path, stem: str, tries: list[dict], pid: str, labe
 
 # ── poses ──────────────────────────────────────────────────────────
 
-def _poses(p: Project, st: dict, folder: Path, body: Path, ids: list[str], base: int, report) -> None:
-    from . import qwen21
+def _poses(p: Project, st: dict, folder: Path, body: Path, ids: list[str], base: int, report,
+           cos: dict | None = None) -> None:
+    from . import figure, qwen21
     from . import stubs as sketches
     from .chain import identity_seed
+
+    photo = engine() == "krea2" and p.data["style"] == "photoreal" and cos is not None
 
     specs = {x["id"]: x for x in natural_poses()}
     skel_dir = folder / "skeletons"
@@ -346,6 +370,7 @@ def _poses(p: Project, st: dict, folder: Path, body: Path, ids: list[str], base:
     if not ids:
         return
     locked = p.require_face()
+    locked_path = p.path(locked)
     tries: dict[str, list[dict]] = {i: [] for i in ids}
     pending = list(ids)
     rounds = 1 if _stub() else POSE_TRIES
@@ -354,14 +379,21 @@ def _poses(p: Project, st: dict, folder: Path, body: Path, ids: list[str], base:
         for n, pid in enumerate(pending):
             s = base + 10 * order.index(pid) + k
             dest = folder / f".pose_{pid}_{k}.png"
-            text = text_pose(specs[pid]["hint"], p.data["style"])
-            print(f"  pose {pid} · essai {k + 1} · graine {s}")
+            step = (lambda pr, m, n=n: report(0.05 + 0.9 * (k + (n + pr) / len(pending)) / rounds, m))
+            print(f"  pose {pid} · essai {k + 1} · graine {s} · {'Krea 2' if photo else 'Qwen-Image 2.1'}")
             t0 = time.monotonic()
-            qwen21.generate(prompt=text, refs=[body, skel_dir / f"{pid}.png"], dest=dest, seed=s, size=POSE_SIZE,
-                            resolution=RESOLUTION,
-                            report=lambda pr, m, n=n: report(0.05 + 0.9 * (k + (n + pr) / len(pending)) / rounds, m),
-                            stub=lambda pid=pid: sketches.mannequin(POSE_SIZE, azimuth=float(specs[pid].get("yaw", 0)),
-                                                                    seed=identity_seed(p), label=f"FACTICE · {pid}"))
+            if photo:
+                text = text_pose_photo(p, cos, specs[pid]["hint"])
+                figure.generate("krea2", prompt=text, refs=[locked_path], dest=dest, seed=s, report=step,
+                                identity_seed=identity_seed(p))
+            else:
+                text = text_pose(specs[pid]["hint"], p.data["style"])
+                qwen21.generate(prompt=text, refs=[body, skel_dir / f"{pid}.png"], dest=dest, seed=s, size=POSE_SIZE,
+                                resolution=RESOLUTION, report=step,
+                                stub=lambda pid=pid: sketches.mannequin(POSE_SIZE,
+                                                                        azimuth=float(specs[pid].get("yaw", 0)),
+                                                                        seed=identity_seed(p),
+                                                                        label=f"FACTICE · {pid}"))
             tries[pid].append({"file": dest, "seed": s, "secs": round(time.monotonic() - t0, 1), "prompt": text})
         scores = identity(p.path(locked), [tries[x][-1]["file"] for x in pending])
         for pid, sc in zip(pending, scores):
@@ -375,7 +407,7 @@ def _poses(p: Project, st: dict, folder: Path, body: Path, ids: list[str], base:
     for pid in ids:
         entry = _keep(p, folder, f"pose_{pid}", tries[pid], pid, specs[pid]["label"], POSE_MIN)
         entry.update(prompt=tries[pid][0]["prompt"], skeleton=p.rel(skel_dir / f"{pid}.png"),
-                     yaw=specs[pid].get("yaw", 0))
+                     yaw=specs[pid].get("yaw", 0), engine="krea2" if photo else "qwen21")
         _replace(st["panels"]["poses"], entry)
     p.save()
     report(0.97, "détourage des poses")

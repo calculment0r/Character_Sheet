@@ -3,10 +3,10 @@
 Chaîne souveraine : prompt ou photo → visage validé → costume et plein
 pied en pose naturelle → A-pose par squelette → vues orthogonales → mesh
 PBR → rig SOMA → animation, et un turnaround H3 de présentation à la fin.
-Les images du personnage (visage, plein pied, expressions) sortent de
-**Krea 2** (`factory/krea2.py`, décision de Cal du 28/09 : Qwen-Image 2.1
-n'est pas bon en photographie) ; Qwen-Image 2.1 ne fait plus que l'A-pose,
-les vues et les poses de la planche, faute de pose guidée dans Krea 2.
+Les images du personnage (visage, plein pied, expressions et poses de la
+planche) sortent de **Krea 2** (`factory/krea2.py`, décision de Cal du
+28/09 : Qwen-Image 2.1 n'est pas bon en photographie) ; Qwen-Image 2.1 ne
+fait plus que l'A-pose et les vues, guidées par squelette.
 Les études et essais qui fondent ces choix : `docs/ETUDES.md`, à lire
 avant de toucher à ces étages. **Tout tourne en
 local, sur la machine** — pas d'API pour l'instant, décision de Cal.
