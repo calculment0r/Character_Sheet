@@ -19,7 +19,7 @@
 <body class="cz-page">
 
 <header class="hdr">
-  <a class="logo" href="#/" title="les personnages">
+  <a class="logo" href="./studio.html" title="le casting">
     <span class="sq"><i></i></span>
     <span>
       <b>Character Factory</b>
@@ -28,6 +28,7 @@
   </a>
   <span class="sp"></span>
   <span class="pill" id="sys-pill" title=""><i></i><span id="sys-text">démarrage</span></span>
+  <a class="tb ghost sm" id="to-queue" href="#/file" title="les rendus en cours et en file : arrêter, relancer">File</a>
   <a class="tb ghost sm" id="to-studio" href="./studio.html">Studio</a>
 </header>
 
@@ -40,6 +41,17 @@
   <div>
     <img id="lightbox-img" alt="">
     <div class="cap" id="lightbox-cap"></div>
+  </div>
+</div>
+
+<div class="scrim" id="confirm" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <div class="modal-head"><span class="t" id="confirm-title">confirmer</span></div>
+    <div class="modal-body"><p id="confirm-text"></p></div>
+    <div class="modal-foot"><span class="sp"></span>
+      <button class="tb ghost" id="confirm-no">Pas encore</button>
+      <button class="tb ghost risk" id="confirm-yes">Oui</button>
+    </div>
   </div>
 </div>
 

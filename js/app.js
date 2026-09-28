@@ -632,7 +632,12 @@ function wire() {
   $('#copy').onclick = handleCopy;
   $('#download').onclick = handleDownload;
 
-  $('#home-btn').onclick = showHome;
+  // Le titre ramène au studio, la maison depuis le 27/09 ; l'ancien
+  // accueil de la console reste derrière « Console ».
+  $('#home-btn').onclick = () => {
+    const slug = new URLSearchParams(location.search).get('slug');
+    location.href = slug ? `./studio.html#/p/${encodeURIComponent(slug)}` : './studio.html';
+  };
   $('#console-btn').onclick = showHome;
   $('#settings-btn').onclick = openSettings;
   $('#set-save').onclick = saveSettings;

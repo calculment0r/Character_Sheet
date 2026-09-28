@@ -27,7 +27,7 @@
 <body>
 
 <header class="hdr">
-  <a class="logo" href="./console.html" title="revenir à la console">
+  <a class="logo" href="./studio.html" title="le casting">
     <span class="sq"><i></i></span>
     <span>
       <b>Character Factory</b>
@@ -35,6 +35,8 @@
     </span>
   </a>
 
+  <a class="tb ghost sm" id="back-fiche" href="./studio.html" hidden title="revenir à la fiche du personnage">← Fiche</a>
+  <a class="tb ghost sm" id="back-coulisses" href="./coulisses.html" hidden title="revenir aux coulisses du personnage">Coulisses</a>
   <span class="sp"></span>
 
   <span class="pill" id="pill"><i></i><span id="pill-text">aucun modèle</span></span>
@@ -1979,6 +1981,20 @@ renderer.setAnimationLoop(loop);
 
 // Servie en http : ?src=<url> pour A, ?b=<url> pour B, ?mode=a|b|side|wipe.
 const params = new URLSearchParams(location.search);
+// Ouvert depuis les coulisses ou la fiche : /files/<slug>/… dit à quel
+// personnage revenir (Cal, 28/09 : « je ne peux pas revenir à la fiche »).
+{
+  const slug = params.get('slug') || (/^\/files\/([^/?]+)\//.exec(params.get('src') || '') || [])[1];
+  if (slug) {
+    const s = encodeURIComponent(decodeURIComponent(slug));
+    const fiche = document.getElementById('back-fiche');
+    const cz = document.getElementById('back-coulisses');
+    fiche.href = `./studio.html#/p/${s}`;
+    cz.href = `./coulisses.html#/${s}`;
+    fiche.hidden = false;
+    cz.hidden = false;
+  }
+}
 if (params.get('src')) loadFromUrl('a', params.get('src'));
 if (params.get('b')) loadFromUrl('b', params.get('b'));
 if (MODES[params.get('mode')]) setMode(params.get('mode'));

@@ -128,3 +128,10 @@
 /* ── travaux : les paramètres et le résultat, en clair ──── */
 .cz-page .job .when { font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .1em; color: var(--ink3); }
 .cz-page .job .read summary { margin-top: 2px; }
+
+/* Les gestes de la file et de la corbeille (28/09) : un filet orange,
+   jamais un bouton plein — l'orange plein reste l'action du studio. */
+.tb.ghost.risk { color: var(--or); box-shadow: inset 0 0 0 1px var(--line-or); }
+.cz-page .job .top { align-items: center; }
+.cz-page .job .top .tb { margin-left: var(--s2); }
+.cz-page .job .top a { color: var(--cy); text-decoration: none; }

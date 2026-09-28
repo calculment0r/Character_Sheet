@@ -20,8 +20,10 @@ local, sans rien d'autre que la bibliothèque standard :
   /api/characters              GET la liste, POST une création
   /api/characters/<slug>       GET le détail ; PUT …/identity ; POST …/actions/<action>
   /api/characters/<slug>/tree  GET les fichiers du dossier (chemin, taille, date), en lecture
+  /api/characters/<slug>/delete  POST : le personnage à la corbeille (projects/.corbeille/)
   /api/uploads                 POST une image de référence (corps brut)
-  /api/jobs[/<id>]             la file de travaux ; POST …/<id>/cancel
+  /api/jobs[/<id>]             la file de travaux (?slug, ?limit) ; POST …/<id>/cancel,
+                               POST …/<id>/retry (mêmes réglages)
   /api/attention               ce qui attend Cal, tous personnages confondus
   /files/<slug>/<chemin>       les fichiers d'un personnage
 
@@ -50,8 +52,10 @@ import mimetypes
 import os
 import queue
 import re
+import shutil
 import sys
 import threading
+import time
 import traceback
 import urllib.error
 import urllib.parse
@@ -767,6 +771,34 @@ class Studio:
     def find(self, job_id: str) -> Job | None:
         return next((j for j in self.jobs if j.id == job_id), None)
 
+    def retry(self, job: Job) -> dict:
+        """Relance un travail fini, en échec ou annulé, avec les mêmes
+        réglages ; une étape d'autopilote relance l'autopilote du costume."""
+        if job.status in ("queued", "running"):
+            raise ChainError("ce travail n'est pas fini : arrête-le d'abord")
+        if job.action == "autopilot":
+            return self.act(job.slug, "autopilot", {"costume": job.params.get("costume")})
+        return self.act(job.slug, job.action, dict(job.params))
+
+    def trash(self, slug: str) -> dict:
+        """Un personnage d'essai à la corbeille (`projects/.corbeille/`) :
+        son dossier y part tel quel, on peut l'en ressortir à la main. Pas
+        pendant qu'un travail tourne dessus ; ceux qui attendent sont annulés."""
+        root = project_root(slug)
+        if root is None:
+            raise ChainError(f"personnage inconnu : {slug}")
+        with self.lock:
+            if self.running is not None and self.running.slug == slug:
+                raise ChainError("un travail tourne sur ce personnage : arrête-le dans la file, puis recommence")
+            for job in self.jobs:
+                if job.slug == slug and job.status == "queued":
+                    job.status, job.message, job.ended = "cancelled", "personnage mis à la corbeille", now()
+        dest = config.projects_root() / ".corbeille" / f"{slug}-{time.strftime('%Y%m%d-%H%M%S')}"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(root), str(dest))
+        self.live.pop(slug, None)
+        return {"slug": slug, "trash": str(dest.relative_to(config.projects_root()))}
+
     def cancel(self, job: Job) -> str:
         if job.status == "queued":
             job.status, job.message, job.ended = "cancelled", "annulé avant de partir", now()
@@ -1072,7 +1104,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if len(parts) == 1 and method == "GET":
                 q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                 slug = (q.get("slug") or [None])[0]
-                jobs = [j.public() for j in reversed(s.jobs) if slug in (None, j.slug)][:40]
+                limit = int((q.get("limit") or ["40"])[0]) if str((q.get("limit") or ["40"])[0]).isdigit() else 40
+                jobs = [j.public() for j in reversed(s.jobs) if slug in (None, j.slug)][:max(1, min(limit, 200))]
                 return self._json({"jobs": jobs, "running": s.running.id if s.running else None})
             job = s.find(parts[1]) if len(parts) > 1 else None
             if job is None:
@@ -1081,6 +1114,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._json(job.public(full=True))
             if len(parts) == 3 and parts[2] == "cancel" and method == "POST":
                 return self._json({"message": s.cancel(job), "job": job.public()})
+            if len(parts) == 3 and parts[2] == "retry" and method == "POST":
+                return self._json(s.retry(job))
         if head == "characters":
             if len(parts) == 1:
                 if method == "GET":
@@ -1103,6 +1138,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if root is None:
                     return self._error(404, "personnage inconnu")
                 return self._json({"slug": slug, **tree(root)})
+            if len(parts) == 3 and parts[2] == "delete" and method == "POST":
+                return self._json(s.trash(slug))
             if len(parts) == 3 and parts[2] == "identity" and method == "PUT":
                 return self._json(self._identity(slug))
             if len(parts) == 4 and parts[2] == "actions" and method == "POST":

@@ -9,8 +9,10 @@
    mesurés et les graines relancées, les versions de mesh et
    leurs canaux, les rigs, les travaux et leurs journaux, l'état
    de la machine, et le manifeste brut.
-   Lecture seule : aucune action ne part d'ici.
-   #/<slug>[/<costume>] ouvre un personnage.
+   Trois gestes seulement partent d'ici (Cal, 28/09) : arrêter ou
+   relancer un rendu dans la file, mettre un autopilote en pause
+   ou le reprendre, et envoyer un personnage d'essai à la corbeille.
+   #/<slug>[/<costume>] ouvre un personnage ; #/file, la file des rendus.
    ============================================================ */
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -47,6 +49,27 @@ const state = {
 };
 
 /* ── réseau ─────────────────────────────────────────────── */
+
+async function post(path, body = {}) {
+  const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(body) });
+  let json = null;
+  try { json = await res.json(); } catch (_) { /* corps vide */ }
+  if (!res.ok) throw new Error(json?.error?.message || `${res.status} ${res.statusText}`);
+  return json;
+}
+
+function ask(title, text, yes = 'Oui') {
+  return new Promise((resolve) => {
+    $('#confirm-title').textContent = title;
+    $('#confirm-text').textContent = text;
+    $('#confirm-yes').textContent = yes;
+    $('#confirm').hidden = false;
+    const done = (v) => { $('#confirm').hidden = true; $('#confirm-yes').onclick = null; $('#confirm-no').onclick = null; resolve(v); };
+    $('#confirm-yes').onclick = () => done(true);
+    $('#confirm-no').onclick = () => done(false);
+  });
+}
 
 async function api(path) {
   const res = await fetch(path, { headers: { accept: 'application/json' }, cache: 'no-store' });
@@ -293,7 +316,9 @@ function head(d) {
       <span class="role">${esc(s.role || '')}${d.busy ? ' · un travail tourne sur ce personnage' : ''}</span>
       ${ticks(s.stages)}<span class="lbl">${esc(next)}${state.truncated ? ' · liste de fichiers tronquée' : ''}</span></div>
     <div class="acts"><a class="tb ghost sm" href="./studio.html#/p/${encodeURIComponent(c.slug)}">Studio</a>
-      <button class="tb ghost sm" data-refresh>Relire</button></div></div></div>`;
+      <button class="tb ghost sm" data-refresh>Relire</button>
+      <button class="tb ghost sm risk" data-trash="${esc(c.slug)}" data-name="${esc(c.name)}"
+        title="le dossier part à la corbeille des projets">Détruire</button></div></div></div>`;
 }
 
 function identity(c) {
@@ -582,8 +607,14 @@ function jobsBox() {
     <button class="tb${state.jobsAll ? ' on' : ''}" data-jobs="all">Tous</button></div>`;
   const list = jobs.length ? `<div class="jobs">${jobs.map((j) => {
     const p = { ...(j.params || {}) };
+    const acts = ['queued', 'running'].includes(j.status)
+      ? `<button class="tb ghost sm" data-job-stop="${esc(j.id)}" title="${j.status === 'running'
+        ? 'interrompt le calcul à sa prochaine étape' : 'le retire de la file'}">Arrêter</button>`
+      : `<button class="tb ghost sm" data-job-retry="${esc(j.id)}" title="le relance avec les mêmes réglages">Relancer</button>`;
+    const who = state.jobsAll || state.queue
+      ? ` · <a href="#/${encodeURIComponent(j.slug)}">${esc(j.slug)}</a>` : '';
     return `<div class="job ${esc(j.status)}"><div class="top"><span class="nm">${esc(j.label)} · ${esc(j.action)}${
-      state.jobsAll ? ` · ${esc(j.slug)}` : ''}</span><span class="st ${esc(j.status)}">${esc(JOB_STATE[j.status] || j.status)}</span></div>
+      who}</span><span class="st ${esc(j.status)}">${esc(JOB_STATE[j.status] || j.status)}</span>${acts}</div>
       ${j.status === 'running' ? `<div class="bar"><i style="width:${Math.round((j.progress || 0) * 100)}%"></i></div>` : ''}
       ${j.status === 'done' && j.message === 'fini' ? '' : `<div class="msg">${esc(j.error || j.message || '')}</div>`}
       <div class="when">${esc(j.id)} · créé ${esc(when(j.created))}${j.started ? ` · parti ${esc(when(j.started))}` : ''}${
@@ -616,11 +647,37 @@ function systemBox() {
   return box('cz-systeme', 'SYS', 'Système', s.running ? 'occupé' : low ? 'mémoire basse' : 'au repos', body);
 }
 
+/* ── la file des rendus ─────────────────────────────────── */
+
+function renderQueue() {
+  const pilots = state.list.flatMap((c) => Object.entries(c.autopilot || {}).map(([k, a]) => ({ c, k, a })));
+  const pilotRows = pilots.length ? `<div class="jobs">${pilots.map(({ c, k, a }) => {
+    const on = a.state === 'running';
+    return `<div class="job ${on ? 'running' : 'done'}"><div class="top"><span class="nm"><a href="#/${
+      encodeURIComponent(c.slug)}">${esc(c.name)}</a> · ${esc(k)}</span><span class="st">${esc(a.state || '')}${
+      a.step ? ` · ${esc(a.step)}` : ''}</span>${on
+      ? `<button class="tb ghost sm" data-pilot-stop="${esc(c.slug)}" data-costume="${esc(k)}">Pause</button>`
+      : `<button class="tb ghost sm" data-pilot-go="${esc(c.slug)}" data-costume="${esc(k)}">Reprendre</button>`}</div>
+      ${a.failed ? `<div class="msg">en échec : ${esc(a.failed.step || '')} ${esc(a.failed.error || '')}</div>` : ''}</div>`;
+  }).join('')}</div>` : '<div class="jobs-empty">Aucun autopilote en route.</div>';
+  $('#main').innerHTML = [
+    `<div class="cz-head"><div class="perso-head"><div class="who"><span class="ref">file des rendus · un calcul à la fois</span>
+      <h1>File des rendus</h1><span class="role">Arrêter retire un rendu de la file, ou interrompt celui qui tourne ;
+      relancer le remet en file avec les mêmes réglages.</span></div>
+      <div class="acts"><button class="tb ghost sm" data-refresh>Relire</button></div></div></div>`,
+    box('cz-autopilotes', 'AUTO', 'Autopilotes', `${pilots.filter((x) => x.a.state === 'running').length} en route`, pilotRows),
+    `<div id="cz-jobs">${jobsBox()}</div>`,
+  ].join('');
+  hydrate($('#main'));
+  document.title = 'CHARACTER FACTORY · COULISSES · FILE';
+}
+
 /* ── chargement ─────────────────────────────────────────── */
 
 function parseRoute() {
   const h = decodeURIComponent(location.hash.replace(/^#\/?/, ''));
   if (h.startsWith('cz-')) return null;                     // un saut dans la page, pas une route
+  if (h === 'file') return { queue: true };
   const parts = h.replace(/^p\//, '').split('/').filter(Boolean);
   return { slug: parts[0] || null, costume: parts[1] || null };
 }
@@ -652,7 +709,7 @@ async function loadCharacter(force = false) {
 }
 
 async function loadJobs() {
-  const q = state.jobsAll || !state.slug ? '' : `?slug=${encodeURIComponent(state.slug)}`;
+  const q = state.queue ? '?limit=120' : state.jobsAll || !state.slug ? '' : `?slug=${encodeURIComponent(state.slug)}`;
   const out = await api(`/api/jobs${q}`);
   state.jobs = out.jobs || [];
 }
@@ -660,6 +717,20 @@ async function loadJobs() {
 async function onRoute() {
   const r = parseRoute();
   if (!r) return;
+  state.queue = !!r.queue;
+  if (r.queue) {
+    state.slug = null;
+    state.detail = null;
+    renderSide();
+    try {
+      await Promise.all([loadList(), loadJobs()]);
+      renderSide();
+      renderQueue();
+    } catch (e) {
+      $('#main').innerHTML = `<div class="gate"><p>${esc(e.message)}</p></div>`;
+    }
+    return;
+  }
   if (!r.slug) {
     if (state.list[0]) location.replace(`#/${encodeURIComponent(state.list[0].slug)}`);
     else renderMain();
@@ -693,6 +764,15 @@ function hydrate(root) {
 }
 
 async function refresh() {
+  if (state.queue) {
+    try {
+      await Promise.all([loadList(), loadJobs()]);
+      renderSide();
+      renderQueue();
+      toast('relu');
+    } catch (e) { toast(e.message, 6000); }
+    return;
+  }
   try {
     await loadList();
     renderSide();
@@ -716,6 +796,11 @@ async function pollJobs() {
     if (box) {
       box.innerHTML = jobsBox();
       hydrate(box);
+    }
+    if (state.queue) {
+      await loadList();
+      const pilots = $('#cz-autopilotes');
+      if (pilots) renderQueue();
     }
     // Un travail qui finit change le manifeste : on relit le personnage.
     if (state.slug && await loadCharacter()) {
@@ -768,6 +853,48 @@ function wire() {
     if (jump) {
       e.preventDefault();
       document.getElementById(jump.dataset.jump)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    const stop = e.target.closest('[data-job-stop]');
+    if (stop) {
+      try { toast((await post(`/api/jobs/${stop.dataset.jobStop}/cancel`)).message || 'arrêté'); } catch (err) { toast(err.message, 6000); }
+      await loadJobs().catch(() => {});
+      $('#cz-jobs').innerHTML = jobsBox();
+      return;
+    }
+    const again = e.target.closest('[data-job-retry]');
+    if (again) {
+      try { await post(`/api/jobs/${again.dataset.jobRetry}/retry`); toast('relancé : remis en file'); } catch (err) { toast(err.message, 6000); }
+      await loadJobs().catch(() => {});
+      $('#cz-jobs').innerHTML = jobsBox();
+      return;
+    }
+    const pause = e.target.closest('[data-pilot-stop]');
+    const resume = e.target.closest('[data-pilot-go]');
+    if (pause || resume) {
+      const el = pause || resume;
+      const slug = el.dataset.pilotStop || el.dataset.pilotGo;
+      try {
+        await post(`/api/characters/${encodeURIComponent(slug)}/actions/${pause ? 'autopilot_stop' : 'autopilot'}`,
+          { costume: el.dataset.costume });
+        toast(pause ? 'autopilote en pause' : 'autopilote relancé');
+      } catch (err) { toast(err.message, 6000); }
+      refresh();
+      return;
+    }
+    const trash = e.target.closest('[data-trash]');
+    if (trash) {
+      const ok = await ask(`Détruire ${trash.dataset.name} ?`,
+        'Le personnage disparaît du studio et des coulisses. Son dossier part à la corbeille des projets '
+        + '(projects/.corbeille/) : on peut encore l\'en ressortir à la main. Ses rendus en file sont annulés.', 'Détruire');
+      if (!ok) return;
+      try {
+        const out = await post(`/api/characters/${encodeURIComponent(trash.dataset.trash)}/delete`);
+        toast(`à la corbeille : ${out.trash}`, 5000);
+        state.slug = null;
+        await loadList();
+        location.hash = '#/file';
+      } catch (err) { toast(err.message, 7000); }
       return;
     }
     const scope = e.target.closest('[data-jobs]');
