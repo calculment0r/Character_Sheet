@@ -1334,8 +1334,11 @@ async function answerAttention(el) {
   const id = el.dataset.attention;
   el.disabled = true;
   try {
-    if (opt.action) await api(actionUrl(opt.action), { method: 'POST', body: opt.params || {} });
-    else await api(`/api/characters/${enc(slug())}/attention/${enc(id)}`, { method: 'POST', body: { option: opt.id } });
+    // l'atelier ne reçoit les réponses que par l'action `attention` :
+    // `do` = retry, dismiss ou choose (avec le candidat retenu)
+    const body = { id, do: opt.action || 'dismiss' };
+    if (opt.candidate) body.candidate = opt.candidate;
+    await api(actionUrl('attention'), { method: 'POST', body });
     toast('réponse donnée à l\'atelier');
     await loadDetail();
     render(true);

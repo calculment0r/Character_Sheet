@@ -229,8 +229,11 @@ ne valide pas encore les gabarits de portrait ; H3 garde son rendu dur
 pour le plein pied et la planche (piste : upscale/SUPIR, ou FLUX.2 Kontext
 pour le plein pied).
 
-**On ne travaille que sur DGX2** (Cal, 25/09). Le PC sert à écrire le
-code et à ouvrir la page ; tout calcule sur DGX2.
+**Les machines ont changé depuis** : le 25/09, Cal voulait qu'on ne
+travaille que sur DGX2. Depuis le 28/09, on travaille sur les deux DGX
+en parallèle : DGX1 porte le studio, DGX2 en est le miroir exact (voir
+`CLAUDE.md` et `docs/REPRISE_CAL.md`). Le PC sert à écrire le code et à
+ouvrir la page.
 
 **Le studio existe et tourne** : `./usine studio` sur DGX2
 (`~/Character_Factory`, venv `.venv`, lancé par

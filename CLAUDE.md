@@ -12,7 +12,8 @@ Les études et essais qui fondent ces choix : `docs/ETUDES.md`, à lire
 avant de toucher à ces étages. **Tout tourne en
 local, sur la machine** — pas d'API pour l'instant, décision de Cal.
 
-Reprise sur la machine : `REPRISE.md` — **à lire en premier**
+Reprise de la dernière session : `docs/REPRISE_CAL.md` — **à lire en premier**
+Reprise sur la machine : `REPRISE.md`
 Cadrage : `docs/BRIEF_CHARACTER_FACTORY.md`
 Mode d'emploi de la chaîne : `docs/LOCAL.md`
 Reprise du travail : `docs/HANDOFF.md`
@@ -20,12 +21,17 @@ Reprise du travail : `docs/HANDOFF.md`
 
 ## Lancer
 
-On ne travaille que sur **DGX2** (`ssh dgx2`, dépôt dans
-`~/Character_Factory`, venv `.venv`). Le PC ne sert qu'à écrire le code
-et à ouvrir la page.
+On travaille sur **les deux DGX en parallèle** (Cal, 28/09) : `ssh dgx1`
+porte le studio et le lien de test, `ssh dgx2` est son miroir exact —
+même code, mêmes modèles, mêmes nœuds — et prend les essais en même
+temps. Dépôt dans `~/Character_Factory`, venv `.venv`, sur les deux ;
+seul `factory.local.json` diffère (`python_pose`). Le PC ne sert qu'à
+écrire le code et à ouvrir la page. Tout ajout (modèle, nœud, paquet)
+se fait sur les deux, par le câble direct (DGX1 169.254.110.6 ↔ DGX2
+169.254.42.193).
 
 ```sh
-./usine studio            # le studio, sur DGX2 : http://192.168.10.247:8765/
+./usine studio            # le studio, sur DGX1 : http://192.168.10.205:8765/
 ./usine doctor            # ce qui tourne déjà : GPU, ComfyUI et ses nœuds H3, paquets
 ./usine gabarit export.json   # adopter le workflow H3 de ComfyUI (export API)
 ./usine etat <perso>      # où en est un personnage, et la commande suivante
