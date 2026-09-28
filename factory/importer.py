@@ -14,7 +14,9 @@ contrôle, mesh et rig.
                phrase, et si c'est une planche à plusieurs vues ;
   2. plein pied Krea 2, édition d'identité v1.2 (elle met la source au
                cadre de la sortie, `fit`) : le personnage seul, en pied, de
-               face, bras le long du corps, sur fond gris uni, 1152 × 2048,
+               face stricte (un 3/4 fait refuser l'A-pose : « pas de face »,
+               Chauve et Manteau le 28/09), bras le long du corps, sur fond
+               gris uni, 1152 × 2048,
                dans le style de l'image — rien d'autre ne sort de la planche ;
   3. visage    de la même image, en gros plan de face, expression neutre,
                tête et épaules, 1024² ;
@@ -117,9 +119,10 @@ def text_fullbody(info: dict) -> str:
     where = ("From this character sheet, take the main character and show only one full-body front view of them. "
              if info.get("sheet_layout") == "sheet" else "")
     return " ".join(filter(None, [
-        where + "Show this same character alone, standing upright and facing the camera, arms relaxed along the "
-        "sides of the body, the whole body visible from the top of the head to the feet with a small margin, "
-        "centred on a plain uniform light grey background.",
+        where + "Show this same character alone, standing upright in a strict front view: the face, chest, hips and "
+        "feet all turned squarely toward the camera, not a three-quarter view, arms relaxed along the sides of the "
+        "body, the whole body visible from the top of the head to the feet with a small margin, centred on a plain "
+        "uniform light grey background.",
         "Keep exactly the same face, hair, body proportions, outfit, accessories and colours.",
         f"Outfit: {info.get('outfit_prompt', '').strip().rstrip('.')}." if info.get("outfit_prompt") else "",
         "No other figure, no strings or wires, no text, no logo sheet layout, no floor pattern.",
