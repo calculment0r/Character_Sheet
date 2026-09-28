@@ -1167,10 +1167,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def _static(self, path: str) -> None:
         rel = path.lstrip("/") or "studio.html"
-        if rel in STATIC_PAGES or any(rel.startswith(d + "/") for d in STATIC_DIRS):
-            target = (config.REPO / rel).resolve()
-            if target.is_relative_to(config.REPO.resolve()):
-                return self._file(target)
+        repo = config.REPO.resolve()
+        target = (repo / rel).resolve()
+        # Le chemin se juge une fois résolu : « js/..%2ffactory.local.json »
+        # commence par « js/ » mais sort du dossier (audit du 28/09).
+        allowed = ([repo / page for page in STATIC_PAGES] if rel in STATIC_PAGES else
+                   [repo / d for d in STATIC_DIRS if target.is_relative_to(repo / d)])
+        if any(target == a or target.is_relative_to(a) for a in allowed) and target.is_file():
+            return self._file(target)
         self._error(404, "introuvable")
 
     def _project_file(self, rest: str, versioned: bool = False) -> None:
