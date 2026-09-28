@@ -86,9 +86,24 @@ intégrer ou jeter.
   d'agir sur celui d'un autre sauf `admins`. Un bloc « Les machines » dans
   `index.html`. Il écrit aussi dans `docs/CLOUDFLARE.md`, mais sur l'idée
   d'un domaine, que Cal n'a pas : à reprendre (voir plus bas).
-- **L'audit de sécurité** du studio avant exposition : rapport dans
-  `C:\Users\calcu\AppData\Local\Temp\claude\C--Character-Factory\a996411d-2100-440b-9bb5-690c404b1245\scratchpad\audit_securite.md`.
-  À corriger avant toute ouverture sur internet.
+- **L'audit de sécurité** du studio avant exposition est fini (rapport
+  complet hors dépôt, qui est public :
+  `C:\Users\calcu\AppData\Local\Temp\claude\C--Character-Factory\a996411d-2100-440b-9bb5-690c404b1245\scratchpad\audit_securite.md`).
+  Verdict : **ne rien ouvrir sur internet en l'état**. Corrigé le 28/09 :
+  la lecture de fichiers par `..` dans `_static` (commit 01aea49). Reste :
+  - critique : aucune authentification dans le studio, qui écoute sur
+    toutes les interfaces (le relais de DGX2 aussi) → studio sur
+    127.0.0.1 derrière le tunnel, jeton Access vérifié dans `_dispatch` ;
+  - critique : pas de droits par utilisateur (détruire, verrouiller un
+    visage, annuler le travail d'un autre) → propriétaires et admins
+    (c'est ce que fait le pont, non commité) ;
+  - haut : un upload EPS passe par Ghostscript → n'ouvrir que
+    PNG/JPEG/WEBP ;
+  - haut : requêtes forgées depuis une autre page → cookie Access en Lax,
+    contrôle de `Origin` / `Sec-Fetch-Site` avant chaque écriture ;
+  - haut : file GPU sans quota par personne.
+  Rien trouvé en XSS ni en injection de commande ; `/v1` n'est pas un
+  proxy ouvert.
 
 ## La direction pour la suite : une plateforme Cloudflare (Cal, 28/09 soir)
 
