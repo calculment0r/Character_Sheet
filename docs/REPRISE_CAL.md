@@ -75,10 +75,14 @@ mot, §1 à §11.
 
 ## En cours au moment de la coupure
 
-Deux sous-agents travaillaient ; leurs changements NE sont PAS commités.
-Faire `git status` : relire, tester (`chain_check` sur une copie DGX2),
-intégrer ou jeter.
-- **Le pont** : `tools/bridge.py` (+ `tools/character-factory-bridge.service`),
+- **Le pont** est fini, mais **pas fusionné** : il est sur la branche
+  `claude/cf-bridge` (commit f2f3224, poussée), `chain_check` 76/76 sur une
+  copie DGX2. À relire, puis fusionner dans `claude/epic-wright-y2kbrc`
+  (il part de 200254c). Écrit pour un tunnel sur un domaine que Cal n'a
+  pas : sa partie `docs/CLOUDFLARE.md` est à revoir selon la plateforme
+  Cloudflare ci-dessous. Il ajoute aussi une page protégée `/bridge/`
+  « Tout démarrer », que Cal n'a pas demandée : à garder ou retirer.
+  Contenu : `tools/bridge.py` (+ `tools/character-factory-bridge.service`),
   port 8770 sur DGX1 : `GET /bridge/health` public (DGX1, DGX2, studio,
   ComfyUI, H3, Ollama, mémoire), `POST /bridge/start|stop` protégé (en-tête
   Cloudflare Access ou LAN). Un panneau « Machines » dans le studio. Les
@@ -96,7 +100,7 @@ intégrer ou jeter.
     127.0.0.1 derrière le tunnel, jeton Access vérifié dans `_dispatch` ;
   - critique : pas de droits par utilisateur (détruire, verrouiller un
     visage, annuler le travail d'un autre) → propriétaires et admins
-    (c'est ce que fait le pont, non commité) ;
+    (c'est ce que fait le pont, branche `claude/cf-bridge`) ;
   - haut : un upload EPS passe par Ghostscript → n'ouvrir que
     PNG/JPEG/WEBP ;
   - haut : requêtes forgées depuis une autre page → cookie Access en Lax,
@@ -164,7 +168,7 @@ agents. Proposer l'architecture à Cal avec les sources, avant d'écrire.
 
 ## À faire ensuite, dans l'ordre
 
-1. Intégrer ou jeter le travail du pont et de l'audit (ci-dessus).
+1. Relire et fusionner la branche `claude/cf-bridge` (le pont, les propriétaires) ; corriger les points restants de l'audit.
 2. Méthode « géométrie d'abord » dans la chaîne ; refaire **Manteau** (même
    défaut que Survêt : buste tourné de 15–20°) et re-rigger Chauve, Costaud,
    Garçon, Marionnette avec le rig sur l'anatomie.
