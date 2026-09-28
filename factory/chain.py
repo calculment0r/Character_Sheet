@@ -206,7 +206,8 @@ def apose(p: Project, costume: str | None, *, variants: int = 2, seed: int | Non
     folder = p.dir(f"costumes/{key}/apose")
     skel = pose.skeletons(p.path(body), folder / "skeleton.png", report=report)[0]
     state["skeleton"] = p.rel(skel)
-    text = pose.text_apose(prompts.describe_outfit(p.sheet, cos["prompt"]), p.data["style"])
+    text = pose.text_apose(prompts.describe_outfit(p.sheet, cos["prompt"]), p.data["style"],
+                           p.data.get("style_desc", ""))
     base = _seed(seed)
     made = []
     for i in range(variants):
@@ -410,7 +411,7 @@ def views(p: Project, costume: str | None, *, method: str = "qwen21-pose", names
                 continue
             az = turns[n]
             limit = TOLERANCE_DEG if n in ORTHO else 2 * TOLERANCE_DEG
-            text = pose.text_view(az, p.data["style"])
+            text = pose.text_view(az, p.data["style"], p.data.get("style_desc", ""))
             tries: list[dict] = []
             for k in range(VIEW_TRIES if measure else 1):
                 seed_k = s + k

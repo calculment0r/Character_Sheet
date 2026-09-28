@@ -347,6 +347,21 @@ def a_fullbody_ok(p: Project, q: dict, report):
     return out
 
 
+def a_import(p: Project, q: dict, report):
+    """Un personnage tiré d'une image (plein pied ou planche) : lu,
+    extrait, visage et plein pied validés par l'import ; puis l'autopilote,
+    comme après un plein pied validé (`importer.py`)."""
+    from . import importer
+
+    images = _uploads([q.get("image")] if q.get("image") else q.get("refs"))
+    if not images:
+        raise ChainError("aucune image à importer")
+    out = importer.run(p, images[0], costume=str(q.get("costume") or "tenue-1"), seed=_seed(q) or 7, report=report)
+    if autopilot.enabled() and q.get("autopilot", True) not in (False, "off", "0", 0):
+        out["autopilot"] = autopilot.start(p, out["costume"], why="personnage importé d'une image")
+    return out
+
+
 def a_apose(p: Project, q: dict, report):
     key = _costume(p, q)
     one = lambda seed, report: chain.apose(p, key, variants=1, seed=seed, report=report)
@@ -484,6 +499,7 @@ def _gpu_face(q: dict, p: Project | None = None):
 ACTIONS = {
     "face":         (a_face, "variantes du visage", _gpu_face, read_face_brief),
     "face_lock":    (a_face_lock, "verrouillage du visage", None),
+    "import":       (a_import, "personnage tiré d'une image", ("krea2", "portrait")),
     "costume_add":  (a_costume_add, "nouveau costume", None),
     "costume_edit": (a_costume_edit, "costume modifié", None),
     "fullbody":     (a_fullbody, "plein pied", _gpu_fullbody, read_costume_brief),

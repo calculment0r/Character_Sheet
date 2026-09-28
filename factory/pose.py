@@ -118,21 +118,38 @@ def head_only(face: Path, dest: Path) -> Path:
     return dest
 
 
-def text_apose(outfit: str, style: str = "photoreal") -> str:
+def _kind(style: str) -> str:
+    """Une photographie pour un personnage photo ; sinon une image au
+    style de la source — « photograph » tirait les personnages illustrés
+    vers la photo (import d'images Midjourney, 28/09)."""
+    return "Full-body studio photograph" if style == "photoreal" else "Full-body character image"
+
+
+def _look(style: str, style_desc: str = "") -> str:
+    if style == "photoreal":
+        return LOOK
+    if style_desc.strip():
+        return ("Plain uniform light grey background, soft even light, eye-level camera. Keep exactly the art style of "
+                f"<image1>: {style_desc.strip().rstrip('.')}; the same rendering, shading, colours and body "
+                "proportions; not a photograph.")
+    return STYLIZED
+
+
+def text_apose(outfit: str, style: str = "photoreal", style_desc: str = "") -> str:
     return " ".join(filter(None, [
-        "Full-body studio photograph of the same person as in <image1>: the same face, hair, skin tone, age and body "
+        f"{_kind(style)} of the same person as in <image1>: the same face, hair, skin tone, age and body "
         "build, wearing exactly the same outfit as in <image1>" + (f" ({outfit.strip()})" if outfit.strip() else "")
         + ", every garment, colour, fold and detail unchanged.",
         f"The person now stands in the pose of the skeleton in <image2>: {APOSE}, facing the camera.",
         "The skeleton only guides the pose; the image shows the person alone, without lines or dots.",
         "The whole figure from the top of the head to the soles of the shoes is inside the frame.",
-        LOOK if style == "photoreal" else STYLIZED,
+        _look(style, style_desc),
     ]))
 
 
-def text_view(azimuth: int, style: str = "photoreal") -> str:
+def text_view(azimuth: int, style: str = "photoreal", style_desc: str = "") -> str:
     return " ".join([
-        "Full-body studio photograph of the same person as in <image1>, with exactly the same face, hair, skin tone, "
+        f"{_kind(style)} of the same person as in <image1>, with exactly the same face, hair, skin tone, "
         "body build and the exact same outfit, every garment, colour and detail unchanged, in the same pose: "
         f"{APOSE}.",
         f"The camera has moved around the person: this is {VIEWS[azimuth]}.",
@@ -140,7 +157,7 @@ def text_view(azimuth: int, style: str = "photoreal") -> str:
         "lines or dots.",
         "The whole figure from the top of the head to the soles of the shoes is inside the frame, at the same size "
         "and on the same ground line as in <image1>.",
-        LOOK if style == "photoreal" else STYLIZED,
+        _look(style, style_desc),
     ])
 
 
