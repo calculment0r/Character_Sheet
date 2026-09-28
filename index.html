@@ -44,6 +44,46 @@
 .foot-note a { color: var(--cy); }
 @media (max-width: 640px) { .etat { padding: var(--s4) 16px 60px; } }
 </style>
+<script type="module">
+// L'adresse publique du studio, derrière la porte Cloudflare Access
+// (docs/CLOUDFLARE.md) : le nom d'hôte seul, par exemple 'studio.exemple.fr'.
+// Vide tant que Cal ne l'a pas donnée : le bloc « Les machines » dit alors
+// « adresse à venir ». Même valeur que `public_host` du pont sur DGX1.
+const FACTORY_DOMAIN = '';
+
+import { fetchHealth, machinesList, verdict, when, serviceUp } from './js/machines.js';
+
+/* Les machines : la santé publique du pont (/bridge/health), rien d'autre.
+   Le démarrage se fait dans le studio, derrière la porte : jamais d'ici. */
+const $ = (id) => document.getElementById(id);
+
+async function machines() {
+  if (!FACTORY_DOMAIN) {
+    $('m-when').textContent = 'adresse à venir';
+    $('m-say').textContent = 'Adresse à venir. Dès que Cal l\'aura donnée, ce bloc dira ici si les DGX sont allumées, '
+      + 'et le studio s\'ouvrira depuis n\'importe où, derrière une porte à e-mails.';
+    return;
+  }
+  const base = `https://${FACTORY_DOMAIN}`;
+  let h = null;
+  try { h = await fetchHealth(`${base}/bridge/health`); } catch (_) { /* éteintes, ou tunnel fermé */ }
+  const v = verdict(h);
+  const studio = serviceUp(h, 'dgx1', 'studio');
+  $('m-when').textContent = h ? `${v.word} · ${when(h)}` : 'éteintes';
+  $('m-list').innerHTML = machinesList(h);
+  $('m-say').textContent = !h ? 'Les machines sont éteintes, ou le tunnel est fermé. Reviens quand Cal les aura allumées.'
+    : h.ready ? 'Prêt : ouvre le studio, entre avec ton e-mail, et fais ton personnage.'
+      : studio ? `À démarrer. ${v.text} Dans le studio, le panneau « Machines » propose « Tout démarrer ».`
+        : `À démarrer : le studio dort. Entre avec ton e-mail, la page des machines le lance, avec les modèles.`;
+  const open = $('m-open');
+  open.hidden = !h;
+  open.href = studio ? `${base}/` : `${base}/bridge/`;
+  open.textContent = studio ? 'Ouvrir le studio ▸' : 'Démarrer le studio ▸';
+  setTimeout(machines, 30000);
+}
+
+machines();
+</script>
 </head>
 <body>
 
@@ -60,7 +100,7 @@
   <a class="tb ghost sm" href="./viewer.html">Viewer 3D</a>
   <a class="tb ghost sm" href="./theme.html">Thème</a>
   <a class="tb ghost sm" href="./console.html">Console</a>
-  <a class="tb go sm" href="http://192.168.10.247:8765/" title="sur le réseau de la maison, ou par Tailscale : 100.108.108.65:8765">Studio · DGX2 ▸</a>
+  <a class="tb ghost sm" href="http://192.168.10.247:8765/" title="sur le réseau de la maison, ou par Tailscale : 100.108.108.65:8765 ; de partout : « Les machines » plus bas">Studio · maison</a>
 </header>
 
 <main class="etat">
@@ -83,6 +123,18 @@
       <span class="dots"></span>
     </div>
   </div>
+
+  <section class="sect" id="machines">
+    <div class="sect-head"><span class="k">00</span><h2>Les machines</h2><span class="cnt" id="m-when">relevé…</span></div>
+    <div class="mach-card">
+      <div class="mach-list" id="m-list"></div>
+      <div class="mach-foot">
+        <p class="mach-note" id="m-say">Le pont relève les deux DGX.</p>
+        <span class="sp"></span>
+        <a class="tb go" id="m-open" href="./" hidden>Ouvrir le studio ▸</a>
+      </div>
+    </div>
+  </section>
 
   <section class="sect">
     <div class="sect-head"><span class="k">01</span><h2>Les étages</h2><span class="cnt">tourne · câblé · attend</span></div>

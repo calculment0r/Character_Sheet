@@ -2,6 +2,7 @@
 
 import { SHEET_FIELDS } from './schema.js';
 import { talk, voiceConfig, micBlocker, Micro } from './parler.js';
+import { fetchHealth, command, machinesList, verdict, when, stepsText, h3Up } from './machines.js';
 
 /* ============================================================
    Le studio.
@@ -65,7 +66,14 @@ const state = {
   traitsOpen: false,
   moreOpen: false,           // « toute sa fiche », déplié
   regions: {},               // la fiche : le dernier HTML de chaque région
+  castFilter: null,          // le casting : 'mine' | 'all' ; null = selon qui regarde
+  // les machines, lues sur le pont : { health, open, busy, fast (jusqu'à quand relever vite) }
+  machines: { health: null, tried: false, open: false, busy: false, fast: 0 },
 };
+
+// Le pont (tools/bridge.py) : derrière le tunnel, sur la même adresse
+// (/bridge/*) ; à la maison, sur le port 8770 de la même machine.
+const BRIDGE = location.port === '8765' ? `${location.protocol}//${location.hostname}:8770` : '';
 
 // Les étapes en plein cadre, ouvertes depuis la fiche.
 const SURFACES = {
@@ -299,8 +307,37 @@ function waitsOnCasting(list) {
   return out;
 }
 
+/* Les miens, ou tous : chacun voit d'abord ses personnages ; Cal, tous. */
+const ownerName = (o) => String(o || 'cal').split('@')[0];
+const mineOf = (c) => !state.list?.me?.id || (c.owner || 'cal') === state.list.me.id;
+
+function castFilter() {
+  if (state.castFilter) return state.castFilter;
+  try {
+    const kept = localStorage.getItem('cf.cast.filter');
+    if (kept === 'mine' || kept === 'all') return kept;
+  } catch (_) { /* stockage fermé : le défaut suffit */ }
+  return state.list?.me?.admin === false ? 'mine' : 'all';
+}
+
+function setCastFilter(v) {
+  state.castFilter = v;
+  try { localStorage.setItem('cf.cast.filter', v); } catch (_) { /* rien à garder */ }
+}
+
+function castSeg(all) {
+  if (!state.list?.me || !all.length) return '';
+  const f = castFilter();
+  const mine = all.filter(mineOf).length;
+  return `<div class="seg cast-filter" role="group" aria-label="les personnages montrés">
+    <button class="tb${f === 'mine' ? ' on' : ''}" type="button" data-cast-filter="mine" aria-pressed="${f === 'mine'}">Les miens · ${mine}</button>
+    <button class="tb${f === 'all' ? ' on' : ''}" type="button" data-cast-filter="all" aria-pressed="${f === 'all'}">Tous · ${all.length}</button>
+  </div>`;
+}
+
 function renderHome() {
-  const list = state.list?.characters || [];
+  const all = state.list?.characters || [];
+  const list = castFilter() === 'mine' ? all.filter(mineOf) : all;
   const waits = waitsOnCasting(list);
   // « Ce qui attend » ne se montre que s'il y a quelque chose : un panneau vide ne dit rien.
   return `
@@ -310,6 +347,7 @@ function renderHome() {
       <h1 class="cast-title">Les personnages</h1>
       <p class="prose">Un nom pour commencer, une phrase pour dire qui il est. Son visage, sa voix et sa tenue viennent
         ensuite, une question à la fois ; le reste se fait tout seul, pendant que tu travailles.</p>
+      ${castSeg(all)}
     </div>
     ${waits.length ? `<aside class="waits-panel">
       <div class="panel-head"><h2>Ce qui attend</h2><span class="lbl">${waits.length}</span></div>
@@ -356,6 +394,7 @@ function poster(c) {
       ${c.voice ? `<button class="play" data-play="${esc(c.voice)}" title="écouter sa voix"><i></i><span>sa voix</span></button>`
         : '<span class="lbl">pas encore de voix</span>'}
       <span class="sp"></span>
+      ${mineOf(c) ? '' : `<span class="lbl" title="${esc(c.owner)}">de ${esc(ownerName(c.owner))}</span>`}
       ${c.locked ? `<a class="tb ghost sm" href="#/p/${enc(c.slug)}/scene">Parler</a>` : ''}
     </div>
   </article>`;
@@ -651,7 +690,8 @@ function ficheHead(d) {
   return `<header class="fi-head">
     <a class="fi-back" href="#/" title="le casting">◂ Casting</a>
     <div class="fi-who">${nameBlock(c, 'fi-name')}
-      <div class="fi-meta">${metaLine(c).map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>
+      <div class="fi-meta">${metaLine(c).map((x) => `<span>${esc(x)}</span>`).join('')}${d.can_edit === false
+        ? `<span class="fi-owner" title="${esc(d.owner)}">à ${esc(ownerName(d.owner))} · regarder seulement</span>` : ''}</div></div>
     <div class="fi-crans" role="list" aria-label="où ${she(c) ? 'elle' : 'il'} en est">${crans(d).map(([k, st]) =>
       `<div class="fi-cran ${st}" role="listitem" title="${esc(`${k} : ${CRAN_TITLE[st]}`)}"><i></i><span>${esc(k)}</span></div>`).join('')}</div>
     <div class="fi-acts">${next.html || `<span class="fi-next">${esc(next.text || '')}</span>`}
@@ -2283,6 +2323,8 @@ function wire() {
       render(true);
       return;
     }
+    const cf = t.closest('[data-cast-filter]');
+    if (cf) { setCastFilter(cf.dataset.castFilter); render(true); return; }
     const motion = t.closest('[data-motion]');
     if (motion) { state.motionPeek = state.motionPeek === motion.dataset.motion ? null : motion.dataset.motion; render(true); return; }
     if (t.closest('[data-traits-open]')) { state.traitsOpen = !state.traitsOpen; render(true); return; }
@@ -2409,8 +2451,28 @@ function wire() {
   });
 
   $('#lightbox').addEventListener('click', () => { $('#lightbox').hidden = true; });
+
+  // Les machines : le panneau s'ouvre sur l'en-tête, se ferme en cliquant ailleurs ou par Échap.
+  $('#machines-btn').addEventListener('click', () => {
+    state.machines.open = !state.machines.open;
+    paintMachines();
+    if (state.machines.open) pollMachines(true);
+  });
+  $('#machines-pop').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mach]');
+    if (b && !b.disabled) machinesCommand(b.dataset.mach);
+  });
+  document.addEventListener('click', (e) => {
+    // le chemin du clic, pris au départ : un bouton redessiné entre-temps compte encore comme dedans
+    if (state.machines.open && !e.composedPath().includes($('#machines'))) {
+      state.machines.open = false;
+      paintMachines();
+    }
+  });
+
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if (state.machines.open) { state.machines.open = false; paintMachines(); $('#machines-btn').focus(); return; }
     const box = $('#lightbox');
     if (!box.hidden) { box.hidden = true; return; }
     // Échap : d'une étape en plein cadre, retour à la fiche.
@@ -2482,5 +2544,78 @@ async function pollSystem() {
   setTimeout(pollSystem, 5000);
 }
 
+/* ── les machines (le pont, tools/bridge.py) ────────────── */
+
+/* Le panneau de l'en-tête : les deux DGX, ce qui tourne, et « Tout
+   démarrer » quand quelque chose manque. Jamais orange : l'orange de
+   l'écran reste la question du personnage. */
+function paintMachines() {
+  const m = state.machines;
+  const h = m.health;
+  const v = verdict(h);
+  const btn = $('#machines-btn');
+  btn.className = `mach-btn ${h ? v.cls : m.tried ? 'err' : ''}`;
+  btn.setAttribute('aria-expanded', String(m.open));
+  $('#machines-text').textContent = h ? `machines · ${v.word}` : m.tried ? 'machines · pont muet' : 'machines';
+  const pop = $('#machines-pop');
+  pop.hidden = !m.open;
+  if (!m.open) return;
+  if (!h) {
+    pop.innerHTML = `<div class="mach-top"><span class="lbl">les machines</span></div>
+      <p class="mach-note">Le pont ne répond pas. Il tourne sur DGX1 (tools/bridge.py, port 8770) ; à la maison,
+        par DGX2, il faut aussi son relais.</p>`;
+    return;
+  }
+  const missing = (h.missing || []).length;
+  pop.innerHTML = `<div class="mach-top"><span class="lbl">les machines · ${esc(v.word)}</span><span class="sp"></span>
+      <span class="lbl">${esc(when(h))}</span></div>
+    <div class="mach-list">${machinesList(h)}</div>
+    ${h.ready && !missing ? '' : `<p class="mach-note">${esc(v.text)}</p>`}
+    <div class="mach-foot">
+      ${missing ? `<button class="tb ghost sm" type="button" data-mach="start"${m.busy ? ' disabled' : ''}>Tout démarrer</button>` : ''}
+      ${h3Up(h) ? `<button class="tb ghost sm" type="button" data-mach="stop-h3"${m.busy ? ' disabled' : ''}
+          title="libérer la mémoire : H3 ne sert qu'au turnaround de présentation">Arrêter H3</button>`
+        : `<button class="tb ghost sm" type="button" data-mach="start-h3"${m.busy ? ' disabled' : ''}>Démarrer H3</button>`}
+      <span class="sp"></span>${m.busy ? '<span class="lbl">en cours…</span>' : ''}
+    </div>`;
+}
+
+// Un relevé ; sans `once`, il reprogramme le suivant (vite après un démarrage).
+let machTimer = null;
+async function pollMachines(once = false) {
+  const m = state.machines;
+  try {
+    m.health = await fetchHealth(`${BRIDGE}/bridge/health`);
+  } catch (_) {
+    m.health = null;
+  }
+  m.tried = true;
+  paintMachines();
+  if (once) return;
+  clearTimeout(machTimer);
+  machTimer = setTimeout(pollMachines, Date.now() < m.fast ? 3000 : 15000);
+}
+
+async function machinesCommand(what) {
+  const m = state.machines;
+  const [verb, body] = {
+    start: ['start', { what: 'all', machine: 'all' }],
+    'start-h3': ['start', { what: 'h3', machine: 'all' }],
+    'stop-h3': ['stop', { what: 'h3', machine: 'all' }],
+  }[what] || [];
+  if (!verb) return;
+  m.busy = true;
+  paintMachines();
+  try {
+    const out = await command(BRIDGE, verb, body);
+    toast(`machines : ${stepsText(out)}${verb === 'start' ? ' · ComfyUI met une minute à s\'éveiller' : ''}`, 7000);
+    m.fast = Date.now() + 120000;
+  } catch (e) {
+    toast(e.message, 7000);
+  }
+  m.busy = false;
+  await pollMachines();
+}
+
 wire();
-onRoute().then(() => { pollJobs(); pollSystem(); });
+onRoute().then(() => { pollJobs(); pollSystem(); pollMachines(); });

@@ -27,6 +27,15 @@ local, sans rien d'autre que la bibliothèque standard :
   /api/attention               ce qui attend Cal, tous personnages confondus
   /files/<slug>/<chemin>       les fichiers d'un personnage
 
+Chaque personnage a un propriétaire (`owner`, Cal le 28/09 : « je veux
+que mes amis puissent … faire leur perso ») : l'e-mail que pose
+Cloudflare Access devant le tunnel, « cal » depuis la maison. Détruire,
+renommer, lancer une action sur le personnage d'un autre est refusé
+(403), sauf aux administrateurs (`admins` de factory.local.json, « cal »
+par défaut). Tout se regarde ; un personnage d'avant les propriétaires
+est à « cal ». Une requête passée par le tunnel sans la porte est
+refusée, quelle qu'elle soit (docs/CLOUDFLARE.md).
+
 L'autopilote (`autopilot.py`, décision de Cal du 27/09) : dès qu'un
 plein pied est validé, A-pose, vues, préparation, contrôle, mesh et rig
 s'enchaînent seuls, validés par la mesure ; Cal n'est appelé qu'après
@@ -46,6 +55,7 @@ from __future__ import annotations
 
 import http.server
 import io
+import ipaddress
 import itertools
 import json
 import mimetypes
@@ -726,6 +736,7 @@ def summary(p: Project) -> dict:
         or next((c["fullbody"]["validated"] for c in costumes if c["fullbody"].get("validated")), None)
     return {
         "slug": d["slug"], "name": d["name"], "style": d["style"], "created_at": d.get("created_at"),
+        "owner": owner_of(p),
         "role": sheet.get("role", ""), "archetype": sheet.get("archetype", ""),
         "thumb": files_url(d["slug"], thumb), "locked": bool(face.get("locked")),
         "poster": files_url(d["slug"], poster), "voice": files_url(d["slug"], _voice_file(d.get("voice"))),
@@ -793,6 +804,89 @@ def _voice_file(voice) -> str | None:
 
 def backends() -> dict:
     return {cap: config.backend(cap) for cap in config.CAPABILITIES}
+
+
+# ── qui demande : les propriétaires ────────────────────────────────
+#
+# Même règle que le pont (tools/bridge.py) : on croit l'e-mail que pose
+# Cloudflare Access s'il arrive d'une adresse de confiance (le tunnel
+# sort de la machine même) ; une requête marquée par Cloudflare sans cet
+# e-mail a pris le tunnel sans la porte. Depuis la maison, c'est Cal.
+
+ACCESS_EMAIL = "Cf-Access-Authenticated-User-Email"
+CLOUDFLARE_MARKS = ("Cf-Ray", "Cf-Connecting-Ip", "Cf-Visitor", "Cdn-Loop", "Cf-Access-Jwt-Assertion")
+TRUSTED_NETWORKS = ("192.168.10.0/24", "169.254.0.0/16", "127.0.0.1/32")    # la maison, le câble, la machine
+HOUSE = "cal"
+
+
+class Forbidden(Exception):
+    """Un refus d'accès (403) : le message dit à qui est le personnage."""
+
+
+def _names(name: str, default) -> list[str]:
+    """Une liste de factory.local.json, ou FACTORY_<NOM> séparée par des virgules."""
+    env = os.getenv(f"FACTORY_{name.upper()}")
+    raw = env.split(",") if env is not None else config._file().get(name, default)
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    return [str(x).strip() for x in raw or [] if str(x).strip()]
+
+
+def trusted(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(str(ip).strip("[]"))
+    except ValueError:
+        return False
+    if getattr(addr, "ipv4_mapped", None):
+        addr = addr.ipv4_mapped
+    for net in _names("trusted_networks", TRUSTED_NETWORKS):
+        try:
+            if addr in ipaddress.ip_network(net, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def via_cloudflare(headers) -> bool:
+    return any(headers.get(h) for h in CLOUDFLARE_MARKS)
+
+
+def requester(peer: str, headers) -> str | None:
+    """L'e-mail posé par la porte (ou son alias : `aliases` de
+    factory.local.json, pour que Cal reste « cal » de dehors), « cal »
+    depuis la maison ; None pour qui vient d'ailleurs sans la porte."""
+    if not trusted(peer):
+        return None
+    email = str(headers.get(ACCESS_EMAIL) or "").strip().lower()
+    if email:
+        aliases = config._file().get("aliases")
+        if isinstance(aliases, dict):
+            email = {str(k).strip().lower(): str(v).strip().lower() for k, v in aliases.items()}.get(email, email)
+        return email
+    return None if via_cloudflare(headers) else HOUSE
+
+
+def admins() -> set[str]:
+    return {a.lower() for a in _names("admins", [HOUSE])}
+
+
+def owner_of(p: Project) -> str:
+    return str(p.data.get("owner") or HOUSE).lower()
+
+
+def may_edit(who: str | None, p: Project) -> bool:
+    return who is not None and (who == owner_of(p) or who in admins())
+
+
+def guard(who: str | None, p: Project, doing: str) -> None:
+    """Refuse d'agir sur le personnage d'un autre ; les administrateurs passent."""
+    if who is None:
+        raise Forbidden("qui es-tu ? passe par l'adresse du studio (la porte Cloudflare Access) ou par le réseau "
+                        "de la maison")
+    if not may_edit(who, p):
+        raise Forbidden(f"« {p.data.get('name') or p.data.get('slug')} » est à {owner_of(p)} : tu peux le regarder, "
+                        f"pas {doing}. Crée ton personnage depuis le casting.")
 
 
 # ── le serveur ─────────────────────────────────────────────────────
@@ -1140,9 +1234,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_PUT(self) -> None:
         self._dispatch("PUT")
 
+    def _who(self) -> str | None:
+        return requester(self.client_address[0], self.headers)
+
     def _dispatch(self, method: str) -> None:
         path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
         try:
+            if via_cloudflare(self.headers) and self._who() is None:
+                # Le tunnel sans la porte : on ne montre rien, on ne fait rien.
+                raise Forbidden("cette adresse doit être gardée par Cloudflare Access (docs/CLOUDFLARE.md) : "
+                                "le studio ne répond pas sans elle")
             if path.startswith("/v1/"):
                 return self._llm(method, path)
             if path.startswith("/api/"):
@@ -1153,6 +1254,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 versioned = "v" in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                 return self._project_file(path[len("/files/"):], versioned)
             return self._static(path)
+        except Forbidden as exc:
+            self._error(403, str(exc))
         except ChainError as exc:
             self._error(409, str(exc))
         except MemoryError as exc:
@@ -1211,12 +1314,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     # API
 
+    def _guard(self, slug: str, doing: str) -> None:
+        """Agir sur un personnage : à son propriétaire et aux administrateurs.
+        Un personnage disparu (un travail d'un personnage mis à la
+        corbeille) : aux administrateurs seulement."""
+        who = self._who()
+        try:
+            p = self.studio.project(slug)
+        except ChainError:
+            if who in admins():
+                return
+            raise
+        guard(who, p, doing)
+
     def _api(self, method: str, parts: list[str]) -> None:
         s = self.studio
         head = parts[0] if parts else ""
         if head == "system" and method == "GET":
             return self._json(s.system())
         if head == "uploads" and method == "POST":
+            if self._who() is None:
+                raise Forbidden("qui es-tu ? passe par l'adresse du studio (la porte Cloudflare Access) ou par le "
+                                "réseau de la maison pour déposer une image")
             return self._json(self._upload())
         if head == "attention" and method == "GET":
             items = [{"slug": p.data["slug"], "name": p.data["name"], **a}
@@ -1235,14 +1354,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if len(parts) == 2 and method == "GET":
                 return self._json(job.public(full=True))
             if len(parts) == 3 and parts[2] == "cancel" and method == "POST":
+                self._guard(job.slug, "arrêter ses rendus")
                 return self._json({"message": s.cancel(job), "job": job.public()})
             if len(parts) == 3 and parts[2] == "retry" and method == "POST":
+                self._guard(job.slug, "relancer ses rendus")
                 return self._json(s.retry(job))
         if head == "characters":
             if len(parts) == 1:
                 if method == "GET":
+                    who = self._who()
                     return self._json({"characters": [summary(p) for p in _by_recent(list_projects())],
-                                       "backends": backends()})
+                                       "backends": backends(), "me": {"id": who, "admin": who in admins()}})
                 if method == "POST":
                     return self._json(self._create(), 201)
             slug = parts[1] if len(parts) > 1 else ""
@@ -1253,7 +1375,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 autopilot.attention(p)      # la clé existe toujours dans `character`
                 return self._json({"character": p.data, "summary": summary(p), "busy": s.busy(slug),
                                    "attention": autopilot.open_items(p),
-                                   "face_engines": ENGINES,
+                                   "face_engines": ENGINES, "owner": owner_of(p), "can_edit": may_edit(self._who(), p),
                                    "backends": backends(), "view_methods": list(chain.VIEW_METHODS)})
             if len(parts) == 3 and parts[2] == "tree" and method == "GET":
                 root = project_root(slug)
@@ -1261,10 +1383,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._error(404, "personnage inconnu")
                 return self._json({"slug": slug, **tree(root)})
             if len(parts) == 3 and parts[2] == "delete" and method == "POST":
+                self._guard(slug, "le détruire")
                 return self._json(s.trash(slug))
             if len(parts) == 3 and parts[2] == "identity" and method == "PUT":
+                self._guard(slug, "le renommer ni changer sa fiche")
                 return self._json(self._identity(slug))
             if len(parts) == 4 and parts[2] == "actions" and method == "POST":
+                self._guard(slug, f"lancer « {ACTIONS[parts[3]][1] if parts[3] in ACTIONS else parts[3]} » dessus")
                 return self._json(s.act(slug, parts[3], self._payload()))
         self._error(404, "route inconnue")
 
@@ -1288,6 +1413,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return {"id": name, "name": self.headers.get("X-Filename", name)}
 
     def _create(self) -> dict:
+        who = self._who()
+        if who is None:
+            raise Forbidden("qui es-tu ? passe par l'adresse du studio (la porte Cloudflare Access) ou par le réseau "
+                            "de la maison pour créer un personnage")
         body = self._payload()
         sheet = {k: v.strip() for k, v in (body.get("sheet") or {}).items() if isinstance(v, str)}
         name = str(body.get("name") or sheet.get("character_name") or "").strip()
@@ -1297,9 +1426,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         notes = [str(n) for n in body.get("notes") or [] if str(n).strip()]
         p = Project.create(name, style=style, identity={**sheet, "character_name": sheet.get("character_name") or name},
                            notes=notes)
+        # Créé (ou importé : l'import part d'un personnage créé ici) : à qui l'a demandé.
+        p.data["owner"] = who
         if body.get("conversation"):
             p.data["identity_chat"] = _text_only(body["conversation"])
-            p.save()
+        p.save()
         return {"slug": p.data["slug"], "summary": summary(p)}
 
     def _identity(self, slug: str) -> dict:

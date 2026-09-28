@@ -487,6 +487,26 @@
       <p class="lbl">l'ambre dit « ça t'attend » : la technique ne remonte que quand elle a échoué deux fois</p>
     </div>
 
+    <h3>Les machines — lues sur le pont · .mach-card, .mach-m, .mach-s, .mach-btn, .mach-pop</h3>
+    <div class="demo">
+      <div class="row">
+        <button class="mach-btn on" type="button"><i></i><span>machines · prêt</span></button>
+        <button class="mach-btn amb" type="button"><i></i><span>machines · à démarrer</span></button>
+        <button class="mach-btn err" type="button"><i></i><span>machines · pont muet</span></button>
+      </div>
+      <section class="mach-card" style="max-width:560px">
+        <div class="mach-list">
+          <div class="mach-m on"><div class="mach-mh"><i></i><b>DGX1</b><span>allumée</span><span class="sp"></span><span>94 Go libres sur 121</span></div>
+            <ul class="mach-s"><li class="work"><i></i>studio<em>au travail</em></li><li class="on"><i></i>comfyui</li>
+              <li class="off"><i></i>h3<em>arrêté</em></li><li class="amb"><i></i>ollama<em>arrêté</em></li></ul></div>
+          <div class="mach-m off"><div class="mach-mh"><i></i><b>DGX2</b><span>éteinte</span></div></div>
+        </div>
+        <div class="mach-foot"><p class="mach-note">À démarrer. Manque : ollama de DGX1.</p><span class="sp"></span>
+          <button class="tb ghost sm">Tout démarrer</button><button class="tb ghost sm">Arrêter H3</button></div>
+      </section>
+      <p class="lbl">le studio les montre dans un panneau de l'en-tête, la page d'état et la page du pont en carte · vert tourne, acier au travail, ambre manque, gris arrêté · jamais d'orange : le démarrage n'est pas la question de l'écran</p>
+    </div>
+
     <h3>Studio — un personnage : tête, puce de l'atelier, volets · .p-head, .atelier, .vols</h3>
     <div class="demo">
       <div class="p-head">

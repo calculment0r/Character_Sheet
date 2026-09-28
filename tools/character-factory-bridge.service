@@ -1,0 +1,38 @@
+# Le pont de Character Factory (tools/bridge.py), toujours allumé sur DGX1.
+#
+# Il dit à la page publique si les DGX sont allumées (/bridge/health), et
+# démarre derrière la porte ce qui manque (studio, ComfyUI, H3, Ollama,
+# relais de DGX2). Voir docs/CLOUDFLARE.md.
+#
+# Installer, sur DGX1 (pas fait par la chaîne : c'est à Cal) :
+#   sudo cp ~/Character_Factory/tools/character-factory-bridge.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now character-factory-bridge
+#   curl -s localhost:8770/bridge/health
+#
+# Son journal : journalctl -u character-factory-bridge -f
+
+[Unit]
+Description=Character Factory - le pont (etat des DGX, demarrage derriere la porte ; port 8770)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dgx
+WorkingDirectory=/home/dgx/Character_Factory
+# Le python du système : le pont n'a besoin que de la bibliothèque standard.
+ExecStart=/usr/bin/python3 tools/bridge.py --port 8770
+Environment=PYTHONUNBUFFERED=1
+# Le nom d'hôte public du studio, quand Cal l'aura (même valeur que
+# FACTORY_DOMAIN dans index.html, et que `public_host` de factory.local.json).
+#Environment=BRIDGE_PUBLIC_HOST=studio.exemple.fr
+Restart=always
+RestartSec=3
+# Le studio que le pont lance doit survivre à un redémarrage du pont :
+# on n'arrête que le pont lui-même, pas ce qu'il a lancé.
+KillMode=process
+# Pas de NoNewPrivileges : le pont passe par `sudo -n systemctl start …`.
+
+[Install]
+WantedBy=multi-user.target

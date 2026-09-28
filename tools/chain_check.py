@@ -119,25 +119,26 @@ def studio_route(tmp: Path) -> None:
 
     port, llm_port = free_port(), free_port()
     env = {**os.environ, "FACTORY_PROJECTS": str(tmp / "studio"), "FACTORY_LLM_URL": f"http://127.0.0.1:{llm_port}",
-           "FACTORY_LLM_MODEL": "modele-du-studio", "PYTHONIOENCODING": "utf-8", "FACTORY_STUB_DELAY": "0.5"}
+           "FACTORY_LLM_MODEL": "modele-du-studio", "PYTHONIOENCODING": "utf-8", "FACTORY_STUB_DELAY": "0.5",
+           "FACTORY_ADMINS": "cal,chef@example.com"}
     procs = [subprocess.Popen([sys.executable, str(REPO / "tools/mock_llm.py"), str(llm_port)],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
              subprocess.Popen([sys.executable, "-m", "factory", "studio", "--hote", "127.0.0.1", "--port", str(port)],
                               cwd=REPO, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)]
     base = f"http://127.0.0.1:{port}"
 
-    def call(path: str, body=None, method: str | None = None, raw: bytes | None = None):
+    def call(path: str, body=None, method: str | None = None, raw: bytes | None = None, headers: dict | None = None):
         data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
         req = urllib.request.Request(base + path, data=data, method=method or ("POST" if data is not None else "GET"),
-                                     headers={"Content-Type": "application/json"})
+                                     headers={"Content-Type": "application/json", **(headers or {})})
         try:
             with urllib.request.urlopen(req, timeout=60) as res:
                 return res.status, res.headers.get("Content-Type", ""), res.read()
         except urllib.error.HTTPError as exc:
             return exc.code, exc.headers.get("Content-Type", ""), exc.read()
 
-    def js(path: str, body=None, method: str | None = None):
-        code, _, raw = call(path, body, method)
+    def js(path: str, body=None, method: str | None = None, headers: dict | None = None):
+        code, _, raw = call(path, body, method, headers=headers)
         return code, json.loads(raw or b"null")
 
     def run(slug: str, action: str, **params) -> dict:
@@ -304,6 +305,8 @@ def studio_route(tmp: Path) -> None:
               and all({"size", "mtime"} <= set(f) for f in listing["files"]) and refused == [404] * 3
               and cz == 200 and b"coulisses.js" in cz_html, f"{len(paths)} fichiers, refus {refused}")
 
+        studio_owners(tmp / "studio", slug, js)
+
         _, models = js("/v1/models")
         _, reply = js("/v1/chat/completions", {"model": "local-model", "messages": [{"role": "user", "content": "x"}]})
         seen = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{llm_port}/__seen").read())
@@ -425,6 +428,211 @@ def studio_edits(projects: Path, slug: str, other: str, js, run) -> None:
           and not (root / f".corbeille/{joy['file']}").exists() and not pres.get("removed_expressions")
           and twice["status"] == "http" and stray["status"] == "http",
           str(order))
+
+
+def studio_owners(projects: Path, slug: str, js) -> None:
+    """Les propriétaires, par l'API du studio comme la page s'en sert : un
+    ami passé par la porte (l'en-tête que pose Cloudflare Access) crée son
+    personnage et ne touche pas à ceux des autres ; la maison (Cal) et un
+    administrateur de `admins` touchent à tout ; un personnage d'avant les
+    propriétaires est à cal ; le tunnel sans la porte ne voit rien."""
+    from factory import config, studio as st
+    from factory.project import Project
+
+    door = {"Cf-Ray": "8c1f2a-CDG", "Cf-Connecting-Ip": "203.0.113.7"}     # passé par Cloudflare
+    friend = {**door, "Cf-Access-Authenticated-User-Email": "Ami@Example.com"}
+    chef = {**door, "Cf-Access-Authenticated-User-Email": "chef@example.com"}   # FACTORY_ADMINS du studio d'essai
+
+    Project.create("Ancien Perso", root=projects)          # un manifeste d'avant les propriétaires
+    made, mine = js("/api/characters", {"name": "Perso de l'ami"}, headers=friend)
+    fslug = (mine or {}).get("slug", "")
+    _, listing = js("/api/characters", headers=friend)
+    owners = {c["slug"]: c.get("owner") for c in listing.get("characters", [])}
+    blind, _ = js("/api/characters", headers=door)
+    anon, _ = js("/api/characters", {"name": "Personne"}, headers=door)
+    old = json.loads((projects / "ancien-perso" / "project.json").read_text(encoding="utf-8"))
+    check("propriétaires : créé par la porte, le personnage est à son e-mail ; ceux de la maison et ceux d'avant sont "
+          "à cal ; le tunnel sans la porte ne voit rien",
+          made == 201 and owners.get(fslug) == "ami@example.com" and owners.get(slug) == "cal"
+          and owners.get("ancien-perso") == "cal" and "owner" not in old
+          and listing.get("me") == {"id": "ami@example.com", "admin": False} and blind == 403 and anon == 403,
+          str({k: owners.get(k) for k in (fslug, slug, "ancien-perso")}))
+
+    act, err = js(f"/api/characters/{slug}/actions/costume_add", {"brief": "un imperméable"}, headers=friend)
+    ren, _ = js(f"/api/characters/{slug}/identity", {"name": "Volée"}, method="PUT", headers=friend)
+    rip, _ = js(f"/api/characters/{slug}/delete", {}, headers=friend)
+    _, jobs = js(f"/api/jobs?slug={slug}&limit=1")
+    halt, _ = js(f"/api/jobs/{jobs['jobs'][0]['id']}/cancel", {}, headers=friend) if jobs.get("jobs") else (0, None)
+    _, seen = js(f"/api/characters/{slug}", headers=friend)
+    own, _ = js(f"/api/characters/{fslug}/identity", {"name": "Perso de l'ami, renommé"}, method="PUT", headers=friend)
+    message = (err or {}).get("error", {}).get("message", "") if isinstance(err, dict) else ""
+    check("propriétaires : agir, renommer, détruire ou arrêter les rendus du personnage d'un autre est refusé (403, "
+          "message clair) ; il se regarde, et le sien se change",
+          act == ren == rip == halt == 403 and "est à cal" in message and seen.get("can_edit") is False
+          and seen.get("owner") == "cal" and seen["character"]["name"] == "Ilse Varga"
+          and (projects / slug / "project.json").is_file() and own == 200, message)
+
+    by_cal, _ = js(f"/api/characters/{fslug}/identity", {"name": "Renommé par Cal"}, method="PUT")
+    by_chef, _ = js(f"/api/characters/{fslug}/actions/costume_add", {"brief": "une veste de chantier"}, headers=chef)
+    _, theirs = js(f"/api/characters/{fslug}", headers=chef)
+    gone, out = js(f"/api/characters/{fslug}/delete", {}, headers=chef)
+    check("propriétaires : les administrateurs (admins, cal par défaut) agissent sur le personnage d'un autre, "
+          "jusqu'à le détruire ; il reste à son propriétaire",
+          by_cal == by_chef == gone == 200 and theirs.get("can_edit") is True
+          and theirs["character"]["name"] == "Renommé par Cal" and theirs.get("owner") == "ami@example.com"
+          and "tenue-1" in theirs["character"]["costumes"] and not (projects / fslug).exists(), str(out))
+
+    # Qui demande, sans serveur : l'alias de Cal dehors, l'e-mail d'un inconnu
+    # qui ne vient pas d'une adresse de confiance.
+    saved = config.LOCAL_CONFIG
+    try:
+        config.LOCAL_CONFIG = projects / "local-essai.json"
+        config.LOCAL_CONFIG.write_text(json.dumps({"aliases": {"Cal@Example.org": "cal"}}), encoding="utf-8")
+        config._file.cache_clear()
+        who = st.requester("127.0.0.1", {**door, st.ACCESS_EMAIL: "cal@example.org"})
+    finally:
+        config.LOCAL_CONFIG = saved
+        config._file.cache_clear()
+    check("propriétaires : Cal passé par la porte reste cal (aliases) ; un e-mail venu d'ailleurs que la maison ou le "
+          "tunnel ne vaut rien ; la maison et le câble sont cal",
+          who == "cal" and st.requester("203.0.113.9", {st.ACCESS_EMAIL: "ami@example.com"}) is None
+          and st.requester("192.168.10.40", {}) == "cal" and st.requester("169.254.42.193", {}) == "cal"
+          and st.requester("100.108.108.65", {}) is None, str(who))
+
+
+def bridge_route() -> None:
+    """Le pont (tools/bridge.py), en essai : rien ne se lance, les commandes
+    sont rendues. DGX1 et DGX2 sont ici deux jeux de ports de la machine
+    même : un ComfyUI factice (tools/mock_comfy.py) répond pour ComfyUI et
+    H3 de DGX1, le reste se tait."""
+    import importlib.util
+    import socket
+    import threading
+    import time
+    import urllib.error
+    import urllib.request
+
+    spec = importlib.util.spec_from_file_location("bridge", REPO / "tools/bridge.py")
+    bridge = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bridge)
+    # son journal (qui a démarré quoi) et ses refus n'ont rien à faire dans ce rapport
+    bridge._journal = lambda *a: None
+    bridge.Handler.log_message = lambda *a: None
+
+    def free_port() -> int:
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+    comfy, silent = free_port(), free_port()
+    mock = subprocess.Popen([sys.executable, str(REPO / "tools/mock_comfy.py"), str(comfy)],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    server = None
+    try:
+        for _ in range(50):
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{comfy}/system_stats", timeout=1)
+                break
+            except OSError:
+                time.sleep(0.1)
+        cfg = bridge.load_config()
+        cfg.update(dry=True, trusted=list(bridge.TRUSTED), public_host="studio.exemple.fr")
+        cfg["machines"]["dgx1"].update(host="127.0.0.1", ssh=None,
+                                       ports={"studio": silent, "comfyui": comfy, "h3": comfy, "ollama": silent})
+        cfg["machines"]["dgx2"].update(host="127.0.0.1", ssh="dgx@cable-dgx2",
+                                       ports={"ssh": silent, "relay": silent, "relay_bridge": silent,
+                                              "comfyui": silent, "h3": silent, "ollama": silent})
+        server = bridge.make_server("127.0.0.1", 0, bridge.Bridge(cfg))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+
+        def call(path: str, body=None, headers: dict | None = None, ctype: str = "application/json"):
+            data = json.dumps(body).encode() if body is not None else None
+            req = urllib.request.Request(base + path, data=data, method="POST" if data is not None else "GET",
+                                         headers={**({"Content-Type": ctype} if data is not None else {}),
+                                                  **(headers or {})})
+            try:
+                with urllib.request.urlopen(req, timeout=30) as res:
+                    code, hdr, raw = res.status, res.headers, res.read()
+            except urllib.error.HTTPError as exc:
+                code, hdr, raw = exc.code, exc.headers, exc.read()
+            try:
+                return code, hdr, json.loads(raw or b"null")
+            except ValueError:
+                return code, hdr, raw
+
+        code, hdr, h = call("/bridge/health", headers={"Origin": bridge.GITHUB_PAGES})
+        text = json.dumps(h, ensure_ascii=False)
+        one = {s["id"]: s["up"] for s in h["machines"][0]["services"]} if code == 200 else {}
+        check("pont : la santé publique — machines, services, mémoire, heure ; CORS pour la page GitHub ; ni adresse "
+              "ni chemin",
+              code == 200 and hdr.get("Access-Control-Allow-Origin") == bridge.GITHUB_PAGES
+              and [m["id"] for m in h["machines"]] == ["dgx1", "dgx2"] and h["machines"][0]["up"]
+              and not h["machines"][1]["up"] and one == {"studio": False, "comfyui": True, "h3": True, "ollama": False}
+              and set(h["missing"]) == {"dgx1:studio", "dgx1:ollama"} and h["ready"] is False and bool(h.get("at"))
+              and (os.name != "posix" or (h["machines"][0]["memory"] or {}).get("total_gb", 0) > 0)
+              and not any(x in text for x in ("127.0.0.1", "169.254", "dgx@", str(REPO))),
+              f"manque {h.get('missing') if isinstance(h, dict) else h}")
+
+        door = {"Cf-Ray": "8c1f2a-CDG", "Cf-Connecting-Ip": "203.0.113.7"}
+        tunnel, _, _ = call("/bridge/start", {"what": "all"}, headers=door)
+        github, _, _ = call("/bridge/start", {"what": "all"}, headers={"Origin": bridge.GITHUB_PAGES})
+        form, _, _ = call("/bridge/start", {"what": "all"}, ctype="text/plain")
+        page_out, _, _ = call("/bridge/", headers=door)
+        page, _, html = call("/bridge/")
+        css, _, _ = call("/bridge/assets/tokens.css")
+        leak, _, _ = call("/bridge/factory.local.json")
+        check("pont : refusé à qui vient d'ailleurs ou prend le tunnel sans la porte, depuis la page GitHub, sans "
+              "JSON ; la page du pont et ses feuilles, à la maison seulement",
+              tunnel == 403 and github == 403 and form == 415 and page_out == 403 and page == 200
+              and b"machines.js" in html and css == 200 and leak == 404
+              and bridge.requester("203.0.113.9", {bridge.ACCESS_EMAIL: "ami@example.com"}) is None
+              and bridge.requester("127.0.0.1", door) is None
+              and bridge.requester("127.0.0.1", {**door, bridge.ACCESS_EMAIL: "Ami@Example.com"}) == "ami@example.com"
+              and bridge.requester("192.168.10.40", {}) == "cal" and bridge.requester("169.254.42.193", {}) == "cal"
+              and not bridge.trusted("100.108.108.65") and not bridge.trusted("10.0.0.5"),
+              f"tunnel {tunnel}, github {github}, formulaire {form}, page {page_out}/{page}")
+
+        code, _, out = call("/bridge/start", {"what": "all", "machine": "dgx1"})
+        steps = {s["what"]: s for s in out.get("steps", [])} if isinstance(out, dict) else {}
+        check("pont : « tout démarrer » sur DGX1, en essai — Ollama par systemd, le studio comme dans REPRISE_CAL ; "
+              "ComfyUI et H3, qui tournent, laissés tels quels",
+              code == 200 and out["dry"] and list(steps) == ["ollama", "comfyui", "h3", "studio"]
+              and steps["ollama"]["cmd"] == ["sudo", "-n", "systemctl", "start", "ollama.service"]
+              and steps["comfyui"]["result"] == "déjà en marche" and "cmd" not in steps["comfyui"]
+              and steps["h3"]["result"] == "déjà en marche" and steps["studio"]["cmd"][:2] == ["bash", "-lc"]
+              and "PYTHONUNBUFFERED=1 setsid nohup ./usine studio > studio.log 2>&1" in steps["studio"]["cmd"][2],
+              str([(s["what"], s["result"]) for s in steps.values()]))
+
+        no_studio, _, why = call("/bridge/start", {"what": "studio", "machine": "dgx2"})
+        off, _, why_off = call("/bridge/start", {"what": "all", "machine": "dgx2"})
+        cfg["machines"]["dgx2"]["ports"]["ssh"] = comfy        # DGX2 s'allume : quelque chose répond
+        friend = {**door, bridge.ACCESS_EMAIL: "ami@example.com", "Origin": "https://studio.exemple.fr",
+                  "Host": "studio.exemple.fr"}
+        code, _, out = call("/bridge/start", {"what": "all", "machine": "dgx2"}, headers=friend)
+        steps = {s["what"]: s for s in out.get("steps", [])} if isinstance(out, dict) else {}
+        ssh = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "dgx@cable-dgx2"]
+        check("pont : DGX2 par ssh sur le câble — ses services par systemd, les deux relais vers DGX1, jamais son "
+              "studio ; éteinte, on le dit",
+              no_studio == 409 and "DGX1" in why["error"]["message"] and off == 409
+              and "éteinte" in why_off["error"]["message"] and code == 200
+              and list(steps) == ["ollama", "comfyui", "h3", "relay", "relay_bridge"]
+              and steps["comfyui"]["cmd"] == [*ssh, "sudo -n systemctl start comfyui.service"]
+              and steps["h3"]["cmd"][-1] == "sudo -n systemctl start comfyui-h3test.service"
+              and "tools/relay.py 8765 169.254.110.6:8765" in steps["relay"]["cmd"][-1]
+              and "tools/relay.py 8770 169.254.110.6:8770" in steps["relay_bridge"]["cmd"][-1],
+              str([(s["what"], s["result"]) for s in steps.values()]))
+
+        halt, _, done = call("/bridge/stop", {"what": "h3", "machine": "dgx1"})
+        wrong, _, _ = call("/bridge/stop", {"what": "comfyui", "machine": "dgx1"})
+        check("pont : H3 s'arrête pour libérer la mémoire quand sa file est vide ; rien d'autre ne s'arrête d'ici",
+              halt == 200 and done["steps"][0]["cmd"] == ["sudo", "-n", "systemctl", "stop", "comfyui-h3test.service"]
+              and wrong == 400, str(done))
+    finally:
+        if server is not None:
+            server.shutdown()
+            server.server_close()
+        mock.terminate()
 
 
 def autopilot_route(root: Path) -> None:
@@ -899,6 +1107,7 @@ def main() -> int:
 
     autopilot_route(root)
     studio_route(tmp)
+    bridge_route()
     comfy_route(tmp, ident)
     native_template()
     orbit_selection()
