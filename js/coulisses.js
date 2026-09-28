@@ -601,8 +601,14 @@ function files() {
 
 /* ── travaux ────────────────────────────────────────────── */
 
+const RANK = { running: 0, queued: 1 };
+
 function jobsBox() {
-  const jobs = state.jobs;
+  // Sur la page file : ce qui tourne, puis ce qui attend, puis le reste.
+  const jobs = state.queue
+    ? [...state.jobs].sort((a, b) => (RANK[a.status] ?? 2) - (RANK[b.status] ?? 2)
+      || (a.status === 'queued' ? String(a.created).localeCompare(String(b.created)) : 0))
+    : state.jobs;
   const seg = `<div class="seg"><button class="tb${state.jobsAll ? '' : ' on'}" data-jobs="one">Ce personnage</button>
     <button class="tb${state.jobsAll ? ' on' : ''}" data-jobs="all">Tous</button></div>`;
   const list = jobs.length ? `<div class="jobs">${jobs.map((j) => {
@@ -628,7 +634,7 @@ function jobsBox() {
   const running = jobs.filter((j) => j.status === 'running').length;
   const queued = jobs.filter((j) => j.status === 'queued').length;
   return box('cz-travaux', 'JOB', 'Travaux', `${running} en cours · ${queued} en file`,
-    `<div class="form-row">${seg}<span class="hint">La file vit dans la mémoire du studio : elle repart à zéro quand il redémarre.</span></div>${list}`);
+    `<div class="form-row">${state.queue ? '' : seg}<span class="hint">La file vit dans la mémoire du studio : elle repart à zéro quand il redémarre.</span></div>${list}`);
 }
 
 function systemBox() {
