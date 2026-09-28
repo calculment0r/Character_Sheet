@@ -31,7 +31,8 @@ se fait sur les deux, par le câble direct (DGX1 169.254.110.6 ↔ DGX2
 169.254.42.193).
 
 ```sh
-./usine studio            # le studio, sur DGX1 : http://192.168.10.205:8765/
+./usine studio            # le studio, sur DGX1 ; on l'ouvre par DGX2 : http://192.168.10.247:8765/
+                          # (relais tools/relay.py : le Wi-Fi de DGX1 est lent, voir docs/REPRISE_CAL.md)
 ./usine doctor            # ce qui tourne déjà : GPU, ComfyUI et ses nœuds H3, paquets
 ./usine gabarit export.json   # adopter le workflow H3 de ComfyUI (export API)
 ./usine etat <perso>      # où en est un personnage, et la commande suivante

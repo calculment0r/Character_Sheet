@@ -19,9 +19,15 @@ chose à faire »). Lire ce fichier, `CLAUDE.md`, la mémoire
   eux, jamais par le PC). `factory.local.json` diffère par machine : ne pas
   le recopier ; le studio le garde en cache → le redémarrer après l'avoir
   modifié.
-- **Le lien pour tester à chaque réponse** : http://192.168.10.205:8765/
-  (Tailscale http://100.120.2.111:8765/), vers le personnage (`#/p/<slug>`) ;
-  la file des rendus : `coulisses.html#/file`.
+- **Le lien pour tester à chaque réponse** : http://192.168.10.247:8765/
+  (Tailscale http://100.108.108.65:8765/), vers le personnage (`#/p/<slug>`) ;
+  la file des rendus : `coulisses.html#/file`. Le studio tourne sur DGX1,
+  mais le Wi-Fi de DGX1 est en 2,4 GHz (28/09 : 135 ms, 5 % de pertes,
+  des pages en plusieurs secondes) : on passe par DGX2 (5 GHz, 9 ms), où
+  `tools/relay.py` renvoie vers DGX1 par le câble direct. Le relais ne
+  survit pas à un redémarrage : `cd ~/Character_Factory && setsid nohup
+  python3 tools/relay.py 8765 169.254.110.6:8765 > ~/relay_studio.log 2>&1
+  < /dev/null &` sur DGX2.
 - **Chercher avant de faire** (sessions passées, mémoire, artifacts, gabarits
   ComfyUI, Hugging Face, Civitai…). Cal déteste qu'on réinvente.
 - Réponses en français, courtes, factuelles ; montrer des images ; dire ce
