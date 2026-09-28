@@ -37,6 +37,13 @@ Manifeste : `cos["presentation"]` = {panels: {expressions, poses,
 details: [{id, label, file, cut, seed, score, tries, secs, at}]},
 palette: [hex], sheet, variants: {clair, sombre}, at}. Fichiers sous
 `costumes/<clé>/presentation/`.
+
+Cal ajoute ses expressions (`add_expression`, action `expression_add`) :
+au bout de `panels.expressions`, même format, plus {custom: true, prompt
+(sa consigne), prompt_en (les mouvements du visage)}. Il en retire
+(`remove_expression`) : l'entrée passe à `removed_expressions`, telle
+quelle, ses images à la corbeille du personnage (`.corbeille/…`), et une
+case retirée ne revient pas d'elle-même ; `restore_expression` la remet.
 """
 
 from __future__ import annotations
@@ -49,7 +56,7 @@ from pathlib import Path
 from PIL import Image
 
 from . import config, imaging
-from .project import ChainError, Project, now
+from .project import ChainError, Project, now, slugify
 
 EXPR_SIZE = (1024, 1024)
 POSE_SIZE = (1152, 2048)
@@ -155,8 +162,12 @@ def _wanted(st: dict, redo: list[str] | None) -> dict[str, set[str]]:
     identifiants de case (`joie`, `marche`, `chaussures`), des groupes
     (`expressions`, `poses`, `details`), `all`, ou `sheet` pour ne
     refaire que la composition."""
-    ids = {"expressions": [e[0] for e in EXPRESSIONS], "poses": [p["id"] for p in natural_poses()],
-           "details": [d[0] for d in DETAILS]}
+    # Une expression retirée par Cal ne revient pas d'elle-même : ni comme
+    # case manquante, ni avec son groupe ; `expression_restore` la remet.
+    removed = {e["id"] for e in st.get("removed_expressions") or []}
+    custom = {e["id"] for e in st["panels"]["expressions"] if e.get("custom")}
+    ids = {"expressions": [e[0] for e in EXPRESSIONS if e[0] not in removed],
+           "poses": [p["id"] for p in natural_poses()], "details": [d[0] for d in DETAILS]}
     if redo:
         out = {g: set() for g in GROUPS}
         for r in redo:
@@ -165,6 +176,10 @@ def _wanted(st: dict, redo: list[str] | None) -> dict[str, set[str]]:
                 return {g: set(v) for g, v in ids.items()}
             if r in ("sheet", "planche"):
                 continue
+            if r in removed:
+                raise ChainError(f"l'expression « {r} » est retirée de la planche : `expression_restore` la remet")
+            if r in custom:
+                raise ChainError(f"« {r} » est une expression ajoutée : `expression_add` en fait une autre")
             if r in ids:
                 out[r] |= set(ids[r])
                 continue
@@ -328,6 +343,141 @@ def _expressions(p: Project, st: dict, folder: Path, locked: str, ids: list[str]
         _matte(p.path(e["file"]), p.path(e["file"]).with_name(f"expr_{eid}_cut.png"), folder)
         e["cut"] = p.rel(p.path(e["file"]).with_name(f"expr_{eid}_cut.png"))
     p.save()
+
+
+# ── expressions ajoutées, retirées, remises ────────────────────────
+
+def text_expression_move(movement: str) -> str:
+    """Une expression demandée par Cal (`expression_add`), écrite en
+    mouvements du visage par le modèle de texte (`brief.EXPRESSION_TASK`) :
+    nommées par leur émotion, les six expressions sortent jouées (Cal,
+    28/09 : « pas naturelles »). Ce qui ne bouge pas, comme
+    `text_expression_photo`."""
+    m = movement.strip().rstrip(".")
+    return (f"Change only the person's facial expression: {m[:1].lower()}{m[1:]}. A subtle, natural expression, "
+            "as in a candid photograph. Keep the same face, identity, age, skin, hair, head angle, framing, light "
+            "and plain light-grey background. Photograph with natural skin texture.")
+
+
+def _new_id(st: dict, name: str) -> str:
+    """L'identifiant d'une expression ajoutée, tiré de son nom ; jamais
+    celui d'une des six, d'une autre case ou d'une expression retirée."""
+    base = slugify(name)[:32].strip("-") or "expression"
+    taken = ({e[0] for e in EXPRESSIONS} | {e["id"] for e in st["panels"]["expressions"]}
+             | {e["id"] for e in st.get("removed_expressions") or []})
+    eid, n = base, 2
+    while eid in taken:
+        eid, n = f"{base}-{n}", n + 1
+    return eid
+
+
+def add_expression(p: Project, costume: str | None, *, prompt: str, movement: str, name: str, seed: int,
+                   report=lambda pr, m: None) -> dict:
+    """Une expression de plus sur la planche de la tenue, faite comme les
+    six (`_expressions`) : le visage verrouillé en source, le contrôle
+    d'identité, jusqu'à trois graines. `prompt` : la consigne de Cal,
+    `movement` : les mouvements du visage en anglais, `name` : l'étiquette.
+    Rangée au bout de `panels.expressions`, avec `custom` et la consigne."""
+    from . import krea2, pose, qwen21
+    from . import stubs as sketches
+    from .chain import identity_seed
+
+    locked = p.require_face()
+    key, cos = p.costume(costume)
+    p.require_fullbody(cos)
+    if not str(prompt or "").strip():
+        raise ChainError("une expression se décrit : écris-la (« un sourire en coin, à peine »)")
+    st = state_of(cos)
+    folder = p.dir(f"costumes/{key}/presentation")
+    eid = _new_id(st, name)
+    photo = engine() == "krea2"
+    head = p.path(locked) if photo else pose.head_only(p.path(locked), folder / "face_ref.png")
+    text = text_expression_move(movement) if photo else text_expression(movement)
+    rounds = 1 if _stub() else EXPR_TRIES
+    tries: list[dict] = []
+    for k in range(rounds):
+        s = seed + k
+        dest = folder / f".expr_{eid}_{k}.png"
+        print(f"  expression {eid} · essai {k + 1} · graine {s} · {'Krea 2' if photo else 'Qwen-Image 2.1'} · {text}")
+        t0 = time.monotonic()
+        step = (lambda pr, m, k=k: report(0.9 * (k + pr) / rounds, m))
+        stub = (lambda: sketches.portrait(EXPR_SIZE, seed=identity_seed(p), label=f"FACTICE · {eid}"))
+        if photo:
+            krea2.generate(prompt=text, refs=[head], dest=dest, seed=s, size=EXPR_SIZE, report=step, stub=stub)
+        else:
+            qwen21.generate(prompt=text, refs=[head], dest=dest, seed=s, size=EXPR_SIZE, resolution=RESOLUTION,
+                            report=step, stub=stub)
+        tries.append({"file": dest, "seed": s, "secs": round(time.monotonic() - t0, 1), "prompt": text})
+        sc = identity(p.path(locked), [dest])[0]
+        tries[-1].update(sc)
+        if sc["score"] is not None:
+            print(f"    {eid} : identité {sc['score']:.3f}")
+        if not sc.get("checked") or (sc.get("score") or 0.0) >= EXPR_MIN:
+            break
+    entry = _keep(p, folder, f"expr_{eid}", tries, eid, name, EXPR_MIN)
+    entry.update(prompt=str(prompt).strip(), prompt_en=movement, engine=engine(), custom=True)
+    report(0.95, "détourage de l'expression")
+    cut = folder / f"expr_{eid}_cut.png"
+    _matte(p.path(entry["file"]), cut, folder)
+    entry["cut"] = p.rel(cut)
+    state_of(cos)["panels"]["expressions"].append(entry)
+    p.save()
+    report(1.0, "expression ajoutée")
+    return entry
+
+
+def remove_expression(p: Project, costume: str | None, eid: str) -> dict:
+    """L'expression sort de la planche vers `removed_expressions`, avec
+    tout ce qu'elle porte ; ses images vont à la corbeille du personnage.
+    `restore` garde de quoi la remettre à sa place. La planche composée ne
+    change qu'à sa prochaine composition (`presentation`, `redo: sheet`)."""
+    key, cos = p.costume(costume)
+    st = state_of(cos)
+    shown = st["panels"]["expressions"]
+    entry = next((e for e in shown if e["id"] == eid), None)
+    if entry is None:
+        raise ChainError(f"expression inconnue sur la planche de {key} : {eid} "
+                         f"(présentes : {', '.join(e['id'] for e in shown) or 'aucune'})")
+    restore = {"index": shown.index(entry)}
+    for field in ("file", "cut"):
+        if entry.get(field):
+            trashed = p.trash(entry[field])
+            if trashed:
+                restore[field], entry[field] = entry[field], trashed
+    entry.update(restore=restore, removed_at=now())
+    shown.remove(entry)
+    st.setdefault("removed_expressions", []).append(entry)
+    p.save()
+    return entry
+
+
+def restore_expression(p: Project, costume: str | None, eid: str) -> dict:
+    """L'inverse : les images sortent de la corbeille, l'expression reprend
+    sa place sur la planche."""
+    key, cos = p.costume(costume)
+    st = state_of(cos)
+    removed = st.get("removed_expressions") or []
+    entry = next((e for e in removed if e["id"] == eid), None)
+    if entry is None:
+        raise ChainError(f"aucune expression retirée « {eid} » sur la planche de {key} "
+                         f"(retirées : {', '.join(e['id'] for e in removed) or 'aucune'})")
+    if any(e["id"] == eid for e in st["panels"]["expressions"]):
+        raise ChainError(f"l'expression « {eid} » est déjà sur la planche")
+    restore = entry.get("restore") or {}
+    moves = [(f, entry[f], restore[f]) for f in ("file", "cut") if restore.get(f) and entry.get(f)]
+    for _, src, dest in moves:        # tout ou rien : on vérifie avant de déplacer
+        if not p.path(src).is_file():
+            raise ChainError(f"l'image n'est plus dans la corbeille : {src}")
+        if p.path(dest).exists():
+            raise ChainError(f"la place est prise : {dest} existe déjà")
+    entry.update({f: p.untrash(src, dest) for f, src, dest in moves})
+    entry.pop("restore", None)
+    entry.pop("removed_at", None)
+    removed.remove(entry)
+    shown = st["panels"]["expressions"]
+    shown.insert(min(int(restore.get("index", len(shown))), len(shown)), entry)
+    p.save()
+    return entry
 
 
 def _keep(p: Project, folder: Path, stem: str, tries: list[dict], pid: str, label: str, floor: float) -> dict:

@@ -247,6 +247,7 @@ def studio_route(tmp: Path) -> None:
         check("studio : l'affiche du casting est la planche de présentation, sans voix ni question en attente",
               ilse["poster"] == f"/files/{slug}/costumes/voyage/presentation/sheet.png" and ilse["voice"] is None
               and ilse["attention"] == 0, str({k: ilse.get(k) for k in ("poster", "voice", "attention")}))
+        studio_edits(tmp / "studio", slug, kid, js, run)
 
         # L'autopilote par le studio : Cal valide un plein pied, la machine
         # fait le reste ; un travail de Cal demandé pendant ce temps passe
@@ -312,6 +313,118 @@ def studio_route(tmp: Path) -> None:
     finally:
         for proc in procs:
             proc.terminate()
+
+
+def studio_edits(projects: Path, slug: str, other: str, js, run) -> None:
+    """Les retouches de Cal par le studio : un look du visage verrouillé
+    (`pending` dès la demande, rendu à côté du visage sans le toucher,
+    annulé en erreur, relancé, retiré à la corbeille), une expression
+    ajoutée à la planche, une des six retirée puis remise. `other` : un
+    personnage sans visage verrouillé, qui sert aussi à occuper la file."""
+    import time
+
+    from factory import presentation
+
+    root = projects / slug
+
+    def wait(job_id: str) -> dict:
+        for _ in range(600):
+            _, job = js(f"/api/jobs/{job_id}")
+            if job["status"] not in ("queued", "running"):
+                return job
+            time.sleep(0.05)
+        return {"status": "timeout"}
+
+    def character() -> dict:
+        return js(f"/api/characters/{slug}")[1]
+
+    look = f"/api/characters/{slug}/actions/look"
+    locked = root / "face/locked.png"
+    before = locked.read_bytes()
+    refused, _ = js(f"/api/characters/{other}/actions/look", {"prompt": "du maquillage de soirée"})
+    _, busy = js(f"/api/characters/{other}/actions/face", {"variants": 2})      # la file occupée ~1 s
+    code, first = js(look, {"prompt": "une fine cicatrice sur la pommette gauche"})
+    _, second = js(look, {"prompt": "du maquillage de soirée", "name": "soirée"})
+    lid, sid = first["job"]["params"]["id"], second["job"]["params"]["id"]
+    seen = {e["id"]: e for e in character()["character"]["face"]["looks"]}
+    js(f"/api/jobs/{second['job']['id']}/cancel", {})
+    done = wait(first["job"]["id"])
+    wait(busy["job"]["id"])
+    c = character()
+    got = {e["id"]: e for e in c["character"]["face"]["looks"]}
+    a = got.get(lid, {})
+    check("studio : un look — pending dès la demande, rendu à côté du visage verrouillé sans le toucher ; annulé "
+          "dans la file, il passe en erreur ; refusé sans visage verrouillé",
+          code == 200 and refused == 409 and seen.get(lid, {}).get("status") == "pending"
+          and seen.get(sid, {}).get("status") == "pending" and done["status"] == "done"
+          and a.get("status") == "ready" and a.get("file") == f"face/looks/{lid}.png" and (root / a["file"]).is_file()
+          and a.get("prompt") == "une fine cicatrice sur la pommette gauche" and a.get("prompt_en") and a.get("name")
+          and isinstance(a.get("seed"), int) and got.get(sid, {}).get("status") == "error"
+          and got[sid].get("file") is None and got[sid].get("name") == "soirée"
+          and c["character"]["face"]["locked"] == "face/locked.png" and locked.read_bytes() == before
+          and c["summary"]["looks"] == 1,
+          f"{ {k: v.get('status') for k, v in got.items()} } · {done.get('error')}")
+
+    _, again = js(f"/api/jobs/{second['job']['id']}/retry", {})
+    redone = wait(again["job"]["id"])
+    b = {e["id"]: e for e in character()["character"]["face"]["looks"]}.get(sid, {})
+    code, gone = js(f"/api/characters/{slug}/actions/look_remove", {"id": sid})
+    unknown, _ = js(f"/api/characters/{slug}/actions/look_remove", {"id": "look-inconnu"})
+    c = character()
+    left = [e["id"] for e in c["character"]["face"]["looks"]]
+    check("studio : un look annulé se relance sous le même nom ; retiré, son image part à la corbeille du "
+          "personnage et l'entrée sort de la liste",
+          redone["status"] == "done" and again["job"]["params"]["id"] == sid and b.get("status") == "ready"
+          and code == 200 and gone["result"]["trash"] == f".corbeille/face/looks/{sid}.png"
+          and (root / gone["result"]["trash"]).is_file() and not (root / f"face/looks/{sid}.png").exists()
+          and left == [lid] and unknown == 409 and c["summary"]["looks"] == 1,
+          f"relance {redone['status']}, reste {left}")
+
+    added = run(slug, "expression_add", costume="voyage", prompt="un sourire en coin, à peine",
+                name="sourire en coin")
+    twin = run(slug, "expression_add", costume="voyage", prompt="rit doucement, les yeux plissés", name="joie")
+    c = character()
+    pres = c["character"]["costumes"]["voyage"]["presentation"]
+    shown = {e["id"]: e for e in pres["panels"]["expressions"]}
+    e = shown.get("sourire-en-coin", {})
+    six = [x[0] for x in presentation.EXPRESSIONS]
+    check("studio : une expression ajoutée à la planche, au format des six, avec sa consigne ; un nom déjà pris "
+          "prend un autre identifiant",
+          added["status"] == "done" and added["result"]["id"] == "sourire-en-coin" and twin["status"] == "done"
+          and twin["result"]["id"] == "joie-2" and e.get("custom") is True
+          and e.get("prompt") == "un sourire en coin, à peine" and e.get("prompt_en") and e.get("label") == "sourire en coin"
+          and isinstance(e.get("seed"), int) and e.get("file") == "costumes/voyage/presentation/expr_sourire-en-coin.png"
+          and (root / e["file"]).is_file() and (root / e["cut"]).is_file()
+          and list(shown)[:6] == six and c["summary"]["expressions"] == 8,
+          f"{list(shown)} · {added.get('error') or twin.get('error')}")
+
+    joy = dict(shown["joie"])
+    out = run(slug, "expression_remove", costume="voyage", id="joie")
+    pres = character()["character"]["costumes"]["voyage"]["presentation"]
+    gone = next((x for x in pres.get("removed_expressions") or [] if x["id"] == "joie"), {})
+    redo = run(slug, "presentation", costume="voyage", redo=["joie"])
+    want = presentation._wanted(pres, None)["expressions"] | presentation._wanted(pres, ["expressions"])["expressions"]
+    check("studio : une expression retirée va à removed_expressions avec son fichier, sa graine et sa consigne, "
+          "son image à la corbeille ; elle ne revient pas d'elle-même",
+          out["status"] == "done" and "joie" not in [x["id"] for x in pres["panels"]["expressions"]]
+          and gone.get("file") == f".corbeille/{joy['file']}" and (root / gone["file"]).is_file()
+          and not (root / joy["file"]).exists() and gone.get("seed") == joy["seed"] and gone.get("prompt") == joy["prompt"]
+          and redo["status"] == "error" and "retirée" in (redo.get("error") or "") and "joie" not in want,
+          f"{gone.get('file')} · {redo.get('error')}")
+
+    back = run(slug, "expression_restore", costume="voyage", id="joie")
+    twice = run(slug, "expression_restore", costume="voyage", id="joie")
+    stray = run(slug, "expression_remove", costume="voyage", id="inconnue")
+    pres = character()["character"]["costumes"]["voyage"]["presentation"]
+    order = [x["id"] for x in pres["panels"]["expressions"]]
+    j = next((x for x in pres["panels"]["expressions"] if x["id"] == "joie"), {})
+    check("studio : l'expression remise reprend sa place et son image, la corbeille rendue ; remettre deux fois ou "
+          "retirer une inconnue est refusé",
+          back["status"] == "done" and order[:6] == six and j.get("file") == joy["file"] and (root / joy["file"]).is_file()
+          and j.get("cut") == joy["cut"] and (root / joy["cut"]).is_file() and "restore" not in j
+          and not (root / f".corbeille/{joy['file']}").exists() and not pres.get("removed_expressions")
+          and twice["status"] == "http" and stray["status"] == "http",
+          str(order))
 
 
 def autopilot_route(root: Path) -> None:

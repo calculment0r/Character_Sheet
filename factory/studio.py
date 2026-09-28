@@ -64,7 +64,7 @@ import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
-from . import autopilot, chain, config, h3, memory
+from . import autopilot, chain, config, h3, looks, memory
 from .project import IDENTITY_SCHEMA, ChainError, Project, apose, list_projects, now
 
 PORT = 8765
@@ -407,6 +407,86 @@ def a_presentation(p: Project, q: dict, report):
             "panels": {g: [e["id"] for e in v] for g, v in st["panels"].items()}}
 
 
+def submit_look(p: Project, q: dict) -> None:
+    """Dès la demande, avant la file : l'entrée du look, `pending`, que la
+    page montre tout de suite ; son identifiant et sa graine vont au travail."""
+    q["seed"] = _seed(q)
+    q["id"] = looks.submit(p, q.get("prompt"), name=str(q.get("name") or ""), look_id=q.get("id") or None,
+                           seed=q["seed"])["id"]
+
+
+def read_look_brief(p: Project, q: dict, llm, say) -> None:
+    """Avant le rendu d'un look : la consigne de Cal, en français, devient
+    une consigne anglaise précise qui dit le côté du corps (`looks.read`)."""
+    looks.read(p, str(q.get("id") or ""), llm, say, keep_name=bool(str(q.get("name") or "").strip()))
+
+
+def a_look(p: Project, q: dict, report):
+    """Un look : le visage verrouillé retouché par Krea 2, rangé à côté de
+    lui (`face.looks`) — il ne le remplace jamais."""
+    e = looks.render(p, str(q.get("id") or ""), seed=_seed(q), report=report)
+    return {"id": e["id"], "status": e["status"], "file": e.get("file"), "score": e.get("score")}
+
+
+def a_look_remove(p: Project, q: dict, report):
+    return looks.remove(p, str(q.get("id") or ""))
+
+
+def read_expression_brief(p: Project, q: dict, llm, say) -> None:
+    """Avant une expression ajoutée : la consigne de Cal devient des
+    mouvements du visage, doux, en anglais (`brief.EXPRESSION_TASK`) —
+    toujours, même écrite en anglais : « joie » ou « angry » rendent une
+    expression jouée. Rien à relire si elle n'a pas bougé (une relance)."""
+    from . import brief
+
+    p.require_face()
+    p.require_fullbody(p.data["costumes"][_costume(p, q)])
+    text = str(q.get("prompt") or "").strip()
+    if not text:
+        raise ChainError("une expression se décrit : écris-la (« un sourire en coin, à peine »)")
+    if q.get("prompt_en") and q.get("prompt_read") == text:
+        return
+    say("le modèle de texte écrit l'expression")
+    if config.backend("brief") != "stub":
+        llm()
+    got = brief.read_edit(brief.EXPRESSION_TASK, text, sheet=p.sheet)
+    q.update(prompt_en=got["prompt"], name_read=got["name"], prompt_read=text)
+    say(f"expression : {got['prompt']}")
+
+
+def a_expression_add(p: Project, q: dict, report):
+    from . import brief, presentation
+
+    key = _costume(p, q)
+    text = str(q.get("prompt") or "").strip()
+    name = str(q.get("name") or "").strip() or q.get("name_read") or brief.short_name(text)
+    e = presentation.add_expression(p, key, prompt=text, movement=q.get("prompt_en") or text, name=name,
+                                    seed=_seed(q), report=report)
+    return {"costume": key, "id": e["id"], "file": e["file"], "score": e.get("score")}
+
+
+def a_expression_remove(p: Project, q: dict, report):
+    from . import presentation
+
+    key = _costume(p, q)
+    e = presentation.remove_expression(p, key, str(q.get("id") or ""))
+    return {"costume": key, "id": e["id"], "trash": e.get("file")}
+
+
+def a_expression_restore(p: Project, q: dict, report):
+    from . import presentation
+
+    key = _costume(p, q)
+    e = presentation.restore_expression(p, key, str(q.get("id") or ""))
+    return {"costume": key, "id": e["id"], "file": e.get("file")}
+
+
+def _gpu_expression(q: dict, p: Project | None = None):
+    from . import presentation
+
+    return ("krea2", "portrait") if presentation.engine() == "krea2" else ("qwen21", "portrait")
+
+
 def a_views(p: Project, q: dict, report):
     names = [n for n in (q.get("names") or []) if n in (*chain.ORTHO, "threequarter")] or None
     raw = chain.views(p, _costume(p, q), method=q.get("method") or "qwen21-pose", names=names, seed=_seed(q),
@@ -514,6 +594,11 @@ ACTIONS = {
                      lambda q, p=None: ("h3", "h3") if q.get("engine") == "h3" else ("qwen21", "portrait")),
     "sheet_ok":     (a_sheet_ok, "planche validée", None),
     "presentation": (a_presentation, "planche de présentation", ("qwen21", "portrait")),
+    "look":         (a_look, "look du visage", ("krea2", "portrait"), read_look_brief),
+    "look_remove":  (a_look_remove, "look retiré", None),
+    "expression_add": (a_expression_add, "expression ajoutée", _gpu_expression, read_expression_brief),
+    "expression_remove": (a_expression_remove, "expression retirée", None),
+    "expression_restore": (a_expression_restore, "expression remise", None),
     "views":        (a_views, "vues orthogonales", _gpu_views),
     "prep":         (a_prep, "préparation des vues", ("birefnet", "prep")),
     "check":        (a_check, "contrôle d'alignement",
@@ -529,6 +614,11 @@ ACTIONS = {
 # Les étages techniques : lancés à la main, ils mettent l'autopilote du
 # costume en pause, pour ne pas se battre avec lui (panneau de débogage).
 MANUAL_TECH = ("apose", "views", "prep", "check", "mesh", "rig", "rig_ok")
+
+# Ce qui se fait dès la demande, avant la file (l'entrée `pending` d'un
+# look), et ce qui se range quand le travail n'aboutit pas.
+ON_SUBMIT = {"look": submit_look}
+ON_FAIL = {"look": lambda p, q, why: looks.fail(p, q.get("id"), why)}
 
 # Le moteur de chaque capacité, pour savoir si un travail touche au GPU.
 _ENGINE = {"h3": "h3", "views": "h3", "prep": "prep", "trellis": "trellis", "sam3dbody": "sam3dbody",
@@ -641,6 +731,9 @@ def summary(p: Project) -> dict:
         "poster": files_url(d["slug"], poster), "voice": files_url(d["slug"], _voice_file(d.get("voice"))),
         "identity": {"filled": filled, "total": SHEET_FIELDS, "notes": len(d["notes"])},
         "costumes": len(costumes),
+        "looks": sum(1 for e in face.get("looks") or [] if e.get("status") == "ready"),
+        "expressions": sum(len(((c.get("presentation") or {}).get("panels") or {}).get("expressions") or [])
+                           for c in costumes),
         "stages": [{"ref": r, "id": i, "label": lab, "state": st} for r, i, lab, st in stages],
         "next": _next(p),
         "autopilot": {k: {f: (c.get("autopilot") or {}).get(f) for f in ("state", "step", "at", "failed")}
@@ -720,8 +813,12 @@ class Studio:
         self.memory = memory.Manager()
         self.lock = threading.Lock()
         threading.Thread(target=self._worker, name="ouvrier", daemon=True).start()
+        projects = list_projects()
+        # Un look `pending` d'avant l'arrêt ne finira jamais : il passe en erreur.
+        for p in projects:
+            looks.interrupted(p)
         # Un studio relancé reprend les autopilotes qui tournaient.
-        for slug, key in autopilot.pending(list_projects()):
+        for slug, key in autopilot.pending(projects):
             self.kick(slug, key)
 
     # la file
@@ -799,9 +896,21 @@ class Studio:
         self.live.pop(slug, None)
         return {"slug": slug, "trash": str(dest.relative_to(config.projects_root()))}
 
+    def _failed(self, job: Job, why: str) -> None:
+        """Un travail qui n'aboutit pas range ce qu'il avait annoncé dès la
+        demande (l'entrée `pending` d'un look)."""
+        try:
+            p = self.project(job.slug)
+            with p.lock:
+                ON_FAIL[job.action](p, job.params, why)
+        except Exception as exc:  # noqa: BLE001 — jamais au prix de l'ouvrier
+            print(f"  {job.action} {job.slug} : entrée non rangée ({exc})")
+
     def cancel(self, job: Job) -> str:
         if job.status == "queued":
             job.status, job.message, job.ended = "cancelled", "annulé avant de partir", now()
+            if job.action in ON_FAIL:
+                self._failed(job, "annulé avant de partir")
             if job.action == "autopilot":
                 p = self.project(job.slug)
                 with p.lock:
@@ -843,6 +952,8 @@ class Studio:
                 job.ended = now()
                 if job.error:
                     job.message = job.error
+                if job.status != "done" and job.action in ON_FAIL:
+                    self._failed(job, "annulé" if job.cancel else job.error or job.status)
                 _local.job = None
                 self.live.pop(job.slug, None)
                 self.running = None
@@ -893,6 +1004,10 @@ class Studio:
         if where(action, params) is not None:
             if action in MANUAL_TECH:
                 self._manual(self.project(slug), action, params)
+            if action in ON_SUBMIT:
+                p = self.project(slug)
+                with p.lock:
+                    ON_SUBMIT[action](p, params)
             return {"job": self.submit(slug, action, params).public()}
         p = self.project(slug)
         out = io.StringIO()

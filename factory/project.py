@@ -39,6 +39,7 @@ from . import config
 
 SCHEMA = "character-factory/project@1"
 IDENTITY_SCHEMA = "character-factory/identity@1"
+TRASH = ".corbeille"        # la corbeille d'un personnage, dans son dossier
 
 
 class ChainError(Exception):
@@ -155,6 +156,31 @@ class Project:
             n += 1
         if not dest.exists():
             shutil.copy2(src, dest)
+        return self.rel(dest)
+
+    def trash(self, rel: str) -> str | None:
+        """Un fichier du personnage à sa corbeille (`.corbeille/`, au même
+        chemin dessous) : rien ne s'efface, une restauration l'en ressort.
+        Rend son chemin dans la corbeille, None s'il n'existait pas."""
+        src = self.path(rel)
+        if not src.is_file():
+            return None
+        dest = self.root / TRASH / self.rel(src)
+        if dest.exists():
+            dest = dest.with_name(f"{dest.stem}-{uuid.uuid4().hex[:6]}{dest.suffix}")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dest))
+        return self.rel(dest)
+
+    def untrash(self, trashed: str, original: str) -> str:
+        """L'inverse : le fichier sort de la corbeille et reprend sa place."""
+        src, dest = self.path(trashed), self.path(original)
+        if not src.is_file():
+            raise ChainError(f"le fichier n'est plus dans la corbeille : {trashed}")
+        if dest.exists():
+            raise ChainError(f"la place est prise : {original} existe déjà")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dest))
         return self.rel(dest)
 
     # ── identité ───────────────────────────────────────────────────
