@@ -814,6 +814,10 @@ class Studio:
                 self.running = None
                 if job.action == "autopilot":
                     self._continue(job)
+                elif job.status == "done" and isinstance(job.result, dict) and job.result.get("autopilot"):
+                    # Un travail qui lance l'autopilote (l'import d'une image) :
+                    # sa première étape part comme après une action rapide.
+                    self.kick(job.slug, job.result["autopilot"])
 
     def _run(self, job: Job) -> None:
         fn, _, _, *pre = ACTIONS[job.action]

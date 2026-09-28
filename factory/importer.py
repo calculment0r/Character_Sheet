@@ -133,7 +133,10 @@ def text_face(info: dict) -> str:
         "straight on at eye level, calm neutral expression, mouth closed, centred on a plain uniform light grey "
         "background.",
         f"Face: {info.get('face_prompt', '').strip().rstrip('.')}." if info.get("face_prompt") else "",
-        "Keep exactly the same face, hair, skin, glasses and features. No text.",
+        # Nommer les lunettes les fait apparaître (« Manteau », 28/09) : on ne
+        # garde que ce que montre l'image, sans rien citer qu'elle n'a pas.
+        "Keep exactly the same face, hair, skin and features as in the source image, and add nothing that is not "
+        "in it. No text.",
         _style_clause(info),
     ]))
 
