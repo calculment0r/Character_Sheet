@@ -1,103 +1,122 @@
-# Reprise — à lire en premier (état au 27/09/2026, soir)
+# Reprise — à lire en premier (état au 28/09/2026, fin d'après-midi)
 
-Cal a arrêté la journée, mécontent. Il va **briefer à nouveau** la
-prochaine session : on ne construit rien avant son brief. Commencer par
-lire ce document, relire `CLAUDE.md`, puis lui demander son brief et le
-noter.
-
-## Ce que Cal a dit en fin de journée (mot pour mot ou presque)
-
-- « Les images créées pour David : il y a des mains à l'envers, les
-  portraits en grand ont une peau plastique etc. »
-- « L'UX est nulle aussi… on a envie d'**une seule page avec les trucs de
-  notre character**. »
-- « La création du character est aussi super mal pensée, je vais devoir te
-  briefer car tu comprends mal et fais des trucs nuls. »
-- Sur la 3D : « c'est vraiment super moche et il a encore 4 bras… les gens
-  y arrivent super facilement et ont des modèles assez fidèles. »
-- Sur la mise en page : « plein de trucs pas lisibles car ça se
-  superpose » (il avait joint une capture, jamais reçue).
+La session du 28/09 s'arrête parce qu'elle est pleine, pas sur un échec :
+Cal a dit « ça marche assez bien tout cela, bravo ». La suite est **la
+page d'un personnage**, fait ou en train de se faire (voir « Première
+chose à faire »). Lire ce fichier, `CLAUDE.md`, la mémoire
+(`C:\Users\calcu\.claude\projects\C--Character-Factory\memory\`), puis
+`docs/BRIEF_CAL_2026-09-28.md` (tout ce que Cal a dit le 28/09, mot pour mot).
 
 ## Règles de travail (Cal, répétées)
 
-- **Uniquement ssh / curl / scp** vers `dgx1` et `dgx2`, et Edge headless
-  (playwright-core) depuis Bash. Jamais le navigateur intégré ni Chrome ni
-  un outil qui lui demande une autorisation.
-- **Le lien pour tester à chaque réponse** : http://192.168.10.247:8765/
-  (Tailscale http://100.108.108.65:8765/), vers le personnage concerné
-  (`#/p/<slug>`).
-- **Chercher avant de faire** : sessions passées, mémoire, artifacts de
-  Cal, gabarits ComfyUI de DGX2, Hugging Face, Civitai, Reddit. Cal
-  déteste qu'on réinvente ou qu'on bricole moins bien que « les gens ».
-- Réponses en français, courtes, factuelles ; montrer des images ; dire
-  honnêtement ce qui est moche.
-- Mémoire : `C:\Users\calcu\.claude\projects\C--Character-Factory\memory\`
-  (MEMORY.md et ses fiches).
+- **ssh / curl / scp seulement** vers `dgx1` et `dgx2`, Edge sans affichage
+  depuis Bash pour voir une page (`msedge --headless=new --screenshot=… URL`
+  suffit, sans playwright). Jamais le navigateur intégré, ni Chrome, ni un
+  outil qui demande une autorisation à Cal. Le dire à chaque sous-agent.
+- **On travaille sur DGX1** depuis le 28/09 ; **DGX2 est son miroir exact**
+  (code, modèles, nœuds, environnements) pour pouvoir lancer sur les deux.
+  Câble direct 200 Gb : DGX1 169.254.110.6 ↔ DGX2 169.254.42.193 (rsync entre
+  eux, jamais par le PC). `factory.local.json` diffère par machine : ne pas
+  le recopier ; le studio le garde en cache → le redémarrer après l'avoir
+  modifié.
+- **Le lien pour tester à chaque réponse** : http://192.168.10.205:8765/
+  (Tailscale http://100.120.2.111:8765/), vers le personnage (`#/p/<slug>`) ;
+  la file des rendus : `coulisses.html#/file`.
+- **Chercher avant de faire** (sessions passées, mémoire, artifacts, gabarits
+  ComfyUI, Hugging Face, Civitai…). Cal déteste qu'on réinvente.
+- Réponses en français, courtes, factuelles ; montrer des images ; dire ce
+  qui est moche. Télécharger un fichier : demander d'abord (nom, source,
+  taille) — Cal a dit oui le 28/09 pour ceux listés dans `docs/ETUDES.md` §8.
+- Une **autre session de Cal installe OmniChar (`.char`)** sur les deux DGX :
+  ne pas le faire ici ; ne pas redémarrer le ComfyUI :8188 pendant qu'il
+  calcule pour elle.
 
-## Où en est le code (branche `claude/epic-wright-y2kbrc`, poussée)
+## Ce qui a été fait le 28/09 (branche `claude/epic-wright-y2kbrc`, poussée, tirée sur les deux DGX)
 
-Fusionné et vérifié (`python tools/chain_check.py` 61/61) :
-- plein pied en pose naturelle (Qwen-Image 2.1 turbo) ; A-pose par
-  squelette DWPose ; vues guidées par squelette et **mesurées par SAM 3D
-  Body** avec relance ; planche de référence Qwen (face/dos/gros plan) ;
-- mesh TRELLIS.2 : décimation auto à 50 000 faces ; par défaut **face +
-  dos seulement** (les 4 vues faisaient des bras en trop) et couleur
-  reprise des vues (`factory/texproject.py`) — le résultat n'a **pas** été
-  montré à Cal ; le mesh reste jugé moche ; un banc des moteurs (TRELLIS.2
-  bf16 image seule, Hunyuan3D 2.1 + Paint, Hunyuan3D-2mv, Pixal3D) a été
-  lancé puis **arrêté avant résultat** (branche éventuelle
-  `claude/cf-mesh2`, travail sur DGX1 `~/cf_mesh`) ;
-- rig UniRig réel sur DGX2 (SOMA 77, bind A-pose, 5 poses de contrôle
-  vérifiées) — rig v1 d'essai-atelier fait, non accepté ;
-- pilote automatique des étages techniques (`factory/autopilot.py`,
-  validation par mesure, « Ce qui attend ») ;
-- planche de présentation (`factory/presentation.py` : 6 expressions,
-  5 poses naturelles, détails SeedVR2, palette, composition 3840×2160) —
-  **Cal la juge mauvaise** (mains à l'envers, peau plastique) ;
-- nouvelle interface « Casting · volets Identité/Visage/Garde-robe/Voix/
-  Planche · Scène » (`js/studio.js`, `js/parler.js`) — **Cal la juge
-  nulle** : il veut une seule page par personnage ; des chevauchements de
-  texte restent (noms longs coupés sur les affiches, pastille d'en-tête,
-  en-tête des coulisses, Identité en 390 px) ;
-- **Coulisses** (`coulisses.html`) : panneau de debug de Cal, tout ce que
-  l'utilisateur ne voit pas — Cal l'a demandé, à garder.
+- **Krea 2 remplace Qwen-Image 2.1** pour tout ce qui se voit : visage,
+  plein pied (photo en pied + visage verrouillé reporté sur la tête),
+  expressions et poses de la planche (tirées du plein pied validé, tenue
+  gardée). `factory/krea2.py`. Photos : ordonnanceur beta, LoRA UltraReal à
+  0,7, lumière décrite, second passage à 0,25 pour le plein pied. Retouches :
+  Identity Edit **v1.2** par les nœuds `comfyui-krea2edit` v1.2.5. Qwen 2.1
+  ne fait plus que l'A-pose et les vues. Tout le banc : `docs/ETUDES.md` §8.
+- **Import d'une image** (Midjourney, plein pied ou planche, illustré ou
+  3D) : `factory/importer.py`, action `import` du studio. Lecture par le
+  modèle de texte (style, identité, tenue, taille), extraction du personnage
+  seul de face, visage, puis l'autopilote jusqu'au rig. Un personnage
+  illustré garde son style (pas de LoRA photo, prompts d'A-pose et de vues
+  sans « photograph »).
+- **Bras trop longs corrigés** (Cal : « quasiment tous des bras beaucoup
+  trop longs ») : le squelette de pose était cadré sur le nez et les
+  chevilles ; le modèle rétrécissait le corps en gardant les mains sur les
+  poignets. Il est maintenant cadré sur la silhouette réelle
+  (`tools/remote/apose_skeleton.py`). Mesuré : bras à ±5 % du plein pied,
+  contre +14 à +29 % avant. Touche aussi David (essai-atelier) : à refaire.
+- **File des rendus** (`coulisses.html#/file`) : arrêter, relancer,
+  autopilotes en pause/repris ; **Détruire** un personnage depuis les
+  Coulisses (dossier vers `projects/.corbeille/`) ; tous les titres
+  ramènent au studio ; le viewer a « ← Fiche » et « Coulisses ».
+- **Orbite 360°** : LoRA pablodawson sur H3 FL2VA, essai réussi sur le
+  Costaud (tour complet, retour sur l'image de départ) ; turbo 8 pas en
+  6 min = 28 pas en 18 min. Script : `tools/remote/orbit360.py` (pas encore
+  un étage, pas encore dans l'interface). Vidéos : `dgx1:~/cf_orbit/`.
+- **Miroir DGX1** : dépôt, modèles, FaceNet, Ollama `qwen3-vl-32b-32k`,
+  UniRig + Python 3.11 (deadsnakes, accord de Cal) + ses poids HF.
 
-Non fusionné, arrêté en cours :
-- **voix** (branche `claude/cf-voice` si poussée, worktree
-  `.claude/worktrees/agent-a8aa2de0e85823230`) : Qwen3-TTS VoiceDesign /
-  Base, chat STT (Kyutai) → LLM → TTS, service `factory.voice_server`
-  testé sur DGX1 (env `~/cf-voice-env`). Contrat d'API prévu : actions
-  voice_design / voice_lock / voice_unlock / line / line_keep, POST
-  /api/characters/<slug>/chat, GET /api/voice/config. Études voix de Cal :
-  artifacts 9168zq2W4ZCy835ZCAJr5Y, 653eYQsS8aZUygEKLc7icB,
-  FW7QtAgfvvunhPdUpcTb35, ThXjhqEQLq7cnEdgXPP9sP, 9F5JpD2vSnKm4hcoKQ9Lw9 ;
-- correctifs de mise en page de l'interface (worktree
-  `.claude/worktrees/agent-a1759431a6efd5a8e`).
+## En cours au moment de la coupure (DGX1, studio lancé)
 
-Études du jour : `docs/ETUDES.md` (pose, vues, planche, mesh, autopilote),
-et la synthèse UX/planche/voix :
-`C:\Users\calcu\AppData\Local\Temp\claude\C--Character-Factory\289efc68-c625-4b85-aaff-f0fe2c65cae4\scratchpad\etudes_ux_27-09.md`
-(à recopier dans le dépôt si elle sert).
+Les six personnages MJ (`mj-survet`, `mj-chauve`, `mj-manteau`,
+`mj-marionnette`, `mj-costaud`, `mj-garcon`) passent par l'autopilote avec le
+squelette corrigé : Chauve et Costaud finis (rig accepté), Garçon et
+Marionnette rig fait, Manteau et Survêt au mesh. Vérifier dans
+`coulisses.html#/file`. Rendus des meshes : `tools/remote/mesh_render.py`
+(python de ComfyUI).
 
-## État des machines
+Défauts vus, pas encore traités :
+- texture des meshes : les flancs sont mal couverts (bande couleur peau le
+  long du pantalon de Chauve) — la couleur ne vient que des vues face/dos ;
+- l'extraction normalise les proportions exagérées (épaules en blocs de
+  Chauve, bras énormes du Costaud) ;
+- Chauve a son mesh à 1,75 m (fait avant que la taille soit renseignée) ;
+- `krea2edit` v1.2.5 n'est chargé que sur DGX2 : redémarrer `comfyui.service`
+  de DGX1 à un moment calme (sinon import et planche échouent sur DGX1) ;
+- la planche de présentation : Cal la trouve « débile » (silhouette vide à
+  côté du personnage en pied, blanc au-dessus des têtes, poses et
+  expressions pas naturelles) — à refaire avec la page personnage.
 
-- DGX2 : **studio arrêté** ; ComfyUI :8188 et :8189 vidés (modèles
-  déchargés) ; Ollama vide. Relancer le studio :
-  `cd ~/Character_Factory && git pull && PYTHONUNBUFFERED=1 setsid nohup ./usine studio > studio.log 2>&1 < /dev/null &`
-  (pour l'arrêter : `pkill -f "[m] factory studio"`).
-  `factory.local.json` de DGX2 a UniRig branché (`"unirig": "python"`).
-- DGX1 : serveurs voix et Kyutai de la session voix arrêtés, modèles
-  Ollama et ComfyUI déchargés ; le serveur de diarisation « reelbench »
-  (port 8448) n'est pas à nous, laissé tel quel.
-- Personnage de travail : `essai-atelier` (« David »), visage, tenue
-  « veryday », plein pied, A-pose, vues mesurées, meshes v1–v3 (v2/v3 ont
-  des bras en trop), rig v1, expressions de présentation partielles.
+## Première chose à faire à la reprise : la page d'un personnage
 
-## Première chose à faire à la reprise
+Cal, 28/09 : « je voudrais quand même qu'on réfléchisse à la page de nos
+persos quand ils sont faits ou en train de se faire.. tu as tout découpé en
+onglets et j'aimerais avoir un design qui est mieux ». Et plus tôt :
+« on doit être plein écran ok pour chaque étape mais on doit aussi avoir une
+fiche perso hyper belle et claire avec tous les éléments dont le user a
+besoin sur la même page » ; « on a même pas les options pour changer ou
+éditer des trucs.. ça fait des visages et on peut que valider ou pas
+valider » ; « j'avais fait une étude de l'expérience utilisateur et je trouve
+que tu as pas du tout bien intégré le truc ».
 
-1. Lire ce fichier, `CLAUDE.md`, la mémoire.
-2. Demander à Cal son brief (création du personnage, page unique, ce qu'il
-   attend de la planche, de la 3D, de la voix) ; le noter tel quel dans
-   `docs/BRIEF_CAL_<date>.md`.
-3. Proposer un plan court sur cette base, avec les études à mener
-   (chercher d'abord ce que font les meilleurs), avant de coder.
+Son étude n'a pas été retrouvée sous ce nom. Le candidat le plus probable,
+**à lui faire confirmer d'abord** : le corpus « Character Forge » de son
+dépôt privé `calculment0r/X-VERSE` (`ETUDE-W05-CONCEPTION-ECRAN-FORGE`,
+`ETUDE-W06-DESIGN-GLOBAL-ONGLET-WORLD`, `07_EXPERIENCE_ET_DESIGN`,
+`_INGEST/ETUDE-CAL-INTERACTION-VALEUR-USAGE-V0.2.md`, maquette
+`MAQUETTE-CHARACTER-FORGE.html`, artifact
+https://claude.ai/code/artifact/d68a2fc3-ac4c-4a57-ae0c-9a55f871c277) : une
+fiche toujours visible à gauche, des surfaces plein écran au centre,
+épingler / écarter / régénérer / importer partout, jamais un formulaire.
+Notes détaillées (locales, hors dépôt public) :
+`C:\Character_Factory\.claude\handoff\ux_study_found.md`.
+
+Démarche : 1) faire confirmer l'étude à Cal ; 2) la lire en entier ;
+3) proposer une maquette (artifact) de la page personnage — fait / en train
+de se faire — avant de coder ; 4) coder dans `studio.html` / `js/studio.js`
+en gardant les Coulisses pour Cal.
+
+## Machines
+
+- DGX1 : studio (`cd ~/Character_Factory && PYTHONUNBUFFERED=1 setsid nohup ./usine studio > studio.log 2>&1 < /dev/null &`,
+  arrêt `pkill -f "[m] factory studio"`), ComfyUI :8188 (`~/ComfyUI/venv`),
+  H3 :8189, Ollama.
+- DGX2 : studio arrêté, miroir à jour (même commit) ; UniRig et Python 3.11
+  identiques.
