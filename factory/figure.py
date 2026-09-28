@@ -63,6 +63,15 @@ def text(outfit: str, *, garments: int = 0, style: str = "photoreal", tags: bool
     ]))
 
 
+# La lumière et la matière décrites (banc du 28/09, docs/ETUDES.md §8).
+BODY_LIGHT = ("A large soft key light from the front left with gentle fill, a soft contact shadow under the feet, "
+              "visible fabric weave and natural creases at the elbows and knees, faint film grain.")
+# Le second passage de la photo en pied : rendue aux deux tiers, agrandie,
+# reprise à 0,25 — la tête n'y fait que 200 px, c'est lui qui lui donne
+# sa peau (banc du 28/09).
+BODY_REFINE = 0.25
+
+
 def text_photo(person: str, outfit: str) -> str:
     """Le plein pied en photographie, pour Krea 2 : `person` dit qui (âge,
     origine, carrure, visage et cheveux, en anglais), `outfit` la tenue."""
@@ -77,6 +86,7 @@ def text_photo(person: str, outfit: str) -> str:
         "plain light grey seamless studio backdrop, soft even studio light, shot on a 50mm lens.",
         "Real fabric texture, seams and wear, natural hands with five fingers.",
         PHOTO_LOOK.replace("an 85mm lens", "a 50mm lens"),
+        BODY_LIGHT,
     ]))
 
 
@@ -99,7 +109,7 @@ def _krea2(prompt: str, refs: list[Path], dest: Path, seed: int, report) -> Path
         return lambda pr, m: report(a + (b - a) * pr, m)
 
     shot = krea2.generate(prompt=prompt, dest=work / "photo.png", seed=seed, size=krea2.FULLBODY,
-                          report=step(0.0, 0.45))
+                          refine=float(config.setting("krea2_refine_body", str(BODY_REFINE))), report=step(0.0, 0.45))
     if garments:
         shot = krea2.generate(prompt=GARMENT_PASS, refs=[shot, garments[0]], dest=work / "tenue.png", seed=seed,
                               size=krea2.FULLBODY, report=step(0.45, 0.7))

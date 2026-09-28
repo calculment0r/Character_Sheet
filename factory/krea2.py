@@ -59,9 +59,13 @@ FULLBODY = (1152, 2048)
 
 
 def workflow(n_refs: int, width: int, height: int, *, grounding: int = GROUNDING, realism: float = 0.0,
-             edit_strength: float = 1.0, steps: int = STEPS, scheduler: str = "simple") -> dict:
+             edit_strength: float = 1.0, steps: int = STEPS, scheduler: str = "simple", refine: float = 0.0,
+             refine_scale: float = 1.5) -> dict:
     """Le graphe au format API. `realism` : force du LoRA de réalisme
-    (0 : absent)."""
+    (0 : absent). `refine` : un second passage (texte → image seulement) —
+    la première image rendue à la taille divisée par `refine_scale`,
+    agrandie, puis reprise à ce débruitage (0,15–0,3 : au-delà, il
+    réinvente), pour la peau."""
     wf = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": config.setting("krea2_unet", UNET),
                                                      "weight_dtype": "default"}},
@@ -115,6 +119,20 @@ def workflow(n_refs: int, width: int, height: int, *, grounding: int = GROUNDING
         "12": {"class_type": "SaveImage", "inputs": {"images": ["11", 0], "filename_prefix": "usine/krea2"},
                "_meta": {"title": "OUT"}},
     })
+    if refine and not n_refs:
+        w0, h0 = (int(round(width / refine_scale / 16)) * 16, int(round(height / refine_scale / 16)) * 16)
+        wf["7"]["inputs"].update(width=w0, height=h0)
+        wf.update({
+            "20": {"class_type": "ImageScale", "inputs": {"image": ["11", 0], "upscale_method": "lanczos",
+                                                          "width": width, "height": height, "crop": "disabled"}},
+            "21": {"class_type": "VAEEncode", "inputs": {"pixels": ["20", 0], "vae": ["3", 0]}},
+            "22": {"class_type": "KSampler",
+                   "inputs": {"model": model, "positive": positive, "negative": negative, "latent_image": ["21", 0],
+                              "seed": "{{seed}}", "steps": steps, "cfg": 1.0, "sampler_name": "euler",
+                              "scheduler": scheduler, "denoise": refine}},
+            "23": {"class_type": "VAEDecode", "inputs": {"samples": ["22", 0], "vae": ["3", 0]}},
+        })
+        wf["12"]["inputs"]["images"] = ["23", 0]
     return wf
 
 
@@ -177,7 +195,8 @@ def fit(src: Path, size: tuple[int, int], dest: Path) -> Path:
 
 def generate(*, prompt: str, refs: list[Path] | None = None, dest: Path, seed: int, size: tuple[int, int],
              report=lambda p, m: None, stub=None, grounding: int | None = None, realism: float | None = None,
-             edit_strength: float = 1.0, steps: int = STEPS, scheduler: str | None = None) -> Path:
+             edit_strength: float = 1.0, steps: int = STEPS, scheduler: str | None = None,
+             refine: float | None = None) -> Path:
     """Rend une image dans `dest`. `refs` : aucune (texte → image), une
     (la source à éditer) ou deux (la scène, puis le sujet). `stub` : l'image
     à écrire en factice."""
@@ -193,6 +212,8 @@ def generate(*, prompt: str, refs: list[Path] | None = None, dest: Path, seed: i
     # éditions restent en « simple », le réglage où elles ont été essayées.
     scheduler = scheduler or config.setting("krea2_scheduler" if not refs else "krea2_edit_scheduler",
                                             "beta" if not refs else "simple")
+    if refine is None:
+        refine = float(config.setting("krea2_refine", "0") or 0)
     work = dest.parent / f".{dest.stem}"
     work.mkdir(parents=True, exist_ok=True)
     comfy = Comfy(config.comfyui_url("portrait"))
@@ -201,7 +222,7 @@ def generate(*, prompt: str, refs: list[Path] | None = None, dest: Path, seed: i
         tag = uuid.uuid4().hex[:8]
         names.append(comfy.upload(fit(Path(r), size, work / f"krea2_ref{k + 1}_{tag}.png")))
     wf = fill(workflow(len(names), *size, grounding=grounding or GROUNDING, realism=realism,
-                       edit_strength=edit_strength, steps=steps, scheduler=scheduler),
+                       edit_strength=edit_strength, steps=steps, scheduler=scheduler, refine=refine),
               {"prompt": prompt, "seed": seed}, names)
     files = comfy.run(wf, work, report=report, prefix="krea2")
     Path(files[0]).replace(dest)

@@ -89,10 +89,16 @@ def who_en(sheet: dict, *, build: bool = False) -> str:
 # Ce qui fait une photo et non une image de synthèse, et un personnage
 # qu'on a envie de filmer : Cal, 28/09 — « vraiment beaux et super
 # photoréalistes », chaque défaut passe dans les planches de la vidéo.
+# Banc du 28/09 (docs/ETUDES.md §8) : décrire la lumière — sa source, sa
+# direction, sa retombée — et un détail de peau fait plus « photo » que
+# les adjectifs ; « 8k », « masterpiece », « ultra realistic » donnent
+# l'air IA et ne s'écrivent pas.
 PHOTO_LOOK = ("Strikingly attractive and photogenic, with well-balanced features, like a lead cast for a feature film. "
-              "Shot on a full-frame camera with an 85mm lens, soft diffused daylight, natural skin texture with fine "
-              "pores and subtle natural marks, healthy skin, no heavy retouching, true-to-life colours, editorial "
-              "casting photograph.")
+              "Shot on a full-frame camera with an 85mm lens, natural skin texture with fine pores and subtle natural "
+              "marks, healthy skin, no heavy retouching, true-to-life colours, editorial casting photograph.")
+PHOTO_LIGHT = ("A single large softbox slightly to camera left with a white bounce card on the right: soft light with a "
+               "gentle falloff across the far cheek and small catchlights in both eyes. Fine vellus hair on the cheeks "
+               "catches the light, visible pores on the nose and forehead, matte unretouched skin, faint film grain.")
 
 
 def text(sheet: dict, extra: str = "", style: str = "photoreal", engine: str = "") -> str:
@@ -132,8 +138,9 @@ def text_photo(sheet: dict, extra: str = "") -> str:
         "Facing the camera straight on at eye level, centred, calm neutral expression, lips softly closed, eyes "
         "looking into the lens.",
         "Bare head with the hair fully visible: no hat, no hood, no glasses, no earrings, no jewellery.",
-        "Plain light grey seamless paper backdrop, soft even light on both sides of the face.",
+        "Plain light grey seamless paper backdrop.",
         PHOTO_LOOK,
+        PHOTO_LIGHT,
     ]))
 
 

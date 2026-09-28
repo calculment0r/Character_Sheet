@@ -379,6 +379,9 @@ Cal `KREA2_*.json`) ; copié sur DGX2 par le câble direct (26 Go en
 | six expressions, personnage d'essai | 0,96 / 0,80 / 0,84 / 0,80 / 0,72 / 0,87 (Qwen ce matin sur `seed` : 0,72–0,78) |
 | pose : photo dans la pose + report du visage | marche, bras croisés, par-dessus l'épaule : poses justes, photo réelle ; FaceNet 0,66–0,76 — gardé |
 | pose : la personne du plein pied mise à la place (2 réf.) | dédoublée deux fois sur trois, un bras en moins une fois — écarté |
+| lumière décrite (softbox à gauche, retombée sur la joue, reflets, duvet) | portrait plus modelé, yeux vivants, le plus « photo » — gardé |
+| LoRA réalisme V2 à 0,8 | à peine différent de sans — laissé à 0 |
+| second passage (rendu aux 2/3, agrandi, repris à 0,25) | portrait : plus de pores mais plus plat et plus âgé — pas gardé ; plein pied : peau de la tête et grain du tissu nettement meilleurs — gardé (`BODY_REFINE`) |
 
 Pièges : les nœuds `comfyui-krea2edit` v1.1 cassent sur ComfyUI 0.37
 (`wrapper() takes from 4 to 6 positional arguments but 7 were given`) :
