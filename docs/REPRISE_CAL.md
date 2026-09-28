@@ -165,6 +165,29 @@ agents. Proposer l'architecture à Cal avec les sources, avant d'écrire.
    les vues d'un objet justes (essai botte : Krea 2 1/4, Qwen 2.1 0/4).
    Nos gabarits : `trellis2_single.json` marge 1,1 au lieu de 1,0,
    `trellis2_mv.json` recadre chaque vue à part.
+   **La piste que Cal a donnée à la fin (28/09)** :
+   https://huggingface.co/spaces/ML-Intern-lab/Qwen-Image-2.1-viewpoint-orbit-LoRA
+   — le LoRA d'orbite de caméra pour Qwen-Image 2.1, appris sur des objets
+   (Google Scanned Objects), entrée PNG détouré, sortie détourée. C'est la
+   logique de Cal pour les objets (une image → des vues par Qwen 2.1 →
+   TRELLIS). Lu dans le code de la démo (`app.py`) :
+   - fichier `checkpoints/steps2000res768/orbit_alpha_lora_gate_up_split.safetensors`
+     (clés diffusers) — **c'est celui qu'on a** (`models/loras/qwen21_viewpoint_orbit_lora.safetensors`,
+     167 833 192 octets, identique) ; ComfyUI n'en charge pas 128 clés (MLP
+     gate/up séparées) : l'essai botte (1/3) était donc fait avec un LoRA à
+     moitié chargé, **il ne compte pas**. À faire : convertir ces clés pour
+     ComfyUI, ou, avec l'accord de Cal, prendre `orbit_alpha_lora.safetensors`
+     (159 Mo, même dépôt) ;
+   - consigne : `<orbit> rotate the camera 90 degrees to the right, eye level. The image has alpha channel and the background is transparent.`
+     (180 : `<orbit> rotate the camera 180 degrees, eye level` ; élévation absolue) ;
+   - 768 × 768, toile transparente, 40 pas (évalué ainsi), `true_cfg_scale`
+     1,0, LoRA à 1,0, sur Qwen-Image 2.1 complet (diffusers
+     `QwenImage21Pipeline`), pas le turbo INT8 ;
+   - chaque vue part de l'image d'origine (rotation relative à elle) ;
+     « l'identité tient sur les petites rotations, dérive sur les faces
+     éloignées » (les auteurs) ;
+   - licence : recherche non commerciale (Qwen Research License), comme
+     Qwen 2.1 lui-même.
 
 ## À faire ensuite, dans l'ordre
 
