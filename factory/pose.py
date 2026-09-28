@@ -38,7 +38,7 @@ LOOK = ("Plain uniform light grey seamless studio background, soft even front li
         "Photorealistic, true-to-life fabric textures, natural hands with five fingers, sharp focus.")
 STYLIZED = ("Plain uniform light grey background, soft even light, eye-level camera. Stylised character design "
             "reference, clean shapes, consistent shading, true colours, natural hands.")
-APOSE = ("a neutral, symmetrical A-pose: the body upright and straight, shoulders and hips level, the head straight, "
+APOSE = ("a neutral A-pose with a symmetrical stance: the body upright and straight, shoulders and hips level, the head straight, "
          "arms straight and held about forty-five degrees out to the sides of the body, hands relaxed with the fingers "
          "pointing down and slightly apart, weight evenly on both feet, both legs straight and slightly apart, feet "
          "pointing forward")
@@ -48,6 +48,14 @@ APOSE = ("a neutral, symmetrical A-pose: the body upright and straight, shoulder
 SQUARE = ("facing the camera squarely: the chest, the hips and both feet turned straight toward the camera, the face "
           "looking straight into the camera. Only the pose changes: do not keep the stance, the lean, the hip shift "
           "or the head turn of <image1>")
+# Seule la posture devient symétrique. « A-pose symétrique » a suffi à
+# Qwen pour recopier le grand logo d'une manche sur l'autre (Survêt,
+# 28/09) : un personnage asymétrique doit le rester, chaque détail de
+# son côté.
+SIDES = ("The person and the outfit stay exactly as asymmetric as in <image1>: every detail that is on one side only "
+         "(a logo or print on one sleeve, a stripe on one leg, a pocket, a strap, a tear, a stain, a tattoo, a scar, "
+         "the hair parting) stays on that same side of the body, at the same size; nothing is mirrored or copied to "
+         "the other side")
 
 VIEWS = {
     45: "a three-quarter front view: the whole body, chest, hips, feet and face, is turned halfway toward the left edge "
@@ -149,6 +157,7 @@ def text_apose(outfit: str, style: str = "photoreal", style_desc: str = "") -> s
         "build, wearing exactly the same outfit as in <image1>" + (f" ({outfit.strip()})" if outfit.strip() else "")
         + ", every garment, colour, fold and detail unchanged.",
         f"The person now stands in the pose of the skeleton in <image2>: {APOSE}, {SQUARE}.",
+        f"{SIDES}.",
         "The skeleton only guides the pose; the image shows the person alone, without lines or dots.",
         "The whole figure from the top of the head to the soles of the shoes is inside the frame.",
         _look(style, style_desc),
@@ -161,6 +170,7 @@ def text_view(azimuth: int, style: str = "photoreal", style_desc: str = "") -> s
         "body build and the exact same outfit, every garment, colour and detail unchanged, in the same pose: "
         f"{APOSE}.",
         f"The camera has moved around the person: this is {VIEWS[azimuth]}.",
+        f"{SIDES}.",
         "The skeleton in <image2> shows the pose and the viewing angle; the image shows the person alone, without "
         "lines or dots.",
         "The whole figure from the top of the head to the soles of the shoes is inside the frame, at the same size "
