@@ -48,7 +48,7 @@ ENTRY = config.REPO / "tools" / "remote" / "unirig_entry.py"
 MIN_MATCHED = 14
 
 
-def run(*, mesh_glb: Path, workdir: Path, report=lambda p, m: None):
+def run(*, mesh_glb: Path, workdir: Path, front: Path | None = None, report=lambda p, m: None):
     mesh = rig._mesh_parts(mesh_glb)
     g = mesh["glb"]
     verts, faces, spans = [], [], []
@@ -84,8 +84,24 @@ def run(*, mesh_glb: Path, workdir: Path, report=lambda p, m: None):
         report(0.75, f"le mesh regardait à {math.degrees(-yaw):.0f}° de +Z : remis face à +Z")
     soma_pos = soma_positions(spec, positions, table)
     owner = unirig_owner(parents, table, spec)
+    marks: dict[str, np.ndarray] = {}
+    if front is not None and Path(front).exists():
+        # Les articulations se posent sur l'anatomie du personnage lui-même,
+        # relevée sur la vue de face dont le mesh est tiré : les règles de
+        # topologie seules mettaient la main au bout des doigts et le coude
+        # au tiers du bras d'un personnage stylisé (Costaud, 28/09).
+        verts = np.concatenate([pr["positions"] for pr in mesh["primitives"]]).astype(np.float64)
+        marks = anatomy(Path(front), verts, workdir=workdir, report=report)
+        if len(marks) >= MIN_MATCHED:
+            soma_pos = soma_positions_from(spec, marks, soma_pos)
+            owner = nearest_owner(parents, positions, soma_pos, spec)
+        else:
+            report(0.78, f"vue de face : {len(marks)} repères seulement, squelette UniRig gardé")
+            marks = {}
     weights = {(mi, pi): to_soma_weights(sj[a:b], sw[a:b], owner) for mi, pi, a, b in spans}
-    report(0.8, f"UniRig : {len(parents)} os, {len(table)} reconnus et reportés sur SOMA 77")
+    report(0.8, f"UniRig : {len(parents)} os, {len(table)} reconnus"
+                + (f" ; {len(marks)} articulations posées sur l'anatomie de la vue de face" if marks else "")
+                + " — reportés sur SOMA 77")
     return skeleton.soma_rig_from_apose(soma_pos, spec), weights, mesh
 
 
@@ -273,6 +289,200 @@ def soma_positions(spec: dict, positions: np.ndarray, table: dict[int, str]) -> 
                 if pa >= 0 else np.eye(3))
         out[j] = known[a] + scale * (turn @ (tmpl[j] - tmpl[a]))
     return out
+
+
+# ── l'anatomie de la vue de face ───────────────────────────────────
+
+# OpenPose 18 (DWPose) et main à 21 points : poignet 0 ; pouce 1-4 ;
+# index 5-8, majeur 9-12, annulaire 13-16, auriculaire 17-20.
+BODY = {"LeftArm": 5, "LeftForeArm": 6, "LeftHand": 7, "RightArm": 2, "RightForeArm": 3, "RightHand": 4,
+        "LeftLeg": 11, "LeftShin": 12, "LeftFoot": 13, "RightLeg": 8, "RightShin": 9, "RightFoot": 10,
+        "Neck1": 1, "LeftEye": 15, "RightEye": 14}
+FINGERS = {"Thumb": (1, 2, 3, 4), "Index": (5, 6, 7, 8), "Middle": (9, 10, 11, 12), "Ring": (13, 14, 15, 16),
+           "Pinky": (17, 18, 19, 20)}
+MIN_SCORE = 0.3
+
+
+def _silhouette_box(img: np.ndarray) -> tuple[float, float, float, float]:
+    if img.ndim == 3 and img.shape[2] == 4:
+        m = img[:, :, 3] > 16
+    else:
+        m = np.abs(img[:, :, :3].astype(int) - img[0, 0, :3].astype(int)).max(2) > 24
+    ys, xs = np.where(m)
+    if len(xs) < 100:
+        raise ChainError("vue de face : silhouette introuvable")
+    return float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max())
+
+
+def anatomy(front: Path, verts: np.ndarray, *, workdir: Path, report=lambda p, m: None) -> dict[str, np.ndarray]:
+    """Les articulations SOMA lues sur la vue de face (DWPose), reportées
+    dans le repère du mesh. La vue préparée et le mesh ont la même
+    silhouette (même rapport largeur/hauteur, pieds au sol ; Costaud,
+    28/09 : 0,82 et 0,82) : un point de l'image passe au mesh par
+    l'échelle des hauteurs ; sa profondeur est le milieu du volume du mesh
+    à cet endroit. Les orteils se lisent sur le pied du mesh, le sommet du
+    crâne en haut du mesh au-dessus du nez."""
+    from PIL import Image
+
+    from . import apose_pick
+
+    entry = apose_pick.measure([front], workdir=workdir / "anatomy", report=report)[str(front)]
+    body = entry.get("body") or []
+    if len(body) < 14:
+        return {}
+    img = np.asarray(Image.open(front))
+    x0, y0, x1, y1 = _silhouette_box(img)
+    lo, hi = verts.min(0), verts.max(0)
+    height = float(hi[1] - lo[1])
+    scale = height / max(1.0, y1 - y0)
+    cx_img, cx_mesh = (x0 + x1) / 2, (lo[0] + hi[0]) / 2
+
+    def xy(q) -> np.ndarray:
+        return np.array([cx_mesh + (q[0] - cx_img) * scale, lo[1] + (y1 - q[1]) * scale])
+
+    def at(q, radius: float = 0.025) -> np.ndarray:
+        """Le point de l'image, au milieu du volume du mesh derrière lui."""
+        c = xy(q)
+        d = np.linalg.norm(verts[:, :2] - c, axis=1)
+        near = verts[d < radius * height]
+        if len(near) < 6:
+            near = verts[np.argsort(d)[:30]]
+        return np.array([c[0], c[1], (near[:, 2].min() + near[:, 2].max()) / 2])
+
+    def ok(q) -> bool:
+        return q is not None and len(q) > 2 and q[2] >= MIN_SCORE
+
+    out: dict[str, np.ndarray] = {}
+    for name, i in BODY.items():
+        if i < len(body) and ok(body[i]):
+            out[name] = at(body[i], 0.018 if "Eye" in name else 0.025)
+    for name in ("LeftEye", "RightEye"):               # les yeux : dans la tête, juste derrière la surface
+        if name in out:
+            near = verts[np.linalg.norm(verts[:, :2] - out[name][:2], axis=1) < 0.02 * height]
+            if len(near):
+                out[name][2] = near[:, 2].max() - 0.012 * height
+    if ok(body[8]) and ok(body[11]):
+        out["Hips"] = (at(body[8]) + at(body[11])) / 2
+    if ok(body[0]):
+        nose = xy(body[0])
+        col = verts[np.abs(verts[:, 0] - nose[0]) < 0.04 * height]
+        if len(col):
+            top = float(col[:, 1].max())
+            out["HeadEnd"] = at([body[0][0], y1 - (top - lo[1]) / scale + 0.02 * (y1 - y0), 1.0], 0.03)
+    # les doigts : chaque main relevée va au poignet le plus proche
+    wrists = {s: out[f"{s}Hand"] for s in ("Left", "Right") if f"{s}Hand" in out}
+    for key in ("left_hand", "right_hand"):
+        hand = entry.get(key) or []
+        if len(hand) < 21 or not ok(hand[0]) or not wrists or sum(ok(q) for q in hand) < 15:
+            continue
+        w = xy(hand[0])
+        side = min(wrists, key=lambda s_: float(np.linalg.norm(wrists[s_][:2] - w)))
+        for finger, ks in FINGERS.items():
+            pts = [hand[k] for k in ks]
+            if not all(ok(q) for q in pts):
+                continue
+            names = [f"{side}Hand{finger}{n}" for n in (("1", "2", "3", "End") if finger == "Thumb"
+                                                         else ("2", "3", "4", "End"))]
+            for n, q in zip(names, pts):
+                out[n] = at(q, 0.012)
+            if finger != "Thumb":                     # le métacarpe, entre le poignet et la jointure
+                out[f"{side}Hand{finger}1"] = wrists[side] + 0.35 * (out[names[0]] - wrists[side])
+    # les orteils : l'avant du pied du mesh, au sol
+    for side in ("Left", "Right"):
+        ankle = out.get(f"{side}Foot")
+        if ankle is None:
+            continue
+        foot = verts[(verts[:, 1] < ankle[1]) & (np.abs(verts[:, 0] - ankle[0]) < 0.06 * height)]
+        if len(foot) < 10:
+            continue
+        tip = foot[np.argmax(foot[:, 2])]
+        ground = lo[1] + 0.015 * height
+        out[f"{side}ToeEnd"] = np.array([tip[0], ground, tip[2]])
+        base = ankle + 0.7 * (tip - ankle)
+        out[f"{side}ToeBase"] = np.array([base[0], ground, base[2]])
+    report(0.78, f"vue de face : {len(out)} articulations relevées")
+    return out
+
+
+def soma_positions_from(spec: dict, marks: dict[str, np.ndarray], fallback: np.ndarray) -> np.ndarray:
+    """Les 77 articulations : celles relevées sur l'anatomie ; la colonne,
+    le cou et la tête le long de l'axe du corps aux proportions du gabarit
+    (entre bassin, cou et sommet du crâne relevés) ; les clavicules entre
+    le cou et l'épaule ; le reste depuis son ancêtre relevé, gabarit tourné
+    sur l'os réel et mis à l'échelle de cet os — celle du personnage, pas
+    une moyenne humaine."""
+    names, parents = spec["names"], spec["parents"]
+    tmpl = skeleton.soma_apose(spec)
+    ix = names.index
+    known = {ix(n): np.asarray(v, float) for n, v in marks.items() if n in names}
+
+    def along(a: str, b: str, members: tuple[str, ...]) -> None:
+        if ix(a) not in known or ix(b) not in known:
+            return
+        pa, pb, ta, tb = known[ix(a)], known[ix(b)], tmpl[ix(a)], tmpl[ix(b)]
+        span = tb[1] - ta[1]
+        for m in members:
+            f = (tmpl[ix(m)][1] - ta[1]) / span if abs(span) > 1e-6 else 0.5
+            known[ix(m)] = pa + f * (pb - pa)
+
+    along("Hips", "Neck1", ("Spine1", "Spine2", "Chest"))
+    along("Neck1", "HeadEnd", ("Neck2", "Head"))
+    for side in ("Left", "Right"):
+        n, sh = ix("Neck1"), ix(f"{side}Arm")
+        if n in known and sh in known:
+            ts, tn, tsh = tmpl[ix(f"{side}Shoulder")], tmpl[n], tmpl[sh]
+            f = float(np.dot(ts - tn, tsh - tn) / max(1e-9, float(np.dot(tsh - tn, tsh - tn))))
+            known[ix(f"{side}Shoulder")] = known[n] + f * (known[sh] - known[n])
+    out = np.zeros_like(tmpl)
+    for j in range(len(names)):
+        if j in known:
+            out[j] = known[j]
+            continue
+        a = parents[j]
+        while a >= 0 and a not in known:
+            a = parents[a]
+        if a < 0:
+            out[j] = fallback[j]
+            continue
+        pa = parents[a]
+        while pa >= 0 and pa not in known:
+            pa = parents[pa]
+        if pa < 0:
+            out[j] = known[a] + (tmpl[j] - tmpl[a])
+            continue
+        real, model = known[a] - known[pa], tmpl[a] - tmpl[pa]
+        local = float(np.linalg.norm(real) / max(1e-9, float(np.linalg.norm(model))))
+        turn = gltf.matrix_from_quat(skeleton.rotation_between(model, real))
+        out[j] = known[a] + local * (turn @ (tmpl[j] - tmpl[a]))
+    return out
+
+
+def _seg_dist(p: np.ndarray, a: np.ndarray, b: np.ndarray) -> float:
+    ab = b - a
+    t = float(np.clip(np.dot(p - a, ab) / max(1e-12, float(np.dot(ab, ab))), 0.0, 1.0))
+    return float(np.linalg.norm(p - (a + t * ab)))
+
+
+def nearest_owner(parents: np.ndarray, positions: np.ndarray, soma_pos: np.ndarray, spec: dict) -> np.ndarray:
+    """Pour chaque os UniRig, l'os SOMA le plus proche : son segment
+    (articulation → milieu de ses enfants) contre ceux de SOMA. Les poids
+    d'UniRig suivent ainsi la chair qu'ils couvrent, quelle que soit la
+    manière dont UniRig a découpé ses chaînes. Les bouts (…End) ne portent
+    pas de poids."""
+    names, sp = spec["names"], spec["parents"]
+    ch = _children(parents)
+    sch: list[list[int]] = [[] for _ in names]
+    for j, p in enumerate(sp):
+        if p >= 0:
+            sch[p].append(j)
+    segs = [(j, soma_pos[j], soma_pos[sch[j]].mean(axis=0) if sch[j] else soma_pos[j])
+            for j, n in enumerate(names) if not n.endswith("End")]
+    owner = np.zeros(len(parents), dtype=int)
+    for i in range(len(parents)):
+        tip = positions[ch[i]].mean(axis=0) if ch[i] else positions[i]
+        mid = (positions[i] + tip) / 2
+        owner[i] = min(segs, key=lambda s_: _seg_dist(mid, s_[1], s_[2]))[0]
+    return owner
 
 
 def unirig_owner(parents: np.ndarray, table: dict[int, str], spec: dict) -> np.ndarray:

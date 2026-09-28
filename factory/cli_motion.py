@@ -36,7 +36,11 @@ def rig(p: Project, costume: str | None, *, mesh: int | None = None, report=None
             print(f"    {int(pr * 100):3d} %  {msg}", flush=True)
 
     try:
-        res = rig_mod.build(mesh_glb=p.path(mesh["glb"]), out_dir=out_dir, report=report)
+        # la vue de face préparée, d'où le mesh est tiré : les articulations
+        # s'y lisent sur l'anatomie du personnage (rig_unirig.anatomy)
+        front = ((cos.get("views") or {}).get("prepared") or {}).get("front", {}).get("file")
+        res = rig_mod.build(mesh_glb=p.path(mesh["glb"]), out_dir=out_dir, front=p.path(front) if front else None,
+                            report=report)
     except rig_mod.RigRefused as exc:
         shutil.rmtree(out_dir, ignore_errors=True)
         raise ChainError(str(exc)) from exc

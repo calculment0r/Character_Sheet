@@ -46,7 +46,7 @@ def arm_angle(sk: Skeleton) -> float:
     return float(np.mean(angles)) if angles else 45.0
 
 
-def build(*, mesh_glb: Path, out_dir: Path, report=lambda p, m: None) -> dict:
+def build(*, mesh_glb: Path, out_dir: Path, front: Path | None = None, report=lambda p, m: None) -> dict:
     """Rigge un mesh ; rend les chemins produits et le squelette."""
     backend = config.backend("unirig")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -56,7 +56,8 @@ def build(*, mesh_glb: Path, out_dir: Path, report=lambda p, m: None) -> dict:
     else:
         from . import rig_unirig
 
-        sk, weights, mesh = rig_unirig.run(mesh_glb=mesh_glb, workdir=out_dir / ".unirig", report=report)
+        sk, weights, mesh = rig_unirig.run(mesh_glb=mesh_glb, workdir=out_dir / ".unirig", front=front,
+                                           report=report)
 
     angle = arm_angle(sk)
     if angle > TPOSE_LIMIT_DEG:
