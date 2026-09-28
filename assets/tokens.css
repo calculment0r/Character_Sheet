@@ -40,6 +40,7 @@
   --line-gr: rgba(47, 107, 74, .85);
   --line-amb: rgba(214, 162, 74, .55);
   --amb-bg:  rgba(214, 162, 74, .08);
+  --grn-bg:  rgba(47, 107, 74, .18);   /* fond d'une pastille retenue (look porté, pose montrée) */
 
   /* voile posé sur une image, sous une étiquette */
   --veil:    rgba(10, 13, 11, .82);

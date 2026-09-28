@@ -1,7 +1,7 @@
 /* ============================================================
    CHARACTER FACTORY — le studio
-   Le casting en affiches, la naissance, les volets d'un personnage
-   (identité, visage, garde-robe, voix, planche), la Scène.
+   Le casting en affiches, la naissance, la fiche d'un personnage et
+   ses étapes en plein cadre, la Scène.
    Que des jetons ; des filets en box-shadow, jamais de bordure.
 
    La première moitié (cartes, blocs d'étage, candidats, file de
@@ -469,24 +469,8 @@ q { color: var(--ink); }
 .atelier.amb { color: var(--amb); box-shadow: inset 0 0 0 1px var(--line-amb); }
 .atelier.amb i { background: var(--amb); }
 
-/* les volets */
-.vols {
-  display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin;
-  box-shadow: inset 0 -1px 0 var(--line); margin-top: calc(-1 * var(--s2));
-}
-.vol {
-  position: relative; display: inline-flex; align-items: center; gap: 8px; flex: none;
-  padding: 12px var(--s4) 13px; text-decoration: none; color: var(--ink3);
-  font-family: var(--f-disp); font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
-  transition: color .12s;
-}
-.vol:hover { color: var(--ink2); }
-.vol.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--cy); }
-.vol .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink3); flex: none; }
-.vol .dot.done { background: var(--grn2); }
-.vol .dot.wait { background: var(--amb); }
-.vol .dot.run { background: var(--cy); animation: sPulse 1.2s infinite; }
-@media (max-width: 640px) { .vol { padding: 11px 10px 12px; font-size: 11px; letter-spacing: .08em; } }
+/* une étape en plein cadre : l'étiquette de l'étape au-dessus du nom */
+.p-who .kicker { color: var(--ink3); }
 
 /* ── ce qui attend : les cartes de l'atelier ────────────── */
 .waits { display: flex; flex-direction: column; gap: var(--s2); }
@@ -796,3 +780,392 @@ body.in-scene .studio { padding-top: var(--s4); padding-bottom: var(--s5); }
 }
 .studio .refs .add { width: auto; min-width: 64px; padding: 0 12px; }
 .cast-top.solo { grid-template-columns: 1fr; }
+
+/* ============================================================
+   LA FICHE — 28/09
+   Un personnage sur une page (Cal : « une super page avec tout pour
+   voir très bien notre personnage et le finetuner ») : le visage en
+   grand et ses looks, le plein pied de la tenue active et ses poses,
+   qui il est, ses expressions ; la 3D, la voix, la taille ; ses
+   tenues, ses détails, où il en est. Maquette : vue « La fiche ».
+   Les places ouvertes ont un filet en tirets : `outline`, qui ne prend
+   pas plus de place qu'un box-shadow.
+   ============================================================ */
+
+body.in-fiche .studio { max-width: 1680px; padding-top: var(--s2); }
+.fi { display: flex; flex-direction: column; min-width: 0; }
+.fi-r { display: contents; }
+.fi-cy { color: var(--cy); }
+.fi-note { margin: 0; font-size: 12px; line-height: 1.55; color: var(--ink3); max-width: 62ch; }
+.fi-row-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* ── l'en-tête : le nom, sa ligne, ses crans, la décision ── */
+.fi-head {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center;
+  gap: var(--s4) var(--s6); padding: var(--s5) 0;
+}
+.fi-back {
+  align-self: start; margin-top: 12px; font-family: var(--f-mono); font-size: 9px; letter-spacing: .2em;
+  text-transform: uppercase; color: var(--ink3); text-decoration: none; white-space: nowrap;
+}
+.fi-back:hover { color: var(--ink); }
+.fi-who { min-width: 0; }
+.fi-name {
+  margin: 0; font-family: var(--f-disp); font-weight: 400; font-size: clamp(30px, 3.6vw, 52px); line-height: 1;
+  letter-spacing: .05em; text-transform: uppercase; overflow-wrap: anywhere; cursor: text;
+}
+.fi-name:hover { color: var(--cy); }
+.fi-who .rename { max-width: 560px; }
+.fi-meta { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.fi-meta span { font-family: var(--f-mono); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--cy); }
+.fi-crans { display: flex; gap: 10px; }
+.fi-cran { display: grid; justify-items: center; gap: 5px; }
+.fi-cran i { width: 30px; height: 6px; border-radius: 1px; box-shadow: inset 0 0 0 1px var(--line); }
+.fi-cran.ok i { background: var(--grn2); box-shadow: none; }
+.fi-cran.run i { background: linear-gradient(90deg, var(--cy) 0 45%, var(--panel3) 45%); animation: sPulse 1.6s infinite; }
+.fi-cran.wait i { background: var(--amb-bg); box-shadow: inset 0 0 0 1px var(--line-amb); }
+.fi-cran span { font-family: var(--f-mono); font-size: 7.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink3); }
+.fi-cran.ok span { color: var(--ink2); }
+.fi-cran.run span { color: var(--cy); }
+.fi-cran.wait span { color: var(--amb); }
+.fi-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.fi-acts .tb { height: 34px; padding: 0 var(--s4); }
+.fi-acts .why { max-width: 17ch; text-align: right; line-height: 1.4; }
+.fi-next { font-family: var(--f-mono); font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--cy); }
+
+/* ── ce qui attend : un bandeau discret ── */
+.fi-waits { display: flex; flex-direction: column; gap: 4px; margin-bottom: var(--s5); }
+.fi-wait {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px var(--s3); padding: 7px 8px 7px var(--s4);
+  border-radius: var(--r2); background: var(--amb-bg); box-shadow: inset 0 0 0 1px var(--line-amb);
+  font-size: 12.5px; line-height: 1.5; color: var(--ink2);
+}
+.fi-wait > i { width: 6px; height: 6px; border-radius: 50%; background: var(--amb); flex: none; }
+.fi-wait > b { color: var(--amb); font-weight: 600; }
+.fi-wait > span:not(.fi-wait-acts) { flex: 1 1 260px; min-width: 0; }
+.fi-wait-acts { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+.fi-wait-acts .lbl { text-decoration: none; padding: 0 6px; }
+.fi-wait-acts .lbl:hover { color: var(--ink); }
+
+/* ── la rangée principale : visage · plein pied · qui il est ── */
+.fi-main {
+  display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) minmax(0, 5fr);
+  gap: var(--s5); align-items: start;
+}
+.fi-col { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+.fi-side { display: flex; flex-direction: column; gap: var(--s6); min-width: 0; }
+
+/* un cadre d'image : le filet passe au-dessus de l'image */
+.fi-frame { position: relative; margin: 0; overflow: hidden; border-radius: var(--r3); background: var(--panel); }
+.fi-frame::after {
+  content: ""; position: absolute; inset: 0; z-index: 3; border-radius: inherit; pointer-events: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.fi-frame > img, .fi-frame > video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.fi-frame img[data-zoom] { cursor: zoom-in; }
+.fi-face { aspect-ratio: 3 / 4; }
+.fi-face > img { object-position: 50% 30%; }
+.fi-body { aspect-ratio: 9 / 16; background: var(--panel2); }
+.fi-body > img { object-fit: contain; }
+
+.fi-cap {
+  position: absolute; inset: auto 0 0 0; z-index: 2; display: flex; justify-content: space-between; align-items: flex-end;
+  gap: 8px; padding: 48px 12px 10px; background: linear-gradient(to top, var(--veil) 35%, var(--veil-0)); pointer-events: none;
+}
+.fi-cap.wrap { flex-wrap: wrap; justify-content: flex-start; }
+.fi-cap > * { pointer-events: auto; }
+.fi-cap .lbl { color: var(--ink2); }
+.fi-cap .lbl b { color: var(--ink); font-weight: 400; }
+
+.fi-tools {
+  position: absolute; top: 8px; right: 8px; z-index: 4; display: flex; gap: 4px;
+  opacity: 0; transition: opacity .15s;
+}
+.fi-frame:hover .fi-tools, .fi-frame:focus-within .fi-tools { opacity: 1; }
+.fi-tools .tb { height: 24px; min-width: 24px; padding: 0 7px; font-size: 10px; background: var(--veil); }
+@media (hover: none) { .fi-tools { opacity: 1; } }
+
+.fi-under { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.fi-under .notice { padding: 8px 12px; }
+
+/* les pastilles : looks, poses, traits */
+.fi-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fi-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 99px;
+  background: transparent; box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap;
+  font-family: var(--f-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink2);
+}
+button.fi-chip:hover { color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-cy); }
+.fi-chip[aria-pressed="true"], .fi-chip.on { color: var(--ink); background: var(--grn-bg); box-shadow: inset 0 0 0 1px var(--line-gr); }
+.fi-chip.run { color: var(--cy); box-shadow: inset 0 0 0 1px var(--line-cy); }
+.fi-chip.run .dot { animation: sPulse 1.2s infinite; }
+.fi-chip.err { color: var(--or); box-shadow: inset 0 0 0 1px var(--line-or); }
+.fi-chip.open { color: var(--ink3); box-shadow: none; outline: 1px dashed var(--line-cy); outline-offset: -1px; }
+.fi-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.fi-chip.on-veil { background: var(--veil); }
+.fi-chip.on-veil[aria-pressed="true"] { background: var(--grn); color: var(--on-grn); box-shadow: none; }
+.fi-chipx { position: relative; display: inline-flex; }
+.fi-x {
+  position: absolute; top: -6px; right: -6px; z-index: 1; width: 17px; height: 17px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 8px; line-height: 1;
+  background: var(--panel3); color: var(--ink2); box-shadow: inset 0 0 0 1px var(--line);
+  opacity: 0; transition: opacity .12s;
+}
+.fi-chipx:hover .fi-x, .fi-x:focus-visible { opacity: 1; }
+.fi-x:hover { color: var(--or); box-shadow: inset 0 0 0 1px var(--line-or); }
+@media (hover: none) { .fi-x { opacity: 1; } }
+
+/* « écris ce qui change » */
+.fi-ask {
+  display: flex; gap: 6px; align-items: center; padding: 4px 4px 4px 12px; border-radius: var(--r2);
+  background: var(--panel); box-shadow: inset 0 0 0 1px var(--line);
+}
+.fi-ask:focus-within { box-shadow: inset 0 0 0 1px var(--line-cy); }
+.fi-ask input { flex: 1; min-width: 0; padding: 5px 0; font-size: 12.5px; color: var(--ink); }
+.fi-ask input::placeholder { color: var(--ink3); }
+.fi-ask input:focus-visible { outline: none; }
+.fi-soon {
+  margin: 0; padding: 8px 12px; border-radius: var(--r2); font-size: 12px; line-height: 1.55; color: var(--ink3);
+  outline: 1px dashed var(--line); outline-offset: -1px;
+}
+.fi-soon b { color: var(--amb); font-weight: 600; }
+
+/* l'audition dans le cadre : les candidats côte à côte, un clic choisit */
+.fi-audition { display: grid; gap: 2px; grid-auto-rows: 1fr; background: var(--bg); }
+.fi-audition.n1 { grid-template-columns: 1fr; }
+.fi-audition.n2 { grid-template-columns: 1fr 1fr; }
+.fi-audition.n3, .fi-audition.n4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.fi-cand {
+  position: relative; min-width: 0; min-height: 0; padding: 0; overflow: hidden; background: var(--panel2); cursor: pointer;
+}
+.fi-cand img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 25%;
+  transition: transform .3s;
+}
+.fi-body .fi-cand img { object-position: 50% 0; }
+.fi-cand:hover img { transform: scale(1.03); }
+.fi-cand::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 2px transparent; transition: box-shadow .12s; }
+.fi-cand:hover::after, .fi-cand:focus-visible::after { box-shadow: inset 0 0 0 2px var(--line-cy); }
+.fi-n {
+  position: absolute; left: 8px; bottom: 8px; z-index: 1; padding: 3px 6px; border-radius: var(--r1); background: var(--veil);
+  font-family: var(--f-mono); font-size: 8px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink2);
+}
+.fi-cand.slot { cursor: default; display: flex; align-items: flex-end; padding: 10px; }
+.fi-cand.slot.on { animation: slotBreath 2.4s ease-in-out infinite; }
+.fi-cand.slot .lbl { color: var(--cy); }
+.fi-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.fi-strip-it {
+  position: relative; flex: none; width: 52px; height: 52px; padding: 0; border-radius: var(--r1); overflow: hidden;
+  background: var(--panel2); opacity: .7; transition: opacity .12s;
+}
+.fi-bodywrap .fi-strip-it { height: 76px; width: 44px; }
+.fi-strip-it img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
+.fi-strip-it::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--line); }
+.fi-strip-it:hover, .fi-strip-it.on { opacity: 1; }
+.fi-strip-it.on::after { box-shadow: inset 0 0 0 2px var(--grn2); }
+
+/* le plein pied : sa tenue en haut, ses poses en bas */
+.fi-bodywrap { position: relative; display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+.fi-bodybar {
+  position: absolute; top: 10px; left: 10px; right: 10px; z-index: 4; display: flex; justify-content: space-between;
+  align-items: center; gap: 8px; pointer-events: none;
+}
+.fi-bodybar > * { pointer-events: auto; }
+.fi-bodybar .lbl { padding: 4px 7px; border-radius: var(--r1); background: var(--veil); color: var(--ink2); }
+.fi-pager { display: flex; gap: 2px; }
+.fi-pager .tb { height: 24px; min-width: 26px; padding: 0 8px; background: var(--veil); }
+
+/* une place ouverte : ce qui manque, et quoi faire */
+.fi-open {
+  display: grid; place-items: center; text-align: center; padding: var(--s5); background: transparent;
+  outline: 1px dashed var(--line-cy); outline-offset: -1px;
+}
+.fi-open::after { display: none; }
+.fi-open > div, .fi-open > form { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: var(--s3); }
+.fi-open p { margin: 0 auto; max-width: 34ch; font-size: 12.5px; line-height: 1.6; color: var(--ink2); }
+.fi-open.amb { outline-color: var(--line-amb); background: var(--amb-bg); }
+.fi-plus { font-family: var(--f-mono); font-size: 22px; line-height: 1; color: var(--ink3); }
+.fi-newcos > form { width: 100%; align-items: stretch; }
+.fi-newcos .fld { font-size: 12.5px; }
+.fi-newcos .refs { justify-content: center; }
+
+/* ── qui il est ── */
+.fi-block { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+.fi-block > header { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); flex-wrap: wrap; }
+.fi-block > header .lbl b { color: var(--ink2); font-weight: 400; }
+.fi-plaque > p:not(.fi-note) {
+  margin: 0; max-width: 62ch; font-size: clamp(15px, 1.2vw, 17px); line-height: 1.55; color: var(--ink); text-wrap: pretty;
+}
+.fi-plaque > p.fi-empty { font-size: 14px; color: var(--ink2); }
+.fi-more summary {
+  cursor: pointer; list-style: none; font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--ink3);
+}
+.fi-more summary::-webkit-details-marker { display: none; }
+.fi-more summary::before { content: "▸ "; }
+.fi-more[open] summary::before { content: "▾ "; }
+.fi-more summary:hover { color: var(--ink2); }
+.fi-more .fiche { margin-top: var(--s3); }
+
+/* ── ses expressions ── */
+.fi-expr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.fi-ex { position: relative; margin: 0; min-width: 0; }
+.fi-ex .fi-frame { aspect-ratio: 1; }
+.fi-ex .fi-frame > img, .fi-ex .fi-frame > video { object-position: 50% 32%; }
+.fi-ex figcaption {
+  margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink2);
+}
+.fi-ex.run .fi-frame, .fi-ex.open .fi-frame { display: grid; place-items: center; text-align: center; padding: 10px; }
+.fi-ex.run .fi-frame::after { box-shadow: inset 0 0 0 1px var(--line-cy); }
+.fi-ex.run q { display: block; margin-top: 4px; font-size: 12px; line-height: 1.4; color: var(--ink2); }
+.fi-ex.run figcaption { color: var(--cy); }
+.fi-ex.open .fi-frame { background: transparent; outline: 1px dashed var(--line-cy); outline-offset: -1px; }
+.fi-ex.open .fi-frame::after { display: none; }
+.fi-ex.open .fi-frame:focus-within { outline-color: var(--cy); }
+.fi-ex.open input { width: 100%; padding: 4px 0; text-align: center; font-size: 12px; color: var(--ink); }
+.fi-ex.open input::placeholder { color: var(--ink3); }
+.fi-ex.open input:focus-visible { outline: none; }
+.fi-ex.open p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink2); }
+.fi-ex.open p b { color: var(--amb); font-weight: 600; }
+.fi-own { display: inline-block; width: 5px; height: 5px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; background: var(--cy); }
+.fi-ex.wide { grid-column: span 2; }
+.fi-ex.wide .fi-frame { aspect-ratio: 2 / 1; }
+.fi-peek {
+  position: absolute; left: 6px; right: 6px; bottom: 6px; z-index: 2; padding: 4px 6px; border-radius: var(--r1);
+  background: var(--veil); text-align: center;
+  font-family: var(--f-mono); font-size: 7.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--cy);
+}
+.fi-bar { position: absolute; inset: 0 0 auto 0; z-index: 2; height: 2px; overflow: hidden; background: var(--panel3); }
+.fi-bar::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 40%; background: var(--cy);
+  animation: fiSlide 1.6s ease-in-out infinite;
+}
+@keyframes fiSlide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+.fi-tray {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--s3); padding: 5px 5px 5px 12px;
+  border-radius: var(--r2); background: var(--panel); box-shadow: inset 0 0 0 1px var(--line);
+}
+.fi-tray .lbl { color: var(--ink2); }
+
+/* ── les bandes du dessous ── */
+.fi-band {
+  margin-top: 30px; padding-top: 16px; box-shadow: inset 0 1px 0 var(--line);
+  display: flex; flex-direction: column; gap: var(--s4); min-width: 0;
+}
+.fi-band > header { display: flex; align-items: baseline; gap: 6px var(--s4); flex-wrap: wrap; }
+.fi-hacts { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.fi-band h2 { margin: 0; font-family: var(--f-disp); font-weight: 400; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; }
+
+/* la 3D, la voix, la taille */
+.fi-band.fi-tiles {
+  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--s4); align-items: stretch;
+}
+.fi-stack { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
+.fi-stack > .fi-tile:first-child { flex: 1; }
+.fi-tile {
+  position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 12px;
+  border-radius: var(--r3); background: var(--panel); box-shadow: inset 0 0 0 1px var(--line);
+}
+.fi-tile.wait { background: var(--amb-bg); box-shadow: inset 0 0 0 1px var(--line-amb); }
+.fi-tile.wait .fi-tile-head .lbl { color: var(--amb); }
+.fi-tile-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.fi-tile-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
+.fi-tile .fi-open { flex: 1; min-height: 150px; }
+.fi-3d {
+  height: clamp(320px, 34vw, 500px);
+  background: radial-gradient(120% 90% at 50% 64%, var(--panel2) 0%, var(--panel) 40%, var(--bg) 80%);
+}
+.fi-3d iframe { position: absolute; inset: 0; display: block; width: 100%; height: 100%; border: 0; }
+.fi-3d.fi-open { height: clamp(220px, 24vw, 340px); }
+.fi-3d.fi-calc > img { position: absolute; inset: 0; object-fit: contain; opacity: .2; }
+.fi-3d.fi-open.fi-calc > img { opacity: .12; }
+.fi-state {
+  position: absolute; top: 8px; left: 8px; z-index: 2; padding: 3px 6px; border-radius: var(--r1); background: var(--veil);
+  font-family: var(--f-mono); font-size: 8px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink2);
+}
+.fi-state.ok { color: var(--grn2); }
+.fi-state.run, .fi-calc .fi-state { color: var(--cy); }
+.fi-state.amb { color: var(--amb); }
+.fi-big {
+  display: block; padding: 0; text-align: left; cursor: text;
+  font-family: var(--f-mono); font-size: 28px; letter-spacing: .06em; text-transform: uppercase; color: var(--cy);
+}
+.fi-big:hover { color: var(--ink); }
+.fi-swatches { display: flex; gap: 4px; }
+.fi-swatches i { flex: 1; height: 30px; border-radius: var(--r1); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* ses tenues, ses détails : des cartes en rangée */
+.fi-row { display: flex; gap: var(--s4); overflow-x: auto; padding-bottom: 6px; align-items: flex-start; scrollbar-width: thin; }
+.fi-card {
+  flex: 0 0 auto; width: 190px; display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0;
+  text-align: left; color: inherit; background: none;
+}
+button.fi-card { cursor: pointer; }
+.fi-card .fi-frame { aspect-ratio: 9 / 16; background: var(--panel2); }
+.fi-card .fi-frame > img { object-fit: contain; }
+.fi-card .fi-frame > img.dim { opacity: .35; }
+button.fi-card:hover .fi-frame::after { box-shadow: inset 0 0 0 1px var(--line-cy); }
+.fi-card.on .fi-frame::after { box-shadow: inset 0 0 0 2px var(--grn2); }
+.fi-card .lbl b { color: var(--ink); font-weight: 400; }
+.fi-card p {
+  margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink2);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.fi-card.wide { width: 270px; }
+.fi-card p.lbl { font-size: 8.5px; line-height: 1.6; color: var(--ink3); }
+/* la place d'une tenue de plus : à la hauteur des cartes de tenue (190 px en 9/16) */
+.fi-card.open .fi-frame {
+  display: grid; place-items: center; padding: var(--s4); background: transparent; aspect-ratio: auto; height: 338px;
+  outline: 1px dashed var(--line-cy); outline-offset: -1px;
+}
+.fi-card.open .fi-frame::after { display: none; }
+.fi-card.open .fi-frame > div { width: 100%; display: flex; flex-direction: column; align-items: stretch; gap: var(--s3); text-align: center; }
+.fi-card.open .fld { min-height: 96px; font-size: 12.5px; }
+.fi-card.open .refs { justify-content: center; }
+.fi-card.open .tb { align-self: center; }
+.fi-card.sq { width: 150px; }
+.fi-card.sq .fi-frame { aspect-ratio: 1; }
+.fi-card.sq .fi-frame > img { object-fit: cover; }
+.fi-card.sheet { width: 267px; }
+.fi-card.sheet .fi-frame { aspect-ratio: 16 / 9; }
+.fi-card .lbl a { color: var(--ink2); }
+.fi-card .lbl a:hover { color: var(--ink); }
+
+/* où il en est : un tableau de service, pas des pourcentages */
+.fi-status {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; padding: 1px;
+  border-radius: var(--r2); overflow: hidden; background: var(--line);
+}
+.fi-status > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 10px 12px; background: var(--panel); }
+.fi-status .v { font-family: var(--f-mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
+.fi-status .v.ok { color: var(--grn2); }
+.fi-status .v.run { color: var(--cy); }
+.fi-status .v.wait { color: var(--amb); }
+.fi-status .v.todo { color: var(--ink3); }
+
+@media (max-width: 1180px) {
+  .fi-head { grid-template-columns: auto minmax(0, 1fr); }
+  .fi-crans, .fi-acts { grid-column: 2; justify-content: flex-start; }
+  .fi-main { grid-template-columns: minmax(0, 4fr) minmax(0, 3fr); }
+  .fi-side { grid-column: 1 / -1; }
+  .fi-band.fi-tiles { grid-template-columns: minmax(0, 1fr); }
+  .fi-stack { flex-direction: row; }
+  .fi-stack > .fi-tile { flex: 1; }
+}
+@media (max-width: 820px) {
+  .fi-head { grid-template-columns: minmax(0, 1fr); gap: var(--s3); padding-top: var(--s2); }
+  .fi-back { margin: 0; }
+  .fi-crans, .fi-acts { grid-column: auto; }
+  .fi-acts .why { text-align: left; }
+  .fi-main { grid-template-columns: minmax(0, 1fr); gap: var(--s6); }
+  .fi-body { max-height: 80vh; }
+  .fi-expr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fi-stack { flex-direction: column; }
+  .fi-3d { height: 380px; }
+  .fi-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fi-wait-acts { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fi-bar::after, .fi-cran.run i { animation: none; }
+}

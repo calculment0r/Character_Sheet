@@ -7,6 +7,8 @@
 <meta name="description" content="Viewer 3D local : GLB, canaux PBR, cinq éclairages, comparaison A/B, clips et poses de contrôle. Tout tourne sur la machine.">
 <!-- icône vide au chargement : le script la dessine depuis les jetons -->
 <link rel="icon" href="data:,">
+<!-- ?embed=1 : le moniteur seul, dans la fiche d'un personnage (assets/viewer.css) -->
+<script>if (new URLSearchParams(location.search).get('embed') === '1') document.documentElement.classList.add('embed');</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Azeret+Mono:wght@300;400;500&family=Saira+Semi+Condensed:wght@400;600&display=swap">
@@ -313,7 +315,8 @@ const state = {
   channel: 'final',
   split: 0.5,         // position du volet, en fraction de la largeur
   grid: true,
-  silhouette: true,
+  // dans la fiche, pas de silhouette vide à côté du personnage (Cal, 28/09)
+  silhouette: !document.documentElement.classList.contains('embed'),
   skeleton: false,
 };
 const view = { w: 1, h: 1, ticks: 1, userMoved: false };
@@ -344,6 +347,12 @@ controls.dampingFactor = 0.09;
 controls.target.set(0, 0.9, 0);
 controls.addEventListener('change', requestRender);
 controls.addEventListener('start', () => { view.userMoved = true; });
+// Dans la fiche (?embed=1) : il tourne doucement, jusqu'à ce qu'on le prenne à la souris.
+if (document.documentElement.classList.contains('embed')) {
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 1.2;
+  controls.addEventListener('start', () => { controls.autoRotate = false; });
+}
 
 /* ── le sol : grille métrique et sol mat ────────────────── */
 // Grille calculée au fragment : 1 m en trait majeur, 0,1 m en trait

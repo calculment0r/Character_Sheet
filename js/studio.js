@@ -8,13 +8,21 @@ import { talk, voiceConfig, micBlocker, Micro } from './parler.js';
 
      #/                     le casting : les personnages en affiches
      #/p/<slug>             un personnage — sa naissance tant qu'il n'est
-                            pas décrit, puis le volet où il attend un choix
-     #/p/<slug>/<volet>     identite · visage · garde-robe · voix · planche
+                            pas décrit, puis SA FICHE : tout sur une page
+     #/p/<slug>/<surface>   une étape en plein cadre, ouverte depuis la
+                            fiche : identite · visage · garde-robe · voix
+                            · planche ; Échap ramène à la fiche
      #/p/<slug>/scene       lui parler
+
+   La fiche (Cal, 28/09 : « une super page avec tout pour voir très bien
+   notre personnage et le finetuner ») : le visage en grand et ses looks,
+   le plein pied de la tenue active et ses poses, qui il est, ses
+   expressions ; puis la 3D, la voix, la taille ; ses tenues, ses
+   détails, où il en est. Plus d'onglets.
 
    On ne tranche ici que le goût : le visage, la tenue, la voix. La
    technique (A-pose, vues, 3D, rig) tourne en arrière-plan ; elle ne
-   se montre que par une puce qui mène aux coulisses. Aucun nom de
+   se montre que par son état, et mène aux coulisses. Aucun nom de
    modèle, aucune graine, aucune méthode dans le parcours.
 
    Tout ce qui calcule part dans la file du serveur, un travail à la
@@ -50,12 +58,20 @@ const state = {
   missing: {},               // actions que le serveur ne connaît pas encore
   scene: { mode: 'talk', busy: false, mic: null, micState: '' },
   system: null,
+  queue: [],                 // la file entière, pour le rang d'un rendu qui attend
+  look: null,                // le look montré en grand ; null = le visage de base
+  bodyView: {},              // par tenue : la pose montrée ('' = le plein pied)
+  motionPeek: null,          // l'expression dont on demande le mouvement
+  traitsOpen: false,
+  moreOpen: false,           // « toute sa fiche », déplié
+  regions: {},               // la fiche : le dernier HTML de chaque région
 };
 
-const TABS = [
-  ['identite', 'Identité'], ['visage', 'Visage'], ['garde-robe', 'Garde-robe'], ['voix', 'Voix'], ['planche', 'Planche'],
-];
-const TAB_IDS = new Set(TABS.map(([id]) => id));
+// Les étapes en plein cadre, ouvertes depuis la fiche.
+const SURFACES = {
+  identite: 'qui il est', visage: 'son visage', 'garde-robe': 'sa garde-robe', voix: 'sa voix', planche: 'sa planche',
+};
+const TAB_IDS = new Set(Object.keys(SURFACES));
 
 // Ce que fait l'arrière-plan, dit simplement pour la puce de l'atelier.
 const BACKGROUND = {
@@ -66,11 +82,12 @@ const BACKGROUND = {
 const HUMAN = {
   face: 'ses visages', fullbody: 'sa tenue', voice_design: 'ses voix', line: 'une réplique',
   presentation: 'sa planche', apose: 'sa pose', views: 'ses vues', prep: 'ses vues', check: 'ses vues',
-  mesh: 'sa 3D', rig: 'son squelette', sheet: 'une planche',
+  mesh: 'sa 3D', rig: 'son squelette', sheet: 'une planche', look: 'un look', expression_add: 'une expression',
 };
 const DONE_TEXT = {
   face: 'ses visages sont arrivés', fullbody: 'ses pleins pieds sont arrivés', voice_design: 'ses voix sont prêtes',
-  line: 'la réplique est dite', presentation: 'sa planche est composée',
+  line: 'la réplique est dite', presentation: 'sa planche est composée', look: 'le look est prêt',
+  expression_add: 'la nouvelle expression est prête',
 };
 const VOICE_ACTIONS = new Set(['voice_design', 'voice_lock', 'voice_unlock', 'line', 'line_keep']);
 
@@ -274,8 +291,9 @@ function waitsOnCasting(list) {
       out.push({ c, href, amb: true, text: `${c.attention} question${c.attention > 1 ? 's' : ''} de l'atelier` });
     }
     const next = c.next?.action;
-    if (next === 'face_lock') out.push({ c, href: `${href}/visage`, text: 'attend que tu choisisses son visage' });
-    else if (next === 'fullbody_ok') out.push({ c, href: `${href}/garde-robe`, text: 'attend que tu choisisses sa tenue' });
+    // La fiche montre elle-même les candidats, avec l'orange du choix.
+    if (next === 'face_lock') out.push({ c, href, text: 'attend que tu choisisses son visage' });
+    else if (next === 'fullbody_ok') out.push({ c, href, text: 'attend que tu choisisses sa tenue' });
     else if (next === 'face' && !c.thumb) out.push({ c, href, text: 'attend que tu dises qui il est' });
   }
   return out;
@@ -360,33 +378,32 @@ function validatedCostume(c) {
   return keys.find((k) => c.costumes[k].fullbody.validated) || null;
 }
 
+// La tenue que montre la fiche : celle qu'on a choisie, sinon la
+// première habillée, sinon la première.
+function activeCostume(c) {
+  const keys = Object.keys(c.costumes);
+  if (state.costume && keys.includes(state.costume)) return state.costume;
+  return keys.find((k) => c.costumes[k].fullbody.validated) || keys[0] || null;
+}
+
+// Sans onglet : la fiche, une étape en plein cadre, la Scène, ou la
+// naissance tant qu'il n'est ni décrit ni en train de naître.
 function currentTab(d) {
   const t = state.route.tab;
   if (t === 'scene' || TAB_IDS.has(t)) return t;
-  const c = d.character;
-  const f = c.face;
+  const f = d.character.face;
   if (!f.locked && !f.candidates.length && !f.brief && !liveJob('face')) return 'naissance';
-  if (!f.locked) return 'visage';
-  const v = voiceOf(c);
-  if (voicePossible(c) && !v?.locked) return 'voix';
-  if (!validatedCostume(c)) return 'garde-robe';
-  return 'planche';
+  return 'fiche';
 }
 
 function renderPerso() {
   const d = state.detail;
   if (!d) return '<p class="prose loading">chargement…</p>';
   const tab = currentTab(d);
-  // Le volet choisi d'office s'écrit dans l'adresse : un choix fait ici
-  // (« C'est lui ») ne fait pas sauter la page vers un autre volet.
-  if (!state.route.tab && TAB_IDS.has(tab)) {
-    state.route.tab = tab;
-    history.replaceState(null, '', tabHref(tab));
-  }
   if (tab === 'naissance') return renderNaissance(d);
   if (tab === 'scene') return renderScene(d);
   const body = { identite: tabIdentite, visage: tabVisage, 'garde-robe': tabGarde, voix: tabVoix, planche: tabPlanche }[tab](d);
-  return `${persoHead(d)}${vols(d, tab)}${attentionCards(d)}<div class="vol-body">${body}</div>`;
+  return `${surfaceHead(d, tab)}${attentionCards(d)}<div class="vol-body">${body}</div>`;
 }
 
 function nameBlock(c, cls) {
@@ -412,17 +429,18 @@ function atelier(d) {
   return ['atelier · en attente', ''];
 }
 
-function persoHead(d) {
+/* Une étape en plein cadre : la fiche reste à un clic (ou Échap), le
+   visage et le nom rappellent de qui on parle. */
+function surfaceHead(d, tab) {
   const c = d.character;
   const s = d.summary;
   const face = s.thumb ? `<img class="p-face" src="${esc(s.thumb)}" alt="" data-zoom="${esc(s.thumb)}" data-cap="${esc(c.name)}">`
     : `<span class="p-face ph">${esc(initials(c.name))}</span>`;
   const [chip, chipCls] = atelier(d);
+  const what = tab === 'identite' && she(c) ? 'qui elle est' : SURFACES[tab];
   return `<div class="p-head">
-    <a class="tb ghost sm back" href="#/" title="le casting">◂ Casting</a>
-    <div class="p-id">${face}<div class="p-who">${nameBlock(c, 'p-name')}
-      <span class="p-line">${esc([s.role, s.archetype].filter(Boolean).join(' · ') || 'un clic sur le nom pour le changer')}</span>
-    </div></div>
+    <a class="tb ghost sm back" href="${tabHref('')}" title="revenir à sa fiche — Échap">◂ Fiche · Échap</a>
+    <div class="p-id">${face}<div class="p-who"><span class="kicker">${esc(what)}</span>${nameBlock(c, 'p-name')}</div></div>
     <span class="sp"></span>
     <a class="atelier ${chipCls}" href="./coulisses.html#/${enc(c.slug)}" title="ce que fait l'atelier : les coulisses"><i></i>${esc(chip)}</a>
     ${c.face.locked ? `<a class="tb" href="${tabHref('scene')}">Parler ▸</a>`
@@ -430,39 +448,739 @@ function persoHead(d) {
   </div>`;
 }
 
-function tabDot(d, id) {
-  const c = d.character;
-  const f = c.face;
-  const v = voiceOf(c);
-  const cos = Object.values(c.costumes);
-  if (id === 'identite') return d.summary.identity.filled >= 8 ? 'done' : '';
-  if (id === 'visage') return f.locked ? 'done' : liveJob('face') ? 'run' : f.candidates.length ? 'wait' : '';
-  if (id === 'garde-robe') {
-    if (liveJob('fullbody')) return 'run';
-    if (cos.some((x) => x.fullbody.validated)) return 'done';
-    return cos.some((x) => x.fullbody.candidates.length) ? 'wait' : '';
-  }
-  if (id === 'voix') {
-    if (liveJob('voice_design')) return 'run';
-    return v?.locked ? 'done' : v?.candidates?.length ? 'wait' : '';
-  }
-  if (liveJob('presentation')) return 'run';
-  return cos.some((x) => x.presentation?.sheet) ? 'done' : '';
+/* ══ LA FICHE ═══════════════════════════════════════════════
+   Une page, tout sous les yeux (maquette du 28/09, vue « La fiche »).
+   Elle se dessine par régions : une région ne se redessine que si
+   son HTML a changé — la 3D, dans son cadre, ne se recharge pas à
+   chaque relevé de la file. Un personnage pas encore fait montre les
+   mêmes blocs, en places ouvertes qui disent quoi faire.
+   ══════════════════════════════════════════════════════════ */
+
+const she = (c) => /^(f\b|fem|woman|fille|girl)/i.test(String(c.identity?.gender || '').trim());
+const cap1 = (t) => { const s = String(t || '').trim(); return s ? s[0].toUpperCase() + s.slice(1) : ''; };
+const low1 = (t) => { const s = String(t || '').trim(); return s ? s[0].toLowerCase() + s.slice(1) : ''; };
+const sentence = (t) => { const s = String(t || '').trim(); return !s || /[.!?…»]$/.test(s) ? s : `${s}.`; };
+const HEX = /^#[0-9a-f]{3,8}$/i;
+
+function ageText(v) {
+  const s = String(v || '').trim();
+  if (/^\d{1,3}$/.test(s)) return `${s} ans`;
+  return /\d/.test(s) || s.length >= 6 ? s : '';     // « la cinquantaine », pas un reste de lecture
 }
 
-function vols(d, tab) {
-  return `<nav class="vols" aria-label="volets">${TABS.map(([id, label]) => {
-    const dot = tabDot(d, id);
-    return `<a class="vol${id === tab ? ' on' : ''}" href="${tabHref(id)}"${id === tab ? ' aria-current="page"' : ''}>
-      <span>${esc(label)}</span>${dot ? `<i class="dot ${dot}"></i>` : ''}</a>`;
-  }).join('')}</nav>`;
+function heightText(v) {
+  const s = String(v || '').trim().replace(',', '.');
+  const m = /(\d+(?:\.\d+)?)/.exec(s);
+  if (!m) return '';
+  let n = Number(m[1]);
+  if (/cm/i.test(s) || n > 3) n /= 100;
+  return n > 0.3 && n < 3 ? `${n.toFixed(2).replace('.', ',')} m` : '';
+}
+
+// Un trait du visage tiré de sa description : « yeux bleus vifs », « short black hair ».
+function feature(desc, re) {
+  const parts = String(desc || '').split(/[,.;]/).map((x) => x.trim().replace(/^(and|et|with|avec)\s+/i, '')).filter(Boolean);
+  let p = parts.find((x) => re.test(x));
+  if (!p) return '';
+  if (p.length > 30) p = p.split(/\s+(?:et|and|with|avec|comme)\s+/i)[0];
+  if (p.length > 34) p = p.split(/\s+/).slice(0, 4).join(' ');
+  return p.toLowerCase();
+}
+
+function metaLine(c) {
+  const s = c.identity || {};
+  return [ageText(s.age), heightText(s.height), feature(s.face_description, /\b(yeux|eyes?)\b/i),
+    feature(s.face_description, /\b(cheveux|hair|chauve|bald)\b/i), c.style === 'stylized' ? 'stylisé' : 'photo'].filter(Boolean);
+}
+
+// La plaque : qui il est, en prose — jamais une liste de champs.
+function plaqueText(c) {
+  const s = c.identity || {};
+  if (String(s.plaque || c.plaque || '').trim()) return String(s.plaque || c.plaque).trim();
+  const elle = she(c);
+  const known = ['personality_traits', 'core_theme', 'behavior_notes', 'emotional_range', 'speech_style', 'role', 'archetype']
+    .some((k) => String(s[k] || '').trim()) || c.face.brief;
+  if (!known) return '';
+  let first = [c.name, ageText(s.age), heightText(s.height)].filter(Boolean).join(', ');
+  const role = String(s.role || s.archetype || '').trim();
+  if (role) first += ` — ${low1(role)}`;
+  const out = [sentence(first)];
+  if (c.face.brief) out.push(sentence(cap1(c.face.brief)));
+  if (s.personality_traits) out.push(sentence(cap1(s.personality_traits)));
+  if (s.core_theme) out.push(sentence(`Ce qui ${elle ? 'la' : 'le'} travaille : ${low1(s.core_theme)}`));
+  if (s.behavior_notes) out.push(sentence(cap1(s.behavior_notes)));
+  if (s.emotional_range) out.push(sentence(`Ses émotions : ${low1(s.emotional_range)}`));
+  if (s.speech_style) out.push(sentence(`Sa façon de parler : ${low1(s.speech_style)}`));
+  return out.join(' ');
+}
+
+const traitList = (c) => String(c.identity?.personality_traits || '').split(',').map((t) => t.trim().toLowerCase())
+  .filter((t) => t && t.length < 28);
+
+// Les expressions d'une tenue : `panels.expressions` (liste), ou une table par id.
+function exprList(pres) {
+  const raw = pres?.panels?.expressions ?? pres?.expressions ?? [];
+  const list = Array.isArray(raw) ? raw : Object.entries(raw).map(([id, e]) => ({ id, ...e }));
+  const gone = new Set((pres?.removed_expressions || []).map((r) => r.id));
+  return list.filter((e) => e && !gone.has(e.id));
+}
+
+function panelList(pres, group) {
+  const raw = pres?.panels?.[group] ?? pres?.[group] ?? [];
+  return (Array.isArray(raw) ? raw : Object.entries(raw).map(([id, e]) => ({ id, ...e }))).filter((e) => e?.file);
+}
+
+const looksOf = (c) => (Array.isArray(c.face.looks) ? c.face.looks.filter((l) => l && l.id) : []);
+
+/* Le rang d'un rendu dans la file entière : Cal passe avant l'autopilote,
+   puis l'ordre d'arrivée — celui de la file du serveur. */
+function rank(job) {
+  if (!job) return 'en calcul';
+  if (job.status === 'running') return `en cours · ${Math.round((job.progress || 0) * 100)} %`;
+  const all = state.queue.length ? state.queue : state.jobs;
+  const q = all.filter((j) => j.status === 'queued')
+    .sort((a, b) => (Number(!!a.auto) - Number(!!b.auto)) || String(a.created).localeCompare(String(b.created)));
+  const i = q.findIndex((j) => j.id === job.id);
+  return i >= 0 ? `en file · rang ${i + 1}` : 'en file';
+}
+
+// La technique d'une tenue : l'autopilote, ou un étage lancé à la main.
+const TECH = new Set(['autopilot', 'apose', 'views', 'prep', 'check', 'mesh', 'rig']);
+function techJob(key) {
+  return state.jobs.find((j) => live(j) && TECH.has(j.action) && (!j.params?.costume || j.params.costume === key));
+}
+
+function techStep(cos, job) {
+  const s = String(job && job.action !== 'autopilot' ? job.action : cos?.autopilot?.step || '');
+  if (s.startsWith('apose')) return 'apose';
+  if (/^(views|prep|check)/.test(s)) return 'views';
+  if (s.startsWith('mesh')) return 'mesh';
+  if (s.startsWith('rig')) return 'rig';
+  return '';
+}
+const STEP_FR = { apose: 'A-pose', views: 'vues', mesh: 'mesh', rig: 'rig' };
+
+function model3d(cos) {
+  if (!cos) return null;
+  const rigs = cos.rigs || [];
+  const rig = [...rigs].reverse().find((r) => r.verdict === 'accepted' && r.glb);
+  if (rig) return { glb: rig.glb, what: `rig v${rig.version} · accepté` };
+  const m = [...(cos.meshes || [])].reverse().find((x) => x.glb);
+  if (m) return { glb: m.glb, what: `mesh v${m.version} · ${rigs.length ? 'rig à regarder' : 'sans rig'}` };
+  return null;
+}
+
+// Ce qui attend Cal pour une tenue, par sorte (rig_review, apose_failed…).
+function waitsFor(d, key, re) {
+  return attentionOf(d).some((a) => (!a.costume || a.costume === key) && re.test(String(a.kind || '')));
+}
+
+/* La prochaine décision de goût : l'unique bouton orange de la fiche. */
+function nextDecision(d) {
+  const c = d.character;
+  const f = c.face;
+  if (!f.locked) {
+    if (!f.candidates.length) return liveJob('face') ? { text: 'ses visages arrivent' } : { html: link('Ses visages ▸', tabHref('visage'), { go: true }) };
+    const n = state.pick.face;
+    return {
+      html: btn('Choisir ce visage ▸', {
+        act: 'face_lock', params: n ? { candidate: String(n) } : undefined, go: true, disabled: !n,
+        why: n ? '' : 'clique d\'abord le visage qui est lui',
+        confirm: 'Garder ce visage ? Il fera autorité sur tout le reste — la tenue, la planche, la 3D — et ne changera plus.',
+      }),
+    };
+  }
+  const keys = Object.keys(c.costumes);
+  if (!keys.length) return { html: btn('L\'habiller ▸', { go: true, attrs: 'data-goto="costume_new.brief"' }) };
+  const act = activeCostume(c);
+  const k = !c.costumes[act].fullbody.validated ? act : keys.find((x) => !c.costumes[x].fullbody.validated);
+  if (k) {
+    const cos = c.costumes[k];
+    if (k !== act) return { html: btn(`${cos.name} ▸`, { go: true, attrs: `data-costume-pick="${esc(k)}"` }) };
+    if (cos.fullbody.candidates.length) {
+      const n = state.pick[`fb:${k}`];
+      return {
+        html: btn('Choisir ce plein pied ▸', {
+          act: 'fullbody_ok', costume: k, params: n ? { candidate: String(n) } : undefined, go: true, disabled: !n,
+          why: n ? '' : 'clique d\'abord le plein pied qui lui va',
+        }),
+      };
+    }
+    if (liveJob('fullbody', k)) return { text: `${she(c) ? 'elle' : 'il'} s'habille` };
+    return { html: btn('L\'habiller ▸', { act: 'fullbody', costume: k, params: { variants: 3 }, go: true }) };
+  }
+  if (voicePossible(c) && !voiceOf(c)?.locked) return { html: link('Choisir sa voix ▸', tabHref('voix'), { go: true }) };
+  const pres = c.costumes[act].presentation;
+  if (!pres?.sheet && !exprList(pres).length && !state.missing.presentation && !liveJob('presentation', act)) {
+    return {
+      html: btn('Composer sa planche ▸', {
+        act: 'presentation', costume: act, go: true,
+        confirm: 'Composer sa planche ? Six expressions, cinq poses naturelles et quatre détails, tirés de son visage et de ce plein pied.',
+      }),
+    };
+  }
+  return { html: link('Lui parler ▸', tabHref('scene'), { go: true }), talk: true };
+}
+
+// Les crans de goût, lus sur le manifeste : fait · en calcul · attend Cal · à venir.
+function crans(d) {
+  const c = d.character;
+  const f = c.face;
+  const all = Object.values(c.costumes);
+  const key = activeCostume(c);
+  const cos = key ? c.costumes[key] : null;
+  const v = voiceOf(c);
+  const tech = cos && techJob(key);
+  const d3 = !cos ? '' : (cos.rigs || []).some((r) => r.verdict === 'accepted') ? 'ok'
+    : tech || cos.autopilot?.state === 'running' ? 'run' : attentionOf(d).some((a) => !a.costume || a.costume === key) ? 'wait' : '';
+  return [
+    ['visage', f.locked ? 'ok' : liveJob('face') ? 'run' : f.candidates.length ? 'wait' : ''],
+    ['tenue', all.some((x) => x.fullbody.validated) ? 'ok' : liveJob('fullbody') ? 'run'
+      : all.some((x) => x.fullbody.candidates.length) ? 'wait' : ''],
+    ['expressions', casesJob(key) || liveJob('expression_add', key) ? 'run'
+      : exprList(cos?.presentation).some((e) => e.file) ? 'ok' : ''],
+    ['voix', v?.locked ? 'ok' : liveJob('voice_design') ? 'run' : v?.candidates?.length ? 'wait' : ''],
+    ['3D', d3],
+  ];
+}
+const CRAN_TITLE = { ok: 'fait', run: 'en calcul', wait: 'attend ton œil', '': 'à venir' };
+
+function ficheHead(d) {
+  const c = d.character;
+  const next = nextDecision(d);
+  return `<header class="fi-head">
+    <a class="fi-back" href="#/" title="le casting">◂ Casting</a>
+    <div class="fi-who">${nameBlock(c, 'fi-name')}
+      <div class="fi-meta">${metaLine(c).map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>
+    <div class="fi-crans" role="list" aria-label="où ${she(c) ? 'elle' : 'il'} en est">${crans(d).map(([k, st]) =>
+      `<div class="fi-cran ${st}" role="listitem" title="${esc(`${k} : ${CRAN_TITLE[st]}`)}"><i></i><span>${esc(k)}</span></div>`).join('')}</div>
+    <div class="fi-acts">${next.html || `<span class="fi-next">${esc(next.text || '')}</span>`}
+      ${c.face.locked && !next.talk ? `<a class="tb ghost" href="${tabHref('scene')}">Parler</a>` : ''}
+      <a class="tb ghost" href="./coulisses.html#/${enc(c.slug)}" title="tout ce que la chaîne fabrique, pour vérifier">Coulisses</a>
+    </div>
+  </header>`;
+}
+
+// Ce qui attend : un bandeau discret sous l'en-tête, jamais en haut de page.
+function ficheWaits(d) {
+  const list = attentionOf(d);
+  if (!list.length) return '';
+  return `<section class="fi-waits" aria-label="ce qui attend">${list.map((a) => `<article class="fi-wait">
+    <i></i><b>${esc(a.title || 'une question de l\'atelier')}</b>${a.text ? `<span>${esc(a.text)}</span>` : ''}
+    <span class="fi-wait-acts">${(a.options || []).map((o, i) => {
+      const opt = optionOf(o, i);
+      return `<button class="tb ghost sm${opt.recommended ? ' rec' : ''}" data-attention="${esc(a.id)}"
+        data-option="${esc(JSON.stringify(opt))}">${esc(opt.label)}${opt.recommended ? '<i>recommandé</i>' : ''}</button>`;
+    }).join('')}<a class="lbl" href="./coulisses.html#/${enc(d.character.slug)}">coulisses ▸</a></span>
+  </article>`).join('')}</section>`;
+}
+
+/* ── le visage en grand, ses looks ── */
+
+function lookJob(l) {
+  return state.jobs.find((j) => live(j) && j.action === 'look' && (j.params?.id === l.id || j.params?.prompt === l.prompt));
+}
+
+function ficheFace(d) {
+  const c = d.character;
+  const f = c.face;
+  if (!f.locked) return faceAudition(d);
+  const looks = looksOf(c);
+  const cur = looks.find((l) => l.id === state.look && l.status === 'ready' && l.file);
+  const src = cur ? fileUrl(c.slug, cur.file, cur.at) : fileUrl(c.slug, f.locked, f.locked_at);
+  const ready = looks.filter((l) => l.status === 'ready' && l.file).length;
+  const chips = looks.map((l) => {
+    const nm = l.name || l.prompt || 'un look';
+    const x = `<button class="fi-x" data-act="look_remove" data-params="${esc(JSON.stringify({ id: l.id }))}"
+      data-confirm="${esc(`Retirer le look « ${nm} » ? Le visage de base ne bouge pas.`)}" title="le retirer" aria-label="retirer ${esc(nm)}">✕</button>`;
+    if (l.status === 'pending') return `<span class="fi-chip run"><i class="dot"></i>${esc(nm)} · ${esc(rank(lookJob(l)))}</span>`;
+    if (l.status === 'error' || !l.file) return `<span class="fi-chipx"><span class="fi-chip err">${esc(nm)} · raté</span>${x}</span>`;
+    return `<span class="fi-chipx"><button class="fi-chip" data-look="${esc(l.id)}" aria-pressed="${cur === l}">${
+      cur === l ? '<i class="dot"></i>' : ''}${esc(nm)}</button>${x}</span>`;
+  });
+  // Un look demandé que le manifeste ne porte pas encore : son travail suffit.
+  state.jobs.filter((j) => live(j) && j.action === 'look' && !looks.some((l) => lookJob(l) === j)).forEach((j) => {
+    chips.push(`<span class="fi-chip run"><i class="dot"></i>${esc(j.params?.name || j.params?.prompt || 'un look')} · ${esc(rank(j))}</span>`);
+  });
+  const ask = state.missing.look
+    ? '<p class="fi-soon"><b>Bientôt</b> · un deuxième visage — maquillage, cicatrice, barbe — sur le même visage : l\'atelier ne sait pas encore le retoucher.</p>'
+    : `<form class="fi-ask" data-form="look" autocomplete="off">
+        <input name="prompt" data-draft="look.prompt" value="${esc(draft('look.prompt'))}" spellcheck="false"
+          placeholder="ce qui change : « une cicatrice sur la pommette gauche »" aria-label="un look : ce qui change sur son visage">
+        <button class="tb ghost sm" type="submit">Essayer</button></form>`;
+  return `<figure class="fi-frame fi-face">
+      <img src="${esc(src)}" alt="${esc(c.name)}, ${cur ? 'look' : 'visage'}" data-zoom="${esc(src)}" data-cap="${esc(cur ? `${c.name} · ${cur.name || cur.prompt}` : c.name)}">
+      <figcaption class="fi-cap"><span class="lbl"><b>${esc(cur ? `look · ${cur.name || cur.prompt}` : 'visage')}</b>${
+        cur ? '' : ` · choisi le ${esc(day(f.locked_at))}`}</span><span class="lbl">${ready ? `${ready} look${ready > 1 ? 's' : ''}` : ''}</span></figcaption>
+    </figure>
+    <div class="fi-under">
+      <div class="fi-chips" aria-label="ses looks"><span class="lbl">Looks</span>
+        <button class="fi-chip" data-look="" aria-pressed="${!cur}">${cur ? '' : '<i class="dot"></i>'}naturel</button>${chips.join('')}</div>
+      ${ask}
+    </div>`;
+}
+
+/* L'audition dans le cadre : un visage pas encore choisi montre ses
+   candidats ; un clic le prend en grand, l'orange de l'en-tête le garde. */
+function audition({ kind, cands, current, older, job, expected, pickN, src, cls, label }) {
+  const picked = cands.find((x) => String(x.n) === String(pickN));
+  const all = [...current, ...older];
+  if (picked) {
+    return `<figure class="fi-frame ${cls}">
+        <img src="${esc(src(picked))}" alt="${esc(`${label} n° ${picked.n}`)}" data-zoom="${esc(src(picked))}" data-cap="${esc(`n° ${picked.n}`)}">
+        <figcaption class="fi-cap"><span class="lbl"><b>n° ${picked.n} · choisi</b></span><span class="lbl">pas encore gardé</span></figcaption>
+      </figure>
+      <div class="fi-strip" aria-label="les autres">${all.map((x) => `<button class="fi-strip-it${x === picked ? ' on' : ''}"
+        data-pick="${esc(kind)}" data-val="${x.n}" title="${x === picked ? 'revoir tous les candidats' : `n° ${x.n}`}">
+        <img src="${esc(src(x))}" alt="n° ${x.n}" loading="lazy"></button>`).join('')}</div>`;
+  }
+  const n = current.length + Math.max(0, expected - current.length);
+  const cells = current.map((x) => `<button class="fi-cand" data-pick="${esc(kind)}" data-val="${x.n}" title="choisir le n° ${x.n}">
+      <img src="${esc(src(x))}" alt="${esc(`${label} n° ${x.n}`)}" loading="lazy"><span class="fi-n">n° ${x.n}</span></button>`)
+    .concat(Array.from({ length: n - current.length }, (_, i) => {
+      const first = job?.status === 'running' && i === 0;
+      return `<div class="fi-cand slot${first ? ' on' : ''}"><span class="lbl">${first ? rank(job) : 'ensuite'}</span></div>`;
+    }));
+  return `<div class="fi-frame ${cls} fi-audition n${Math.min(n, 4)}">${cells.join('')}</div>
+    ${older.length ? `<div class="fi-strip" aria-label="les précédents">${older.map((x) => `<button class="fi-strip-it"
+      data-pick="${esc(kind)}" data-val="${x.n}" title="n° ${x.n}"><img src="${esc(src(x))}" alt="n° ${x.n}" loading="lazy"></button>`).join('')}</div>` : ''}`;
+}
+
+function faceAudition(d) {
+  const c = d.character;
+  const cands = c.face.candidates.map((x, i) => ({ ...x, n: i + 1 }));
+  const l = lot(cands, 'face');
+  const pickN = state.pick.face;
+  const body = cands.length || l.job
+    ? audition({ kind: 'face', cands, ...l, pickN, src: (x) => fileUrl(c.slug, x.file, x.at), cls: 'fi-face', label: 'visage' })
+    : `<div class="fi-frame fi-face fi-open"><div><div class="fi-plus">+</div><p>Ses visages viennent de sa première phrase.</p></div></div>`;
+  return `${body}
+    <div class="fi-under"><div class="fi-chips"><span class="lbl">${
+      cands.length ? `Audition · ${cands.length} visage${cands.length > 1 ? 's' : ''} · un clic : choisir` : 'Audition'}</span>
+      <a class="tb ghost sm" href="${tabHref('visage')}" title="plus âgé, plus jeune, autre coiffure… et le redécrire">Plein cadre ⤢</a></div>
+      ${failure(l.job ? null : lastJob('face'))}</div>`;
+}
+
+/* ── le plein pied de la tenue active, ses poses ── */
+
+function ficheBody(d) {
+  const c = d.character;
+  const keys = Object.keys(c.costumes);
+  const key = activeCostume(c);
+  if (!key) {
+    if (!c.face.locked) {
+      return `<div class="fi-frame fi-body fi-open"><div><div class="fi-plus">+</div>
+        <p>Sa tenue, en pied et dans une pose naturelle, viendra une fois son visage choisi.</p></div></div>`;
+    }
+    return `<div class="fi-frame fi-body fi-open fi-newcos"><form data-form="costume_new">
+      <div class="fi-plus">+</div>
+      <p>Ce qu'${she(c) ? 'elle' : 'il'} porte, de la tête aux pieds. Trois pleins pieds suivront, dans une pose naturelle.</p>
+      ${textarea('costume_new.brief', '', 'en français : « caban bleu marine usé, pull de laine écrue, bottes de pont »', 4)}
+      ${refsZone('costume_new', 'une photo de vêtement')}
+      ${btn('L\'habiller ▸', { act: 'costume_go', form: 'costume_new' })}
+    </form></div>`;
+  }
+  const cos = c.costumes[key];
+  const fb = cos.fullbody;
+  const i = keys.indexOf(key);
+  const pager = keys.length > 1 ? `<div class="fi-pager">
+      <button class="tb" data-costume-step="-1" aria-label="tenue précédente" title="tenue précédente">◂</button>
+      <button class="tb" data-costume-step="1" aria-label="tenue suivante" title="tenue suivante">▸</button></div>` : '';
+  const bar = `<div class="fi-bodybar"><span class="lbl">${esc(cos.name)}${keys.length > 1 ? ` · ${i + 1}/${keys.length}` : ''}</span>${pager}</div>`;
+  if (!fb.validated) {
+    const cands = fb.candidates.map((x, n) => ({ ...x, n: n + 1 }));
+    const l = lot(cands, 'fullbody', key);
+    if (cands.length || l.job) {
+      return `<div class="fi-bodywrap">${audition({ kind: `fb:${key}`, cands, ...l, pickN: state.pick[`fb:${key}`],
+        src: (x) => fileUrl(c.slug, x.file, x.at), cls: 'fi-body', label: cos.name })}${bar}</div>
+        <div class="fi-under"><div class="fi-chips"><span class="lbl">${cands.length ? 'un clic : choisir'
+          : `${she(c) ? 'elle' : 'il'} s'habille`}</span>
+          <a class="tb ghost sm" href="${tabHref('garde-robe')}" title="sa description, ses images, trois autres">Plein cadre ⤢</a></div>
+          ${failure(l.job ? null : lastJob('fullbody', key))}</div>`;
+    }
+    return `<div class="fi-bodywrap"><div class="fi-frame fi-body fi-open"><div><div class="fi-plus">+</div>
+        <p>${cos.brief ? `« ${esc(cos.brief)} »` : 'Cette tenue attend son plein pied.'}</p>
+        <p class="lbl">même visage · pose naturelle</p>
+        <a class="tb ghost sm" href="${tabHref('garde-robe')}">La décrire ⤢</a></div></div>${bar}</div>
+      <div class="fi-under">${failure(lastJob('fullbody', key))}</div>`;
+  }
+  const poses = panelList(cos.presentation, 'poses');
+  const view = state.bodyView[key] || '';
+  const pose = poses.find((p) => p.id === view);
+  const src = pose ? fileUrl(c.slug, pose.file, pose.at) : fileUrl(c.slug, fb.validated, fb.validated_at);
+  const chips = poses.length ? `<div class="fi-chips" aria-label="ses poses">
+      <button class="fi-chip on-veil" data-body-view="" aria-pressed="${!pose}">plein pied</button>${poses.map((p) =>
+      `<button class="fi-chip on-veil" data-body-view="${esc(p.id)}" aria-pressed="${pose === p}">${esc(p.label || p.id)}</button>`).join('')}</div>`
+    : `<span class="lbl">${fb.validated_by === 'import' ? 'tiré de son image' : `choisi le ${esc(day(fb.validated_at))}`} · ses poses viennent avec la planche</span>`;
+  return `<div class="fi-bodywrap"><figure class="fi-frame fi-body">
+      <img src="${esc(src)}" alt="${esc(`${c.name} en pied, ${cos.name}${pose ? `, ${pose.label || pose.id}` : ''}`)}"
+        data-zoom="${esc(src)}" data-cap="${esc(`${cos.name}${pose ? ` · ${pose.label || pose.id}` : ''}`)}">
+      <figcaption class="fi-cap wrap">${chips}</figcaption>
+    </figure>${bar}</div>`;
+}
+
+/* ── qui il est ── */
+
+function ficheWho(d) {
+  const c = d.character;
+  const elle = she(c);
+  const prose = plaqueText(c);
+  const have = traitList(c);
+  const s = c.identity || {};
+  const thin = prose && !['core_theme', 'behavior_notes', 'emotional_range', 'speech_style'].some((k) => String(s[k] || '').trim());
+  const chips = state.traitsOpen
+    ? [...new Set([...have, ...TRAITS])].map((t) => `<button class="fi-chip" data-trait="${esc(t)}" aria-pressed="${have.includes(t)}">${esc(t)}</button>`)
+    : have.map((t) => `<span class="fi-chip on">${esc(t)}</span>`);
+  return `<section class="fi-block fi-plaque">
+    <header><span class="lbl">${elle ? 'Qui elle est' : 'Qui il est'}</span><span class="lbl">écrit avec l'IA · <b>tu corriges</b></span></header>
+    ${prose ? `<p>${esc(prose)}</p>` : `<p class="fi-empty">Son caractère reste à écrire. Dis à l'IA qui ${elle ? 'elle' : 'il'} est :
+      ses traits, ce qui ${elle ? 'la' : 'le'} travaille, ses émotions, sa façon de parler.</p>`}
+    ${thin ? `<p class="fi-note">Le reste — ce qui ${elle ? 'la' : 'le'} travaille, ses émotions, sa façon de parler — s'écrit avec l'IA.</p>` : ''}
+    <div class="fi-chips">${chips.join('')}
+      <button class="fi-chip open" data-traits-open>${state.traitsOpen ? 'fini' : '+ un trait'}</button></div>
+    <div class="fi-row-acts">
+      <a class="tb ghost" href="./console.html?slug=${enc(c.slug)}" title="la console Identité : l'IA le définit avec toi">Affiner avec l'IA</a>
+      ${c.face.locked ? `<a class="tb ghost" href="${tabHref('scene')}">Lui parler</a>` : ''}
+    </div>
+    <details class="fi-more"${state.moreOpen ? ' open' : ''}><summary>toute sa fiche · un clic pour corriger</summary>
+      <div class="sheet-section fiche">${ficheRows(d, 'CORE')}${ficheRows(d, 'PSYCHE')}</div>
+      <div class="adv-body"><span class="lbl">rendu</span><span class="seg">
+        <button class="tb sm${c.style === 'photoreal' ? ' on' : ''}" data-style-set="photoreal">Photo</button>
+        <button class="tb sm${c.style === 'stylized' ? ' on' : ''}" data-style-set="stylized">Stylisé</button></span></div>
+    </details>
+  </section>`;
+}
+
+/* ── ses expressions ── */
+
+function ficheExpr(d) {
+  const c = d.character;
+  const key = activeCostume(c);
+  const cos = key ? c.costumes[key] : null;
+  const pres = cos?.presentation;
+  const ready = !!(c.face.locked && cos?.fullbody.validated);
+  const list = exprList(pres).filter((e) => e.file);
+  const removed = pres?.removed_expressions || [];
+  const presJob = casesJob(key);
+  // Une expression en calcul n'a pas d'entrée tant qu'elle n'est pas faite : son travail suffit.
+  const jobs = state.jobs.filter((j) => live(j) && j.action === 'expression_add' && (j.params?.costume || null) === key);
+  const tiles = [];
+  for (const e of list) {
+    const nm = e.label || e.name || e.id;
+    const src = fileUrl(c.slug, e.file, e.at);
+    const peek = state.motionPeek === e.id;
+    const clip = e.clip ? fileUrl(c.slug, e.clip, e.at) : '';
+    tiles.push(`<figure class="fi-ex${peek ? ' peek' : ''}"${e.custom && e.prompt ? ` title="${esc(`« ${e.prompt} »`)}"` : ''}><div class="fi-frame">
+      ${peek && clip ? `<video src="${esc(clip)}" autoplay loop muted playsinline></video>`
+        : `<img src="${esc(src)}" alt="${esc(nm)}" loading="lazy" data-zoom="${esc(src)}" data-cap="${esc(`${c.name} · ${nm}`)}">`}
+      ${peek && !clip ? '<span class="fi-peek">en mouvement : à venir</span>' : ''}
+      <div class="fi-tools">
+        <button class="tb sm" data-motion="${esc(e.id)}" title="${clip ? 'la voir bouger' : 'en mouvement : à venir'}"
+          aria-label="la voir bouger">▶</button>
+        <button class="tb sm" data-act="expression_remove" data-params="${esc(JSON.stringify({ costume: key, id: e.id }))}"
+          title="l'écarter" aria-label="écarter ${esc(nm)}">✕</button>
+      </div></div><figcaption>${e.custom ? '<i class="fi-own" title="une expression à toi"></i>' : ''}${esc(nm)}</figcaption></figure>`);
+  }
+  jobs.slice().reverse().forEach((j) => tiles.push(exprRun(j.params?.prompt || 'une expression', j)));
+  if (presJob && !list.length) {
+    for (let i = 0; i < 6; i++) tiles.push(`<figure class="fi-ex run"><div class="fi-frame">${i ? '' : '<div class="fi-bar"></div>'}
+      <div><div class="lbl fi-cy">${i ? 'ensuite' : esc(rank(presJob))}</div></div></div><figcaption>planche</figcaption></figure>`);
+  }
+  if (!ready) {
+    tiles.push(`<figure class="fi-ex open wide"><div class="fi-frame"><p>Ses expressions viennent de son visage, une fois ${
+      c.face.locked ? 'sa tenue choisie' : 'son visage choisi'}.</p></div></figure>`);
+  } else {
+    if (!list.length && !presJob) {
+      tiles.push(`<figure class="fi-ex open wide"><div class="fi-frame"><p>Six expressions de base viennent avec sa planche :
+        neutre, joie, colère, tristesse, surprise, malice.</p></div></figure>`);
+    }
+    tiles.push(state.missing.expression_add
+      ? '<figure class="fi-ex open"><div class="fi-frame"><p><b>Bientôt</b> · une expression à toi, en une phrase.</p></div><figcaption>une expression</figcaption></figure>'
+      : `<figure class="fi-ex open"><form class="fi-frame" data-form="expr" data-costume="${esc(key)}" autocomplete="off">
+          <div class="fi-plus">+</div><input name="prompt" data-draft="expr.prompt" value="${esc(draft('expr.prompt'))}" spellcheck="false"
+            placeholder="en mots · Entrée" aria-label="une nouvelle expression, en mots, puis Entrée"></form>
+          <figcaption>une expression</figcaption></figure>`);
+  }
+  const last = removed[removed.length - 1];
+  const tray = last ? `<div class="fi-tray"><span class="lbl">« ${esc(last.label || last.name || last.id)} » écartée${
+      removed.length > 1 ? ` · ${removed.length} à la corbeille` : ''}</span>
+      <button class="tb ghost sm" data-act="expression_restore" data-params="${esc(JSON.stringify({ costume: key, id: last.id }))}">Annuler</button>
+      ${removed.slice(0, -1).reverse().map((r) => `<button class="fi-chip" data-act="expression_restore"
+        data-params="${esc(JSON.stringify({ costume: key, id: r.id }))}" title="la remettre">${esc(r.label || r.name || r.id)} ↺</button>`).join('')}
+    </div>` : '';
+  // La planche composée ne suit pas d'elle-même une expression ajoutée ou écartée.
+  const stale = sheetStale(pres) && !liveJob('presentation', key) ? `<div class="fi-tray"><span class="lbl">sa planche date d'avant ces changements</span>
+      ${recompose(key)}</div>` : '';
+  const n = list.length;
+  return `<section class="fi-block">
+    <header><span class="lbl">Expressions · <b>${n}</b></span><span class="lbl">${n ? 'survole : ▶ la voir bouger · ✕ l\'écarter' : ''}</span></header>
+    <div class="fi-expr">${tiles.join('')}</div>${tray}${stale}
+  </section>`;
+}
+
+// Un travail de planche qui refait des cases — pas la seule recomposition.
+function casesJob(key) {
+  const j = liveJob('presentation', key);
+  return j && String(j.params?.redo || '') !== 'sheet' ? j : null;
+}
+
+function sheetStale(pres) {
+  if (!pres?.sheet) return false;
+  const at = String(pres.at || '');
+  return exprList(pres).some((e) => e.custom && String(e.at || '') > at)
+    || (pres.removed_expressions || []).some((r) => String(r.removed_at || '') > at);
+}
+
+const recompose = (key) => btn('Recomposer la planche', {
+  act: 'presentation', costume: key, params: { redo: ['sheet'] }, sm: true,
+  confirm: 'Recomposer sa planche avec ses expressions d\'aujourd\'hui ? Aucune case n\'est refaite : seule la planche se recompose.',
+});
+
+function exprRun(text, job) {
+  return `<figure class="fi-ex run"><div class="fi-frame"><div class="fi-bar"></div>
+    <div><div class="lbl fi-cy">en calcul</div><q>${esc(text)}</q></div></div><figcaption>${esc(rank(job))}</figcaption></figure>`;
+}
+
+/* ── la bande du dessous : la 3D, la voix, la taille ── */
+
+function fiche3d(d) {
+  const c = d.character;
+  const key = activeCostume(c);
+  const cos = key ? c.costumes[key] : null;
+  const m = model3d(cos);
+  const job = cos && techJob(key);
+  const running = !!(job || cos?.autopilot?.state === 'running');
+  const step = STEP_FR[techStep(cos, job)] || '';
+  const status = running ? `en calcul${step ? ` · ${step}` : ''} · ${rank(job)}` : m ? m.what : '';
+  const head = `<div class="fi-tile-head"><span class="lbl">Modèle 3D</span><span class="lbl${running ? ' fi-cy' : ''}">${esc(status)}</span></div>`;
+  let view;
+  if (m) {
+    const src = fileUrl(c.slug, m.glb);
+    view = `<div class="fi-frame fi-3d"><iframe src="./viewer.html?embed=1&amp;slug=${enc(c.slug)}&amp;src=${enc(src)}"
+      title="${esc(`le modèle 3D de ${c.name}`)}" loading="lazy"></iframe></div>`;
+  } else if (running) {
+    const still = cos.apose?.validated || cos.fullbody.validated;
+    view = `<div class="fi-frame fi-3d fi-calc">${still ? `<img src="${esc(fileUrl(c.slug, still))}" alt="">` : ''}
+      <div class="fi-bar"></div><span class="fi-state">en calcul${step ? ` · ${esc(step)}` : ''}</span></div>`;
+  } else {
+    const still = cos?.apose?.validated || cos?.fullbody.validated;
+    view = `<div class="fi-frame fi-3d fi-open${still ? ' fi-calc' : ''}">${still ? `<img src="${esc(fileUrl(c.slug, still))}" alt="">` : ''}
+      <div><p>${cos?.fullbody.validated
+      ? 'L\'atelier est au repos pour cette tenue : A-pose, vues, mesh et rig reprennent depuis les coulisses.'
+      : 'Il se fait seul après le plein pied : A-pose, vues, mesh, rig.'}</p></div></div>`;
+  }
+  const foot = `<div class="fi-tile-foot"><p class="fi-note">${m ? 'Tourne-le à la souris. Se refait seul quand le plein pied change.'
+    : 'Se fait seul après le plein pied, validé par la mesure ; deux échecs t\'appellent.'}</p>
+    ${m ? `<a class="tb ghost sm" href="./viewer.html?slug=${enc(c.slug)}&amp;src=${enc(fileUrl(c.slug, m.glb))}">Ouvrir le viewer ⤢</a>`
+      : `<a class="tb ghost sm" href="./coulisses.html#/${enc(c.slug)}">Coulisses ▸</a>`}</div>`;
+  return { head, view, foot };
+}
+
+function ficheVoice(d) {
+  const c = d.character;
+  const v = voiceOf(c);
+  const s = c.identity || {};
+  if (v?.locked) {
+    const url = fileUrl(c.slug, lockedVoiceFile(v), v.locked_at);
+    return `<div class="fi-tile"><div class="fi-tile-head"><span class="lbl">Sa voix</span><span class="lbl ok">choisie</span></div>
+      ${player(url, { text: v.locked_text, cls: 'lg' })}${v.description ? `<p class="fi-note">${esc(v.description)}</p>` : ''}
+      <div class="fi-row-acts"><a class="tb ghost sm" href="${tabHref('voix')}">Faire dire · changer ⤢</a></div></div>`;
+  }
+  const job = liveJob('voice_design');
+  const n = v?.candidates?.length || 0;
+  const what = job ? `en calcul · ${rank(job)}` : n ? 'à choisir' : voicePossible(c) ? 'à trouver' : 'bientôt';
+  const body = n ? `<p>${n} voix à écouter, sur la même réplique. Tu gardes la sienne ; elle sert aussi quand tu lui parles.</p>`
+    : voicePossible(c) ? '<p>Décris-la en quelques mots : quatre voix liront la même réplique, tu gardes la sienne.</p>'
+      : `<p>Le studio n'a pas encore de service de voix. Dès qu'il est branché : quatre voix sur la même réplique.</p>${
+        s.speech_style ? `<p class="fi-note">Ce qu'on sait déjà : « ${esc(s.speech_style)} »</p>` : ''}`;
+  return `<div class="fi-tile wait"><div class="fi-tile-head"><span class="lbl">Sa voix</span><span class="lbl">${esc(what)}</span></div>
+    <div class="fi-frame fi-open amb"><div>${body}</div></div>
+    ${voicePossible(c) ? `<div class="fi-row-acts"><a class="tb ghost sm" href="${tabHref('voix')}">${n ? 'Écouter ⤢' : 'La décrire ⤢'}</a></div>` : ''}</div>`;
+}
+
+function ficheSize(d) {
+  const c = d.character;
+  const s = c.identity || {};
+  const key = activeCostume(c);
+  const cos = key ? c.costumes[key] : null;
+  const h = heightText(s.height);
+  const pal = (cos?.presentation?.palette || []).filter((x) => HEX.test(String(x)));
+  // Les teintes de la palette sont des données du personnage, pas du thème.
+  const swatches = (list, what) => `<div class="fi-swatches" aria-label="${esc(what)}">${
+    list.map((x) => `<i style="background:${x}" title="${x}"></i>`).join('')}</div>`;
+  const written = String(s.color_palette || '').match(/#(?:[0-9a-f]{6}|[0-9a-f]{3})\b/gi) || [];
+  const palette = pal.length ? `${swatches(pal, `palette de ${cos.name}`)}<span class="lbl">palette lue sur ${esc(cos.name)}</span>`
+    : written.length ? `${swatches(written, 'palette écrite')}<span class="lbl">palette écrite · lue sur la planche ensuite</span>`
+      : s.color_palette ? `<p class="fi-note">« ${esc(s.color_palette)} »</p><span class="lbl">palette écrite · lue sur la planche ensuite</span>`
+        : '<span class="lbl">la palette se lit sur la planche</span>';
+  return `<div class="fi-tile"><div class="fi-tile-head"><span class="lbl">Taille et palette</span></div>
+    <button class="fi-big" data-edit-open="height" title="corriger sa taille">${h ? esc(h) : '—'}</button>
+    <p class="fi-note">${h ? 'Le mesh est mis à cette échelle. La changer ne refait que le mesh et le rig.'
+      : 'Sa taille n\'est pas écrite : un clic pour la donner.'}</p>
+    ${palette}</div>`;
+}
+
+/* ── ses tenues, ses détails, où il en est ── */
+
+function ficheTenues(d) {
+  const c = d.character;
+  const keys = Object.keys(c.costumes);
+  if (!keys.length) return '';      // la première se décrit dans le cadre du plein pied
+  const act = activeCostume(c);
+  const cards = keys.map((k) => {
+    const cos = c.costumes[k];
+    const fb = cos.fullbody;
+    const img = fb.validated ? fileUrl(c.slug, fb.validated, fb.validated_at)
+      : fb.candidates.length ? fileUrl(c.slug, fb.candidates.at(-1).file, fb.candidates.at(-1).at) : '';
+    const job = liveJob('fullbody', k);
+    const tech = techJob(k);
+    let st = ['à habiller', ''];
+    if (fb.validated) {
+      st = (cos.rigs || []).some((r) => r.verdict === 'accepted') ? ['3D faite', 'ok']
+        : tech || cos.autopilot?.state === 'running' ? ['3D en calcul', 'run'] : ['habillé', 'ok'];
+    } else if (job) st = [rank(job), 'run'];
+    else if (fb.candidates.length) st = ['à choisir', 'amb'];
+    return `<button class="fi-card${k === act ? ' on' : ''}" data-costume-pick="${esc(k)}" aria-pressed="${k === act}">
+      <div class="fi-frame">${img ? `<img src="${esc(img)}" alt="" loading="lazy"${fb.validated ? '' : ' class="dim"'}>` : ''}
+        <span class="fi-state ${st[1]}">${esc(st[0])}</span></div>
+      <span class="lbl"><b>${esc(cos.name)}</b></span>${cos.brief ? `<p>« ${esc(cos.brief)} »</p>` : ''}</button>`;
+  });
+  const add = c.face.locked ? `<form class="fi-card wide open" data-form="costume_new">
+      <div class="fi-frame"><div>
+        <div class="fi-plus">+</div>
+        ${textarea('costume_new.brief', '', 'une autre tenue, en mots : « robe noire droite, veste de cuir courte, bottines »', 3)}
+        ${refsZone('costume_new', 'une photo de vêtement')}
+        <p class="lbl">même visage · même corps · pose naturelle</p>
+        ${btn('L\'habiller ▸', { act: 'costume_go', form: 'costume_new', sm: true })}
+      </div></div><span class="lbl">une tenue de plus</span></form>` : '';
+  return `<section class="fi-band">
+    <header><h2>Ses tenues</h2><span class="lbl">chaque tenue a son plein pied, ses poses et sa 3D · un clic : la montrer</span>
+      <span class="fi-hacts"><a class="tb ghost sm" href="${tabHref('garde-robe')}">Garde-robe ⤢</a></span></header>
+    <div class="fi-row">${cards.join('')}${add}</div>
+  </section>`;
+}
+
+function ficheDetails(d) {
+  const c = d.character;
+  const key = activeCostume(c);
+  const cos = key ? c.costumes[key] : null;
+  const pres = cos?.presentation;
+  const det = panelList(pres, 'details');
+  if (!det.length && !pres?.sheet) return '';
+  const src = (f) => fileUrl(c.slug, f, pres.at);
+  return `<section class="fi-band">
+    <header><h2>Détails</h2><span class="lbl">tirés du plein pied validé · ${esc(cos.name)}</span>
+      <span class="fi-hacts">${sheetStale(pres) && !liveJob('presentation', key) ? recompose(key) : ''}<a class="tb ghost sm" href="${tabHref('planche')}">Sa planche ⤢</a></span></header>
+    <div class="fi-row">${det.map((x) => `<figure class="fi-card sq"><div class="fi-frame"><img src="${esc(src(x.file))}"
+        alt="${esc(x.label || x.id)}" loading="lazy" data-zoom="${esc(src(x.file))}" data-cap="${esc(x.label || x.id)}"></div>
+        <span class="lbl">${esc(x.label || x.id)}</span></figure>`).join('')}
+      ${pres.sheet ? `<figure class="fi-card sheet"><div class="fi-frame"><img src="${esc(src(pres.sheet))}" alt="sa planche" loading="lazy"
+        data-zoom="${esc(src(pres.sheet))}" data-cap="${esc(`${c.name} · ${cos.name} · planche`)}"></div>
+        <span class="lbl">sa planche · <a href="${esc(src(pres.sheet))}" download="${esc(`${c.slug}-planche.png`)}">exporter</a></span></figure>` : ''}
+    </div>
+  </section>`;
+}
+
+// Où il en est : l'état de chaque étage, lu sur le manifeste et la file.
+function ficheStatus(d) {
+  const c = d.character;
+  const f = c.face;
+  const key = activeCostume(c);
+  const cos = key ? c.costumes[key] : null;
+  const fb = cos?.fullbody;
+  const pres = cos?.presentation;
+  const v = voiceOf(c);
+  const tech = cos && techJob(key);
+  const step = cos ? (tech || cos.autopilot?.state === 'running' ? techStep(cos, tech) : '') : '';
+  const run = (id) => (step === id ? [`en calcul · ${rank(tech)}`, 'run'] : null);
+  const presJob = liveJob('presentation', key);
+  const cases = casesJob(key);
+  const looks = looksOf(c).filter((l) => l.status === 'ready').length;
+  const nEx = exprList(pres).filter((e) => e.file).length;
+  const nPo = panelList(pres, 'poses').length;
+  const views = cos?.views || {};
+  const rigs = cos?.rigs || [];
+  const cells = [
+    [`Visage${looks ? ` · ${looks} look${looks > 1 ? 's' : ''}` : ''}`, f.locked ? ['à jour', 'ok'] : liveJob('face') ? [rank(liveJob('face')), 'run']
+      : f.candidates.length ? ['attend ton choix', 'wait'] : ['à faire', 'todo']],
+    [`Plein pied${cos ? ` · ${cos.name}` : ''}`, !cos ? [f.locked ? 'à décrire' : 'après le visage', 'todo']
+      : fb.validated ? [fb.validated_by === 'import' ? 'à jour · importé' : 'à jour', 'ok'] : liveJob('fullbody', key) ? [rank(liveJob('fullbody', key)), 'run']
+        : fb.candidates.length ? ['attend ton choix', 'wait'] : ['à faire', 'todo']],
+    [`Expressions${nEx ? ` · ${nEx}` : ''}`, cases || liveJob('expression_add', key) ? [rank(cases || liveJob('expression_add', key)), 'run']
+      : nEx ? ['à jour', 'ok'] : ['avec la planche', 'todo']],
+    [`Poses${nPo ? ` · ${nPo}` : ''}`, cases ? [rank(cases), 'run'] : nPo ? ['à jour', 'ok'] : ['avec la planche', 'todo']],
+    ['Voix', v?.locked ? ['à jour', 'ok'] : liveJob('voice_design') ? [rank(liveJob('voice_design')), 'run']
+      : v?.candidates?.length ? ['attend ton choix', 'wait'] : voicePossible(c) ? ['à trouver', 'wait'] : ['bientôt', 'todo']],
+    ['A-pose', run('apose') || (cos?.apose?.validated ? [cos.apose.validated_by === 'auto' ? 'mesurée · auto' : 'choisie', 'ok']
+      : cos && waitsFor(d, key, /^apose/) ? ['attend ton œil', 'wait'] : [fb?.validated ? 'à faire' : 'après le plein pied', 'todo'])],
+    ['Vues · contrôle ±5°', run('views') || (views.check?.ok ? ['passé · auto', 'ok']
+      : views.check || (cos && waitsFor(d, key, /^(views|check)/)) ? ['attend ton œil', 'wait']
+        : [(views.raw || []).length ? 'à contrôler' : 'après l\'A-pose', 'todo'])],
+    ['Mesh', run('mesh') || ((cos?.meshes || []).length ? [`à jour · v${cos.meshes.at(-1).version}`, 'ok']
+      : cos && waitsFor(d, key, /^mesh/) ? ['attend ton œil', 'wait'] : ['après les vues', 'todo'])],
+    ['Rig', run('rig') || (rigs.some((r) => r.verdict === 'accepted') ? [`accepté · v${[...rigs].reverse().find((r) => r.verdict === 'accepted').version}`, 'ok']
+      : rigs.length ? ['à regarder', 'wait'] : ['après le mesh', 'todo'])],
+    ['Planche', presJob ? [rank(presJob), 'run'] : sheetStale(pres) ? ['à recomposer', 'wait'] : pres?.sheet ? ['à jour', 'ok']
+      : fb?.validated ? ['à composer', 'wait'] : ['après le plein pied', 'todo']],
+  ];
+  return `<section class="fi-band">
+    <header><h2>Où ${she(c) ? 'elle' : 'il'} en est</h2><span class="lbl">à jour · en calcul · attend ton œil · à faire</span>
+      <span class="fi-hacts"><a class="tb ghost sm" href="./coulisses.html#/${enc(c.slug)}">Tout dans les coulisses ▸</a></span></header>
+    <div class="fi-status">${cells.map(([k, [t, cls]]) => `<div><span class="lbl">${esc(k)}</span><span class="v ${cls}">${esc(t)}</span></div>`).join('')}</div>
+  </section>`;
+}
+
+/* Les régions de la fiche, dans un squelette fixe : les grilles tiennent
+   la mise en page, chaque région n'est qu'un contenu (display: contents). */
+const FICHE_SKELETON = `<div class="fi">
+  <div class="fi-r" data-region="head"></div>
+  <div class="fi-r" data-region="waits"></div>
+  <div class="fi-main">
+    <div class="fi-col fi-r-face" data-region="face"></div>
+    <div class="fi-col fi-r-body" data-region="body"></div>
+    <div class="fi-side"><div class="fi-r" data-region="who"></div><div class="fi-r" data-region="expr"></div></div>
+  </div>
+  <section class="fi-band fi-tiles">
+    <div class="fi-tile fi-t3d"><div class="fi-r" data-region="d3head"></div><div class="fi-r" data-region="d3view"></div>
+      <div class="fi-r" data-region="d3foot"></div></div>
+    <div class="fi-stack"><div class="fi-r" data-region="voice"></div><div class="fi-r" data-region="size"></div></div>
+  </section>
+  <div class="fi-r" data-region="tenues"></div>
+  <div class="fi-r" data-region="details"></div>
+  <div class="fi-r" data-region="status"></div>
+</div>`;
+
+function ficheRegions(d) {
+  const d3 = fiche3d(d);
+  return [
+    ['head', ficheHead(d)], ['waits', ficheWaits(d)], ['face', ficheFace(d)], ['body', ficheBody(d)],
+    ['who', ficheWho(d)], ['expr', ficheExpr(d)], ['d3head', d3.head], ['d3view', d3.view], ['d3foot', d3.foot],
+    ['voice', ficheVoice(d)], ['size', ficheSize(d)], ['tenues', ficheTenues(d)], ['details', ficheDetails(d)],
+    ['status', ficheStatus(d)],
+  ];
+}
+
+function paintFiche(app, d) {
+  const regions = ficheRegions(d);
+  const page = `fiche:${d.character.slug}`;
+  if (app.dataset.page !== page || !app.querySelector('.fi')) {
+    app.dataset.page = page;
+    app.innerHTML = FICHE_SKELETON;
+    state.regions = {};
+  }
+  for (const [k, html] of regions) {
+    if (state.regions[k] === html) continue;
+    const node = app.querySelector(`[data-region="${k}"]`);
+    if (node) node.innerHTML = html;
+    state.regions[k] = html;
+  }
 }
 
 /* ── ce qui attend : les cartes de l'atelier ────────────── */
 
 function attentionOf(d) {
-  const own = d.character.attention || d.attention;
-  if (Array.isArray(own)) return own;
+  if (Array.isArray(d.attention)) return d.attention;
+  if (Array.isArray(d.character.attention)) return d.character.attention.filter((a) => !a.resolved);
   return Array.isArray(state.attention) ? state.attention.filter((a) => a.slug === d.character.slug) : [];
 }
 
@@ -638,7 +1356,7 @@ function visageLocked(d) {
     <img class="hero-img-sq" src="${esc(src)}" alt="son visage" data-zoom="${esc(src)}" data-cap="${esc(c.name)}">
     <div class="hero-txt">
       <span class="kicker">son visage</span>
-      <h2 class="big">C'est lui.</h2>
+      <h2 class="big">C'est ${she(c) ? 'elle' : 'lui'}.</h2>
       <p class="prose">Choisi le ${esc(day(f.locked_at))}. Ce visage fait autorité sur tout le reste — sa tenue, sa planche,
         sa 3D — et ne change plus. Pour un autre visage, un autre personnage.</p>
       <div class="row-start">${nextStepLink(d)}</div>
@@ -1132,13 +1850,21 @@ function render(force = false) {
   if (!force && typing()) { state.pending = true; return; }
   state.pending = false;
   goUsed = false;
+  const app = $('#app');
+  const d = state.detail;
+  const fiche = state.route.view === 'perso' && !!d && currentTab(d) === 'fiche';
   const logBefore = $('#scene-log');
   const keep = logBefore ? logBefore.scrollHeight - logBefore.scrollTop : null;
-  $('#app').innerHTML = state.route.view === 'perso' ? renderPerso() : renderHome();
+  if (fiche) paintFiche(app, d);
+  else {
+    app.dataset.page = '';
+    app.innerHTML = state.route.view === 'perso' ? renderPerso() : renderHome();
+  }
   const logAfter = $('#scene-log');
   if (logAfter) logAfter.scrollTop = keep == null ? logAfter.scrollHeight : logAfter.scrollHeight - keep;
   $('#coulisses-link').href = state.route.view === 'perso' ? `./coulisses.html#/${enc(slug())}` : './coulisses.html';
   document.body.classList.toggle('in-scene', state.route.view === 'perso' && state.route.tab === 'scene');
+  document.body.classList.toggle('in-fiche', fiche);
   paintPlayers();
 }
 
@@ -1188,26 +1914,35 @@ async function onRoute() {
   const route = parseRoute();
   const changed = route.view !== state.route.view || route.slug !== state.route.slug;
   const tabChanged = route.tab !== state.route.tab;
+  const wasFiche = state.route.view === 'perso' && !state.route.tab;
+  let backTo = null;
   state.route = route;
   state.renaming = false;
   state.editField = null;
   if (changed) {
     state.detail = null;
     state.jobs = [];
+    state.queue = [];
     state.costume = undefined;
     state.pick = {};
     state.fbAgain = false;
+    state.look = null;
+    state.bodyView = {};
+    state.motionPeek = null;
+    state.traitsOpen = false;
     state.sig = '';
     state.seen.clear();
     state.scene.mic?.close();
     state.scene.mic = null;
     window.scrollTo(0, 0);
   } else if (tabChanged) {
-    // Changer de volet garde la page où elle est, sauf si les volets sont passés au-dessus.
-    const bar = $('.vols');
-    if (bar && bar.getBoundingClientRect().top < 0) window.scrollTo(0, window.scrollY + bar.getBoundingClientRect().top - 70);
+    // De la fiche à une étape en plein cadre : on part du haut ; au retour,
+    // la fiche reprend où on l'avait laissée.
+    if (wasFiche) state.ficheY = window.scrollY;
+    backTo = route.tab ? 0 : state.ficheY || 0;
   }
   render(true);
+  if (backTo != null) window.scrollTo(0, backTo);
   try {
     if (route.view === 'home') {
       await Promise.all([loadList(), loadAttention()]);
@@ -1273,18 +2008,20 @@ function ask(text) {
 const DONE_NOW = {
   face_lock: 'c\'est lui', fullbody_ok: 'tenue choisie : l\'atelier prend la suite', voice_lock: 'voix choisie : tu peux lui parler',
   voice_unlock: 'le choix de sa voix est rouvert', line_keep: 'prise gardée', costume_edit: 'tenue mise à jour',
+  look_remove: 'look retiré', expression_remove: 'expression écartée : « Annuler » la remet', expression_restore: 'expression remise',
 };
 
+// Rend vrai si l'atelier a pris l'action.
 async function doAction(el) {
   const action = el.dataset.act;
-  if (el.dataset.confirm && !(await ask(el.dataset.confirm))) return;
+  if (el.dataset.confirm && !(await ask(el.dataset.confirm))) return false;
   const params = collect(el);
   if (action === 'face') {
     if (!String(params.brief ?? 'x').trim()) delete params.brief;
     if (!('around' in params) && !params.brief && !(params.refs || []).length && !state.detail.character.face.brief) {
       toast('dis en une phrase qui il est, ou dépose une photo', 5000);
       $('[data-draft="face.brief"]')?.focus();
-      return;
+      return false;
     }
   }
   el.disabled = true;
@@ -1293,14 +2030,14 @@ async function doAction(el) {
       // Une nouvelle tenue : elle se garde (une seule fois, même si le champ
       // vient d'être quitté), puis son plein pied part dans la file.
       const key = await createCostume();
-      if (!key) { el.disabled = false; return; }
+      if (!key) { el.disabled = false; return false; }
       const run = await api(actionUrl('fullbody'), { method: 'POST', body: { costume: key, variants: 3 } });
       state.jobs.unshift(run.job);
       schedulePoll(600);
       toast('il s\'habille : trois pleins pieds arrivent');
       await loadDetail();
       render(true);
-      return;
+      return true;
     }
     const out = await api(actionUrl(action), { method: 'POST', body: params });
     if (out.job) {
@@ -1312,21 +2049,40 @@ async function doAction(el) {
       if (action === 'face_lock') delete state.pick.face;
       if (action === 'fullbody_ok') { delete state.pick[`fb:${params.costume}`]; state.fbAgain = false; }
       if (action === 'voice_lock') delete state.pick.voice;
+      if (action === 'look_remove' && state.look === params.id) state.look = null;
     }
     forget(el.dataset.form);
     await loadDetail();
     render(true);
+    return true;
   } catch (e) {
     if (unknown(e)) {
       state.missing[action] = true;
       if (VOICE_ACTIONS.has(action)) state.missing.voice_design = true;
       toast('pas encore branché dans l\'atelier : ça arrive bientôt', 5000);
       render(true);
-      return;
+      return false;
     }
     toast(e.message, 7000);
     el.disabled = false;
+    return false;
   }
+}
+
+/* Un look, une expression : une phrase, Entrée, et le rendu part en file.
+   La phrase ne se perd que si l'atelier l'a prise. */
+async function submitPhrase(form, action, key, extra = {}) {
+  const field = form.elements.prompt;
+  const prompt = String(field?.value || '').trim();
+  if (!prompt) { toast(action === 'look' ? 'écris ce qui change sur son visage' : 'écris l\'expression, en mots'); return; }
+  const fake = document.createElement('button');
+  fake.dataset.act = action;
+  fake.dataset.params = JSON.stringify({ ...extra, prompt });
+  delete state.drafts[key];
+  field.value = '';
+  field.blur();
+  if (!(await doAction(fake)) && !state.missing[action]) state.drafts[key] = prompt;
+  render(true);
 }
 
 async function answerAttention(el) {
@@ -1508,6 +2264,43 @@ function wire() {
     if (playBtn) { e.preventDefault(); e.stopPropagation(); play(playBtn.dataset.play); return; }
     const actBtn = t.closest('[data-act]');
     if (actBtn) { e.preventDefault(); e.stopPropagation(); if (!actBtn.disabled) doAction(actBtn); return; }
+    // la fiche : un look, une pose, une tenue, le mouvement d'une expression
+    const look = t.closest('[data-look]');
+    if (look) { state.look = look.dataset.look || null; render(true); return; }
+    const bodyView = t.closest('[data-body-view]');
+    if (bodyView) {
+      state.bodyView = { ...state.bodyView, [activeCostume(state.detail.character)]: bodyView.dataset.bodyView };
+      render(true);
+      return;
+    }
+    const cosPick = t.closest('[data-costume-pick]');
+    if (cosPick) { state.costume = cosPick.dataset.costumePick; state.fbAgain = false; render(true); return; }
+    const cosStep = t.closest('[data-costume-step]');
+    if (cosStep) {
+      const keys = Object.keys(state.detail.character.costumes);
+      const i = keys.indexOf(activeCostume(state.detail.character));
+      state.costume = keys[(i + Number(cosStep.dataset.costumeStep) + keys.length) % keys.length];
+      render(true);
+      return;
+    }
+    const motion = t.closest('[data-motion]');
+    if (motion) { state.motionPeek = state.motionPeek === motion.dataset.motion ? null : motion.dataset.motion; render(true); return; }
+    if (t.closest('[data-traits-open]')) { state.traitsOpen = !state.traitsOpen; render(true); return; }
+    const goto = t.closest('[data-goto]');
+    if (goto) {
+      const field = $(`[data-draft="${CSS.escape(goto.dataset.goto)}"]`);
+      if (field) { field.scrollIntoView({ behavior: 'smooth', block: 'center' }); field.focus({ preventScroll: true }); }
+      return;
+    }
+    const editOpen = t.closest('[data-edit-open]');
+    if (editOpen) {
+      state.moreOpen = true;
+      state.editField = editOpen.dataset.editOpen;
+      render(true);
+      const inp = $('form[data-form="field"] textarea');
+      if (inp) { inp.scrollIntoView({ behavior: 'smooth', block: 'center' }); inp.focus({ preventScroll: true }); }
+      return;
+    }
     const pick = t.closest('[data-pick]');
     if (pick) {
       const k = pick.dataset.pick;
@@ -1576,10 +2369,15 @@ function wire() {
     if (form === 'rename') rename(e.target);
     if (form === 'field') saveField(e.target);
     if (form === 'scene') submitScene(e.target);
+    if (form === 'look') submitPhrase(e.target, 'look', 'look.prompt');
+    if (form === 'expr') submitPhrase(e.target, 'expression_add', 'expr.prompt', { costume: e.target.dataset.costume });
   });
+  // « toute sa fiche » garde son dépli d'un rendu à l'autre
+  app.addEventListener('toggle', (e) => { if (e.target.matches?.('.fi-more')) state.moreOpen = e.target.open; }, true);
   app.addEventListener('keydown', (e) => {
     const t = e.target;
     if (e.key === 'Escape' && (state.renaming || state.editField)) {
+      e.stopPropagation();     // Échap ferme le champ, pas l'étape
       state.renaming = false; state.editField = null; render(true); return;
     }
     // Entrée envoie ; Maj+Entrée va à la ligne.
@@ -1611,7 +2409,14 @@ function wire() {
   });
 
   $('#lightbox').addEventListener('click', () => { $('#lightbox').hidden = true; });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#lightbox').hidden = true; });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const box = $('#lightbox');
+    if (!box.hidden) { box.hidden = true; return; }
+    // Échap : d'une étape en plein cadre, retour à la fiche.
+    if (state.route.view === 'perso' && TAB_IDS.has(state.route.tab) && !typing() && $('#confirm').hidden
+      && !state.renaming && !state.editField) location.hash = tabHref('');
+  });
   window.addEventListener('hashchange', onRoute);
 }
 
@@ -1629,9 +2434,11 @@ async function pollJobs() {
   let active = false;
   try {
     if (state.route.view === 'perso' && state.detail) {
-      const before = jobsSig();
+      const before = jobsSig() + state.queue.map((j) => `${j.id}:${j.status}`).join('|');
       const jobs = await loadJobs();
-      const moved = jobsSig() !== before;
+      // Un rendu qui attend : la file entière dit son rang.
+      state.queue = jobs.some((j) => j.status === 'queued') ? (await api('/api/jobs?limit=120')).jobs : [];
+      const moved = jobsSig() + state.queue.map((j) => `${j.id}:${j.status}`).join('|') !== before;
       active = jobs.some(live);
       const finished = jobs.filter((j) => !live(j) && !state.seen.has(j.id));
       finished.forEach((j) => { state.seen.add(j.id); announce(j); });

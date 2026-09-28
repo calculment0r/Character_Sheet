@@ -164,6 +164,15 @@ body.dragging .vw .monitor .layer.over { box-shadow: inset 0 0 0 2px var(--or); 
 .vw .tl-foot { gap: var(--s3); }
 .vw .tl-foot span:nth-child(2) { text-align: center; }
 
+/* ── dans la fiche d'un personnage (?embed=1) : le moniteur seul ── */
+html.embed body { overflow: hidden; background: var(--panel); }
+html.embed .hdr, html.embed .vw-side, html.embed .transport, html.embed .timeline, html.embed .toast,
+html.embed .vw .monitor .tag, html.embed .vw .monitor .handle, html.embed .vw .monitor .empty { display: none; }
+html.embed .vw { display: block; max-width: none; padding: 0; }
+html.embed .vw-stage { position: static; }
+html.embed .vw .monitor { height: 100vh; border-radius: 0; }
+html.embed .vw .monitor::after { box-shadow: none; }
+
 /* ── écrans étroits ─────────────────────────────────────── */
 @media (max-width: 900px) {
   .vw { grid-template-columns: minmax(0, 1fr); padding: var(--s4) var(--s4) 40px; }
