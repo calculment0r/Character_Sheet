@@ -349,7 +349,7 @@ def autopilot_route(root: Path) -> None:
     cands = cos["apose"]["candidates"]
     chosen = [o for o in (item or {}).get("options", []) if o["action"] == "choose"]
     check("autopilote : A-pose bras ballants refusée par la mesure trois tours de suite, Cal appelé avec le choix",
-          r["state"] == "failed" and item is not None and len(cands) == 2 * autopilot.APOSE_ROUNDS
+          r["state"] == "failed" and item is not None and len(cands) == autopilot.APOSE_BATCH * autopilot.APOSE_ROUNDS
           and all(not c["measure"]["ok"] and any("bras" in f for f in c["measure"]["fails"]) for c in cands)
           and len(chosen) == 4 and not cos["apose"].get("validated"),
           f"{len(cands)} propositions, état {r['state']}, {len(chosen)} choix")

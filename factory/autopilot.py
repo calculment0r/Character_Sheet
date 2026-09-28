@@ -11,7 +11,8 @@ attend » (`data["attention"]`), avec ce qu'il peut faire.
 Les étapes, une par travail de la file du studio, pour qu'un travail de
 Cal passe devant entre deux (`studio.py`) :
 
-  apose:gen      une A-pose (Qwen-Image 2.1, squelette DWPose), deux par tour ;
+  apose:gen      les A-poses du tour (Qwen-Image 2.1, squelette DWPose),
+                 quatre par tour, tirées d'un coup sur les deux machines ;
   apose:pick     chaque proposition relevée par DWPose et notée contre le
                  plein pied (`apose_pick.py`) ; la meilleure recevable est
                  validée ; sinon un tour de plus, trois tours au plus, puis
@@ -39,7 +40,7 @@ import uuid
 from . import chain, config, h3
 from .project import ChainError, Project, apose as apose_of, fullbody_token, now
 
-APOSE_BATCH = 2       # propositions par tour
+APOSE_BATCH = 4       # propositions par tour : deux par machine (DGX1, DGX2)
 APOSE_ROUNDS = 3      # tours avant d'appeler Cal
 VIEW_ROUNDS = 2       # reprises des vues hors tolérance
 STEP_TRIES = 2        # une exception deux fois sur la même étape : Cal
@@ -335,9 +336,10 @@ def _no_fake(capability: str, what: str) -> None:
 
 def _apose(p: Project, key: str, cos: dict, st: dict, arg: str, report) -> None:
     if arg == "gen":
-        n = len(_round_candidates(cos, st)) - st.get("apose_base", 0) + 1
-        _log(st, f"A-pose : proposition {n} (tour {st.get('apose_round', 0) + 1}/{APOSE_ROUNDS})")
-        chain.apose(p, key, variants=1, seed=h3.new_seed(), report=report)
+        have = len(_round_candidates(cos, st)) - st.get("apose_base", 0)
+        need = APOSE_BATCH * (st.get("apose_round", 0) + 1) - have
+        _log(st, f"A-pose : propositions {have + 1} à {have + need} (tour {st.get('apose_round', 0) + 1}/{APOSE_ROUNDS})")
+        chain.apose(p, key, variants=max(1, need), seed=h3.new_seed(), report=report)
         return
     _apose_pick(p, key, cos, st, report)
 
@@ -364,7 +366,8 @@ def _apose_pick(p: Project, key: str, cos: dict, st: dict, report) -> None:
     if good:
         n, best = max(good, key=lambda nc: nc[1]["measure"]["score"])
         metric = {k: best["measure"].get(k) for k in ("score", "arms_deg", "elbows_deg", "legs_deg", "ankle_ratio",
-                                                      "facing", "nose_offset", "frame", "outfit", "engine")}
+                                                      "facing", "nose_offset", "torso_tilt", "level", "knees_deg",
+                                                      "ankle_level", "eye_tilt", "frame", "outfit", "engine")}
         metric["thresholds"] = apose_pick.THRESHOLDS
         metric["candidates"] = len(cands)
         p.validate_apose(key, str(n), by="auto", metric=metric)
@@ -379,7 +382,7 @@ def _apose_pick(p: Project, key: str, cos: dict, st: dict, report) -> None:
     ranked = sorted(cands, key=lambda nc: -nc[1]["measure"].get("score", 0.0))
     options = [{"action": "choose", "candidate": str(n), "file": c["file"], "score": c["measure"].get("score"),
                 "fails": c["measure"].get("fails"), "label": f"prendre la n° {n}"} for n, c in ranked[:4]]
-    options += [{"action": "retry", "label": "deux de plus"}, {"action": "dismiss", "label": "ignorer"}]
+    options += [{"action": "retry", "label": "quatre de plus"}, {"action": "dismiss", "label": "ignorer"}]
     _escalate(p, key, st, "apose_failed",
               f"{len(cands)} A-poses tirées, aucune ne passe la mesure : choisis-en une, ou relance.",
               step="apose:pick", options=options)

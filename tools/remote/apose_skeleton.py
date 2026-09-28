@@ -71,9 +71,14 @@ def chain(body, idx, direction):
     return c, new - old   # ancien poignet (ou cheville) et rotation de l'avant-bras
 
 
+def down(deg, side):
+    return np.array([side * math.sin(math.radians(deg)), math.cos(math.radians(deg))])
+
+
 def apose(body, lhand, rhand):
+    """Ancienne remise en A-pose : bras et jambes seulement, le tronc et la
+    tête gardés tels quels. Sert encore quand un point du tronc manque."""
     body = list(body)
-    down = lambda deg, side: np.array([side * math.sin(math.radians(deg)), math.cos(math.radians(deg))])
     # droite du personnage à gauche de l'image : vers -x
     for idx, side, hand in (((2, 3, 4), -1, rhand), ((5, 6, 7), +1, lhand)):
         old_wrist = body[idx[2]]
@@ -85,6 +90,126 @@ def apose(body, lhand, rhand):
     for idx, side in (((8, 9, 10), -1), ((11, 12, 13), +1)):
         chain(body, idx, down(LEG_DEG, side))
     return body
+
+
+def _len(body, a, b):
+    return None if body[a] is None or body[b] is None else float(np.linalg.norm(body[b] - body[a]))
+
+
+def _longest(body, *pairs):
+    """La plus grande longueur relevée d'un os pris des deux côtés : un
+    membre vu en raccourci (tourné, avancé) paraît toujours plus court."""
+    got = [x for x in (_len(body, a, b) for a, b in pairs) if x]
+    return max(got) if got else None
+
+
+# Visage à 68 points (ordre iBUG, celui de DWPose) : chaque point et son
+# symétrique ; ceux de l'axe (arête du nez, milieu des lèvres) sont à eux-mêmes.
+FACE_MIRROR = ([16 - i for i in range(17)] + [26, 25, 24, 23, 22, 21, 20, 19, 18, 17]
+               + [27, 28, 29, 30] + [35, 34, 33, 32, 31]
+               + [45, 44, 43, 42, 47, 46, 39, 38, 37, 36, 41, 40]
+               + [54, 53, 52, 51, 50, 49, 48, 59, 58, 57, 56, 55]
+               + [64, 63, 62, 61, 60, 67, 66, 65]
+               + [69, 68])   # les pupilles, quand le relevé en a 70 (OpenPose)
+
+
+def frontal_face(face):
+    """Le visage redressé et de face : les yeux remis à l'horizontale
+    autour du bout du nez, puis chaque point moyenné avec le miroir de son
+    symétrique par rapport à l'arête du nez. Un visage tourné ou penché
+    donne ainsi un visage droit, de la même taille, centré sur son nez."""
+    if face is None or len(face) < 68 or any(face[i] is None for i in (30, 36, 39, 42, 45)):
+        return None
+    tip = face[30]
+    reye, leye = (face[36] + face[39]) / 2, (face[42] + face[45]) / 2
+    tilt = math.atan2(*(leye - reye)[::-1])
+    upright = rotate(face, tip, -tilt)
+    bridge = [upright[i][0] for i in (27, 28, 29, 30) if upright[i] is not None]
+    mid = float(np.mean(bridge))
+    out = []
+    for i, p in enumerate(upright):
+        j = FACE_MIRROR[i] if i < len(FACE_MIRROR) and FACE_MIRROR[i] < len(upright) else i
+        q = upright[j]
+        if p is None or q is None:
+            out.append(None if p is None else np.array([mid, p[1]]) if j == i else p)
+            continue
+        mirrored = np.array([2 * mid - q[0], q[1]])
+        out.append(np.array([mid, (p[1] + q[1]) / 2]) if j == i else (p + mirrored) / 2)
+    return out, float(-tilt)
+
+
+def canonical(body, lhand, rhand, face):
+    """L'A-pose de référence, quelle que soit la pose de la photo : le tronc
+    droit sous le cou, épaules et hanches à niveau et centrées sur un même
+    axe vertical, bras à 45°, jambes droites légèrement ouvertes, la tête
+    droite et de face. Les longueurs d'os viennent de la photo, chacune à sa
+    plus grande valeur gauche/droite ; les largeurs d'épaules et de hanches
+    sont celles relevées. Seule la pose est rendue symétrique : l'image
+    garde ce qui est propre au personnage (une manche, un sac, une coiffure
+    d'un côté), que le modèle lit sur le plein pied.
+
+    Un tronc penché (−7° sur Survêt, 28/09) ou une tête tournée gardés
+    dans le squelette, le modèle ne redressait que les bras : les vues
+    héritaient d'un corps de travers."""
+    b = list(body)
+    if any(b[i] is None for i in (1, 2, 5, 8, 11)):
+        return apose(body, lhand, rhand), face
+    neck = b[1].copy()
+    torso = float(np.linalg.norm((b[8] + b[11]) / 2 - neck))
+    sw = float(np.linalg.norm(b[5] - b[2])) / 2
+    hw = float(np.linalg.norm(b[11] - b[8])) / 2
+    drop = float(((b[2][1] + b[5][1]) / 2) - neck[1])   # les épaules sous le cou (≈ 0 en OpenPose)
+    ua, fa = _longest(b, (2, 3), (5, 6)), _longest(b, (3, 4), (6, 7))
+    th, sn = _longest(b, (8, 9), (11, 12)), _longest(b, (9, 10), (12, 13))
+    old = {i: None if b[i] is None else b[i].copy() for i in range(len(b))}
+
+    axis = np.array([1.0, 0.0])
+    mid_hip = neck + np.array([0.0, torso])
+    b[2], b[5] = neck + np.array([-sw, drop]), neck + np.array([sw, drop])
+    b[8], b[11] = mid_hip - axis * hw, mid_hip + axis * hw
+    # bras et mains : la main suit le poignet et tourne avec l'avant-bras
+    for (s, e, w), side, hand in (((2, 3, 4), -1, rhand), ((5, 6, 7), +1, lhand)):
+        if ua is None or fa is None:
+            continue
+        d = down(ARM_DEG, side)
+        b[e] = b[s] + d * ua
+        b[w] = b[e] + d * fa
+        if hand and old[w] is not None:
+            ref = old[e] if old[e] is not None else old[s]
+            turn = math.atan2(*d[::-1]) - math.atan2(*(old[w] - ref)[::-1]) if ref is not None else 0.0
+            moved = [None if p is None else p - old[w] + b[w] for p in hand]
+            hand[:] = rotate(moved, b[w], turn)
+    for (s, k, a), side in (((8, 9, 10), -1), ((11, 12, 13), +1)):
+        if th is None or sn is None:
+            continue
+        d = down(LEG_DEG, side)
+        b[k] = b[s] + d * th
+        b[a] = b[k] + d * sn
+    # la tête : le nez droit au-dessus du cou, yeux et oreilles de niveau
+    nn = _len(body, 1, 0) or torso * 0.45
+    nose = neck - np.array([0.0, nn])
+    front = frontal_face(face)
+    if front:
+        f, _ = front
+        f = [None if p is None else p - f[30] + nose for p in f]
+        b[0] = nose
+        if f[36] is not None and f[39] is not None:
+            b[14] = (f[36] + f[39]) / 2
+        if f[42] is not None and f[45] is not None:
+            b[15] = (f[42] + f[45]) / 2
+        jaw = float(abs(f[16][0] - f[0][0])) / 2 if f[0] is not None and f[16] is not None else None
+    else:
+        f = None
+        ex = abs(b[15][0] - b[14][0]) / 2 if b[14] is not None and b[15] is not None else nn * 0.2
+        ey = ((b[14][1] + b[15][1]) / 2 - body[0][1]) if b[14] is not None and b[15] is not None and body[0] is not None else -nn * 0.12
+        b[0] = nose
+        b[14], b[15] = nose + np.array([-ex, ey]), nose + np.array([ex, ey])
+        jaw = None
+    ears = abs(old[17][0] - old[16][0]) / 2 if old[16] is not None and old[17] is not None else None
+    er = max(x for x in (ears, jaw, nn * 0.3) if x)
+    ey = ((b[14][1] + b[15][1]) / 2) if b[14] is not None and b[15] is not None else nose[1] - nn * 0.12
+    b[16], b[17] = np.array([nose[0] - er, ey]), np.array([nose[0] + er, ey])
+    return b, f
 
 
 def silhouette(img):
@@ -198,7 +323,7 @@ def main():
     extent = silhouette(img)
     if extent is None:
         print("silhouette illisible : cadrage sur le nez et les chevilles")
-    body = apose(body, lhand, rhand)
+    body, face = canonical(body, lhand, rhand, face)
     body, lhand, rhand, face = fit([body, lhand, rhand, face], w, h, extent=extent)
     canvas = draw(body, lhand, rhand, face, w, h)
     dest.parent.mkdir(parents=True, exist_ok=True)

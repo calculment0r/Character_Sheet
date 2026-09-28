@@ -98,5 +98,18 @@ def comfyui_url(capability: str | None = None) -> str:
     return setting("comfyui_url", "http://127.0.0.1:8188").rstrip("/")
 
 
+def comfyui_peers() -> list[str]:
+    """Les ComfyUI des autres machines qui prennent une part des rendus
+    (Cal, 28/09 : « on a les deux DGX pour avancer ») : `comfyui_peers`
+    dans factory.local.json (liste d'URL), ou FACTORY_COMFYUI_PEERS
+    (séparées par des virgules). Les machines sont des miroirs : mêmes
+    modèles, mêmes nœuds."""
+    env = os.getenv("FACTORY_COMFYUI_PEERS")
+    raw = env.split(",") if env is not None else _file().get("comfyui_peers") or []
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    return [u.strip().rstrip("/") for u in raw if u and u.strip()]
+
+
 def workflows_dir() -> Path:
     return Path(setting("workflows", str(REPO / "workflows")))

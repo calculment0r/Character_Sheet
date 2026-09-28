@@ -812,8 +812,10 @@ class Studio:
         job.cancel = True
         spot = where(job.action, job.params)
         url = config.comfyui_url(spot[1]) if spot and spot[1] else None
-        if url and _interrupt_ours(url):
-            return "interruption demandée à ComfyUI"
+        # les rendus d'un étage peuvent tourner sur les deux machines à la fois
+        hit = [u for u in ([url, *config.comfyui_peers()] if url else []) if _interrupt_ours(u)]
+        if hit:
+            return "interruption demandée à ComfyUI" + (f" ({len(hit)} machines)" if len(hit) > 1 else "")
         return "annulation demandée : l'étage s'arrêtera à sa prochaine étape"
 
     def _worker(self) -> None:

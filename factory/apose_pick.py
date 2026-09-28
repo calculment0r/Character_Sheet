@@ -9,7 +9,12 @@ même relevé que le squelette, `tools/remote/pose_measure.py`) et notée :
              de 45° (le squelette les met à 45°) ; coude tendu ;
   jambes     hanche → cheville à peine ouvertes vers l'extérieur,
              chevilles plus écartées que les hanches sans grand écart ;
-  de face    les deux yeux vus, épaules larges par rapport au torse ;
+  de face    les deux yeux vus, épaules larges par rapport au torse,
+             nez au milieu des épaules, yeux de niveau ;
+  droite     tronc vertical, épaules et hanches de niveau, genoux
+             tendus, jambes symétriques, pieds sur la même ligne — une
+             photo en pose naturelle (hanche basse, buste tourné) ne
+             doit pas survivre sous des bras écartés (Survêt, 28/09) ;
   cadre      tout le corps dans l'image, du sommet du crâne (estimé
              au-dessus du nez, cheveux compris) aux pieds (sous les chevilles), mains
              comprises ;
@@ -49,7 +54,13 @@ LEG_RANGE = (-3.0, 15.0)  # hanche → cheville, vers l'extérieur
 ANKLE_RATIO = (0.8, 2.6)  # écart des chevilles / écart des hanches
 SHOULDER_RATIO = 0.45   # largeur d'épaules / longueur du torse : de face
 FACING_REL = 0.85       # … et au moins 85 % de celle du plein pied
-NOSE_OFFSET = 0.12      # nez / milieu des épaules, en carrures
+NOSE_OFFSET = 0.06      # nez / milieu des épaules, en carrures (0,12 laissait passer une tête tournée)
+EYE_TILT = 0.025        # écart de hauteur des yeux, en carrures
+TORSO_TILT = 2.5        # cou → milieu des hanches, degrés avec la verticale
+LEVEL = 0.04            # épaules, hanches : écart de hauteur / longueur du torse
+KNEE_BEND = 10.0        # hanche → genou → cheville, degrés
+LEG_SYM = 3.5           # écart entre les deux jambes (vers l'extérieur), degrés
+ANKLE_LEVEL = 0.03      # écart de hauteur des chevilles / longueur de jambe
 FRAME_MARGIN = 0.005    # du cadre, en fraction de l'image
 OUTFIT_MIN = 0.55       # similarité moyenne de la tenue
 REGION_MIN = 0.35       # aucune région en dessous
@@ -57,7 +68,9 @@ MIN_SCORE = 0.3         # confiance d'un point DWPose
 
 THRESHOLDS = {"arm_target": ARM_TARGET, "arm_tol": ARM_TOL, "arm_spread": ARM_SPREAD, "elbow_bend": ELBOW_BEND,
               "leg_range": LEG_RANGE, "ankle_ratio": ANKLE_RATIO, "shoulder_ratio": SHOULDER_RATIO,
-              "facing_rel": FACING_REL, "nose_offset": NOSE_OFFSET, "frame_margin": FRAME_MARGIN, "outfit_min": OUTFIT_MIN, "region_min": REGION_MIN}
+              "facing_rel": FACING_REL, "nose_offset": NOSE_OFFSET, "eye_tilt": EYE_TILT, "torso_tilt": TORSO_TILT,
+              "level": LEVEL, "knee_bend": KNEE_BEND, "leg_sym": LEG_SYM, "ankle_level": ANKLE_LEVEL,
+              "frame_margin": FRAME_MARGIN, "outfit_min": OUTFIT_MIN, "region_min": REGION_MIN}
 
 # OpenPose 18.
 NOSE, NECK, RSH, REL, RWR, LSH, LEL, LWR, RHIP, RKNE, RANK, LHIP, LKNE, LANK, REYE, LEYE = range(16)
@@ -151,6 +164,12 @@ def geometry(entry: dict) -> dict:
     frame = {"top": top / h, "bottom": 1 - bottom / h, "left": min(xs) / w, "right": 1 - max(xs) / w}
     ratio = ankles / max(hips, 1e-6)
     facing = shoulders / max(torso, 1e-6)
+    tilt = math.degrees(math.atan2(mid_hip[0] - p[NECK][0], mid_hip[1] - p[NECK][1]))
+    level = {"shoulders": (p[LSH][1] - p[RSH][1]) / max(torso, 1e-6), "hips": (p[LHIP][1] - p[RHIP][1]) / max(torso, 1e-6)}
+    knees = {"right": _bend(p[RHIP], p[RKNE], p[RANK]), "left": _bend(p[LHIP], p[LKNE], p[LANK])}
+    leg_len = float(np.linalg.norm(p[RANK] - p[RHIP]) + np.linalg.norm(p[LANK] - p[LHIP])) / 2
+    ankle_level = (p[LANK][1] - p[RANK][1]) / max(leg_len, 1e-6)
+    eye_tilt = (p[LEYE][1] - p[REYE][1]) / max(shoulders, 1e-6) if p[REYE] is not None and p[LEYE] is not None else 0.0
     for side, a in arms.items():
         if abs(a - ARM_TARGET) > ARM_TOL:
             fails.append(f"bras {side} à {a:.0f}° de la verticale (45 ± {ARM_TOL:g})")
@@ -163,6 +182,20 @@ def geometry(entry: dict) -> dict:
             fails.append(f"jambe {side} à {a:.0f}° de la verticale")
     if not ANKLE_RATIO[0] <= ratio <= ANKLE_RATIO[1]:
         fails.append(f"écart des pieds {ratio:.2f} × celui des hanches")
+    if abs(legs["right"] - legs["left"]) > LEG_SYM:
+        fails.append(f"jambes dissymétriques ({legs['right']:.0f}° / {legs['left']:.0f}°)")
+    for side, k in knees.items():
+        if k > KNEE_BEND:
+            fails.append(f"genou {side} plié de {k:.0f}°")
+    if abs(ankle_level) > ANKLE_LEVEL:
+        fails.append(f"un pied en avant de l'autre ({ankle_level:+.2f} de la jambe)")
+    if abs(tilt) > TORSO_TILT:
+        fails.append(f"tronc penché de {tilt:+.1f}°")
+    for part, v in level.items():
+        if abs(v) > LEVEL:
+            fails.append(f"{'épaules' if part == 'shoulders' else 'hanches'} pas de niveau ({v:+.2f} du torse)")
+    if abs(eye_tilt) > EYE_TILT:
+        fails.append(f"tête penchée (yeux à {eye_tilt:+.3f} de carrure)")
     # De face : la droite du personnage à gauche de l'image (de dos,
     # DWPose inverse épaules et hanches), le nez entre les épaules (un 3/4
     # le décale d'un tiers de la carrure), les épaules larges.
@@ -177,12 +210,19 @@ def geometry(entry: dict) -> dict:
     if entry.get("people", 1) > 1:
         fails.append(f"{entry['people']} personnes dans l'image")
     arm_err = (abs(arms["left"] - ARM_TARGET) + abs(arms["right"] - ARM_TARGET)) / 2
-    pose_score = max(0.0, 1 - arm_err / 20) * max(0.0, 1 - max(elbows.values()) / 60)
+    # droit et de face comptent autant que les bras : une pose relâchée
+    # sous des bras justes ne doit pas l'emporter
+    straight = (max(0.0, 1 - abs(tilt) / (2 * TORSO_TILT)) * max(0.0, 1 - abs(legs["right"] - legs["left"]) / (2 * LEG_SYM))
+                * max(0.0, 1 - abs(nose_offset) / (2 * NOSE_OFFSET)))
+    pose_score = max(0.0, 1 - arm_err / 20) * max(0.0, 1 - max(elbows.values()) / 60) * (0.5 + 0.5 * straight)
     return {"ok": not fails, "fails": fails, "pose_score": round(pose_score, 3),
             "arms_deg": {k: round(v, 1) for k, v in arms.items()},
             "elbows_deg": {k: round(v, 1) for k, v in elbows.items()},
             "legs_deg": {k: round(v, 1) for k, v in legs.items()}, "ankle_ratio": round(ratio, 2),
-            "facing": round(facing, 2), "nose_offset": round(float(nose_offset), 3), "frame": {k: round(float(v), 3) for k, v in frame.items()},
+            "facing": round(facing, 2), "nose_offset": round(float(nose_offset), 3),
+            "torso_tilt": round(tilt, 1), "level": {k: round(float(v), 3) for k, v in level.items()},
+            "knees_deg": {k: round(v, 1) for k, v in knees.items()}, "ankle_level": round(float(ankle_level), 3),
+            "eye_tilt": round(float(eye_tilt), 3), "frame": {k: round(float(v), 3) for k, v in frame.items()},
             "people": entry.get("people", 1)}
 
 

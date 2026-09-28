@@ -96,18 +96,19 @@ def workflow(n_refs: int, width: int, height: int, resolution: int = 1024, base:
 
 def generate(*, prompt: str, refs: list[Path], dest: Path, seed: int, size: tuple[int, int],
              report=lambda p, m: None, stub=None, resolution: int = 1024, negative: str = "",
-             base: tuple[int, float] | None = None) -> Path:
+             base: tuple[int, float] | None = None, url: str | None = None) -> Path:
     """Rend une image dans `dest`. `refs` : <image1>, <image2>… (trois au
     plus). `stub` : l'image à écrire en factice. `resolution` : taille à
     laquelle l'encodeur lit les références (0 : leur taille). `base` :
-    (pas, cfg) pour le modèle de base, avec le prompt `negative`."""
+    (pas, cfg) pour le modèle de base, avec le prompt `negative`. `url` :
+    le ComfyUI qui rend (`comfy.fan_out`), sinon celui de la capacité."""
     refs = list(refs)[:MAX_REFS]
     dest.parent.mkdir(parents=True, exist_ok=True)
     if config.backend("portrait") == "stub":
         report(0.5, "factice · Qwen-Image 2.1")
         stub().save(dest)
         return dest
-    comfy = Comfy(config.comfyui_url("portrait"))
+    comfy = Comfy(url or config.comfyui_url("portrait"))
     names = [comfy.upload(Path(r)) for r in refs]
     wf = fill(workflow(len(names), *size, resolution=resolution, base=base),
               {"prompt": prompt, "seed": seed, "negative": negative}, names)

@@ -13,7 +13,7 @@ import json
 import zlib
 from pathlib import Path
 
-from . import config, h3, imaging, prompts, views_qwen
+from . import comfy, config, h3, imaging, prompts, views_qwen
 from .project import ChainError, Project, apose as apose_of, fullbody_token, now
 
 ORTHO = ("front", "left", "back", "right")
@@ -209,23 +209,37 @@ def apose(p: Project, costume: str | None, *, variants: int = 2, seed: int | Non
     text = pose.text_apose(prompts.describe_outfit(p.sheet, cos["prompt"]), p.data["style"],
                            p.data.get("style_desc", ""))
     base = _seed(seed)
-    made = []
-    for i in range(variants):
-        s = base + i
-        dest = folder / f"cand-{len(state['candidates']) + 1:03d}.png"
-        print(f"  A-pose {i + 1}/{variants} · Qwen-Image 2.1 turbo · graine {s}")
+    first = len(state["candidates"]) + 1
+    jobs = [(i, base + i, folder / f"cand-{first + i:03d}.png") for i in range(variants)]
+
+    def render(job, url):
+        i, s, dest = job
+        print(f"  A-pose {i + 1}/{variants} · Qwen-Image 2.1 turbo · graine {s} · {url}")
         qwen21.generate(prompt=text, refs=[p.path(body), skel], dest=dest, seed=s, size=pose.SIZE,
-                        resolution=pose.RESOLUTION, report=report,
+                        resolution=pose.RESOLUTION, report=report, url=url,
                         stub=lambda: sketches.mannequin(pose.SIZE, azimuth=0.0, seed=identity_seed(p)))
-        backend = config.backend("portrait")
+        return url
+
+    # les propositions se partagent entre les machines (`comfyui_peers`)
+    done = comfy.fan_out(jobs, render, "portrait")
+    made = []
+    backend = config.backend("portrait")
+    for (i, s, dest), url in zip(jobs, done):
+        if isinstance(url, Exception) or not dest.exists() or comfy.failed([url]):
+            continue
         dest.with_suffix(".json").write_text(json.dumps(
-            {"kind": "apose", "backend": backend, "seed": s, "prompt": text, "refs": [body, p.rel(skel)]},
-            ensure_ascii=False, indent=2), encoding="utf-8")
+            {"kind": "apose", "backend": backend, "seed": s, "prompt": text, "refs": [body, p.rel(skel)],
+             "comfyui": url}, ensure_ascii=False, indent=2), encoding="utf-8")
         entry = {"file": p.rel(dest), "seed": s, "backend": backend, "engine": "qwen21", "fullbody": source,
                  "at": now()}
         state["candidates"].append(entry)
         made.append(entry)
-        p.save()
+    p.save()
+    err = comfy.failed(done)
+    if err and not made:
+        raise err
+    if err:
+        print(f"  une A-pose a échoué : {err}")
     return made
 
 
@@ -401,14 +415,16 @@ def views(p: Project, costume: str | None, *, method: str = "qwen21-pose", names
 
             report(0.05, "SAM 3D Body · face")
             front_yaw = sam3d.yaw(p.path(body), workdir=workdir, name="front")
-        for n in names:
+        if "front" in names:
+            dest = folder / "front.png"
+            imaging.load(p.path(body)).save(dest)
+            raw["front"] = {"file": p.rel(dest), "azimuth": 0.0, "azimuth_source": "A-pose validée", "seed": None,
+                            "backend": "reprise", "at": now(),
+                            **({"azimuth_measured": 0.0} if measure else {})}
+
+        def one(n, url):
+            """Une vue : rendue, mesurée, relancée tant qu'elle s'écarte."""
             dest = folder / f"{n}.png"
-            if n == "front":
-                imaging.load(p.path(body)).save(dest)
-                raw[n] = {"file": p.rel(dest), "azimuth": 0.0, "azimuth_source": "A-pose validée", "seed": None,
-                          "backend": "reprise", "at": now(),
-                          **({"azimuth_measured": 0.0} if measure else {})}
-                continue
             az = turns[n]
             limit = TOLERANCE_DEG if n in ORTHO else 2 * TOLERANCE_DEG
             text = pose.text_view(az, p.data["style"], p.data.get("style_desc", ""))
@@ -416,9 +432,9 @@ def views(p: Project, costume: str | None, *, method: str = "qwen21-pose", names
             for k in range(VIEW_TRIES if measure else 1):
                 seed_k = s + k
                 out = folder / (f"{n}.png" if k == 0 else f".{n}_{k}.png")
-                print(f"  vue {n} · {az}° · squelette · graine {seed_k}")
+                print(f"  vue {n} · {az}° · squelette · graine {seed_k} · {url}")
                 qwen21.generate(prompt=text, refs=[p.path(body), skel[az]], dest=out, seed=seed_k, size=pose.SIZE,
-                                resolution=pose.RESOLUTION, report=report,
+                                resolution=pose.RESOLUTION, report=report, url=url,
                                 stub=lambda: sketches.mannequin(pose.SIZE, azimuth=float(az), seed=identity_seed(p)))
                 got = {"file": out, "seed": seed_k}
                 if measure:
@@ -447,8 +463,20 @@ def views(p: Project, costume: str | None, *, method: str = "qwen21-pose", names
             dest.with_suffix(".json").write_text(json.dumps(
                 {"kind": "view", "method": method, "azimuth": az, "backend": backend, "seed": best["seed"],
                  "prompt": text, "refs": [body, p.rel(skel[az])],
-                 "measured": entry.get("azimuth_measure")}, ensure_ascii=False, indent=2), encoding="utf-8")
-            raw[n] = entry
+                 "measured": entry.get("azimuth_measure"), "comfyui": url}, ensure_ascii=False, indent=2),
+                encoding="utf-8")
+            return entry
+
+        # les vues se partagent entre les machines (`comfyui_peers`)
+        todo = [n for n in names if n != "front"]
+        done = comfy.fan_out(todo, one, "portrait")
+        for n, entry in zip(todo, done):
+            if not comfy.failed([entry]):
+                raw[n] = entry
+        err = comfy.failed(done)
+        if err:
+            p.save()
+            raise err
     elif method == "orbit":
         azimuths = {n: prompts.AZIMUTHS[n][0] for n in names}
         sections = prompts.orbit(p.sheet, p.data["notes"], costume_prompt=cos["prompt"], style=p.data["style"])

@@ -39,6 +39,62 @@ class ComfyError(RuntimeError):
     pass
 
 
+def fan_out(jobs: list, work, capability: str | None = None) -> list:
+    """`work(job, url)` pour chaque travail, réparti sur les ComfyUI qui
+    répondent : celui de la capacité, puis ses pairs (`comfyui_peers`).
+    Chaque machine prend le travail suivant dès qu'elle a fini le sien. Les
+    résultats reviennent dans l'ordre des travaux ; une erreur ne s'élève
+    qu'une fois tous les travaux rendus, pour ne rien perdre de ce qui a
+    marché (l'erreur est à la place du résultat, voir `failed`)."""
+    import queue
+    import threading
+
+    urls = [config.comfyui_url(capability)]
+    if config.backend(capability or "portrait") == "stub":
+        return [work(job, urls[0]) for job in jobs]
+    for peer in config.comfyui_peers():
+        if peer not in urls:
+            try:
+                Comfy(peer, timeout=4).ping()
+                urls.append(peer)
+            except ComfyError as exc:
+                print(f"  {peer} ne répond pas, rendu sur une seule machine ({exc})")
+    if len(urls) == 1 or len(jobs) < 2:
+        return [work(job, urls[0]) for job in jobs]
+    todo: queue.Queue = queue.Queue()
+    for i, job in enumerate(jobs):
+        todo.put((i, job))
+    out: list = [None] * len(jobs)
+
+    def run(url: str) -> None:
+        while True:
+            try:
+                i, job = todo.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                out[i] = work(job, url)
+            except Exception as exc:   # noqa: BLE001 — rendu après les autres
+                out[i] = _Failed(exc)
+
+    threads = [threading.Thread(target=run, args=(u,), daemon=True) for u in urls]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return out
+
+
+class _Failed:
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+
+
+def failed(results: list) -> Exception | None:
+    """La première erreur d'un `fan_out`, s'il y en a une."""
+    return next((r.exc for r in results if isinstance(r, _Failed)), None)
+
+
 class Comfy:
     def __init__(self, url: str | None = None, timeout: float = 30.0) -> None:
         self.url = (url or config.comfyui_url()).rstrip("/")
